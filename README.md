@@ -197,7 +197,12 @@ posts each new voucher to `POST /api/vouchers` with `Authorization: Bearer <VOUC
 
 The app extracts the PDF's text itself (no external service: Flate/ASCII85/Hex streams, object streams, ToUnicode
 font maps) and stores it in table `vouchers` (`key, received_ist, sender, subject, file, guest, room_guess,
-occupancy_guess, text, pdf, created`). The data feed reads that table to fill room numbers, occupancy and gender.
+occupancy_guess, text, pdf, created, applied`). If the voucher names a guest, arrival date and room number that match a
+confirmed booking whose room is not yet assigned, the room is written to the bookings dataset straight away (so the
+dashboard shows it within one auto-refresh). It is **not** applied when it would put 3+ guests in a room, put two
+single-occupancy guests together, create mixed-gender sharing, or when the voucher's Mr/Ms contradicts the booking;
+the reason is stored in `applied`. `{"reapply": true}` re-checks stored vouchers that were not applied yet.
+The hourly data feed also reads the table and applies the same rules.
 Scanned (image-only) PDFs have no text layer and are stored with empty text.
 
 ## User accounts

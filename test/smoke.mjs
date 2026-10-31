@@ -95,6 +95,18 @@ check('old host redirects to PRIMARY_HOST', r.status === 301 && r.headers.get('l
   check('voucher PDF text extracted (guest, room, occupancy)', r.status === 200 && vj.guest === 'Mr. Test Guest' && vj.room === '03' && vj.occupancy === 'Single', JSON.stringify(vj));
   r = await vpost({known: ['m1#0', 'm2#0']}, 'v-secret');
   check('voucher "known" lookup', JSON.stringify((await r.json()).known) === '["m1#0"]');
+  // a Sapphire-style voucher fills the room of the matching booking straight away
+  {
+    const lines = ['Guest Name', 'Ms . Neha Joshi', 'Arrival Date 02 - Nov - 2026', 'Departure Date 0 4 - Nov - 2026', 'Room Type Room in an Apartment', 'Room No 03'];
+    const c2 = zlib.deflateSync(Buffer.from('BT /F1 10 Tf 50 800 Td ' + lines.map((l) => '(' + l + ') Tj 0 -12 Td').join(' ') + ' ET'));
+    const p2 = Buffer.concat([Buffer.from(parts.slice(0, 5).join('') + `5 0 obj << /Length ${c2.length} /Filter /FlateDecode >> stream\n`), c2, Buffer.from('\nendstream endobj\ntrailer << /Root 1 0 R >>\n%%EOF')]);
+    r = await vpost({key: 'm3#0', file: 'Ms. Neha Joshi.pdf', pdf: p2.toString('base64')}, 'v-secret');
+    const aj = await r.json();
+    const neha = JSON.parse(DB.raw.prepare("SELECT json FROM datasets WHERE id = 'bookings'").get().json).find((b) => b.guest === 'Ms. Neha Joshi');
+    check('voucher room applied to booking immediately', /set for Ms. Neha Joshi/.test(aj.applied) && neha.room === '1001-103', aj.applied);
+    r = await vpost({key: 'm4#0', file: 'Mr. Neha Joshi.pdf', pdf: p2.toString('base64').replace(/x/g, 'x')}, 'v-secret');
+    check('voucher never overwrites an assigned room', /already set/.test((await r.json()).applied));
+  }
   env = {DB};
   check('voucher intake off without VOUCHER_TOKEN', (await vpost({known: []}, '')).status === 401);
 }

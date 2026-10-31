@@ -291,6 +291,50 @@ async function pdfText(u8) {
   return lines.join("\n").replace(/[ \t ]+/g, " ").split("\n").map((l) => l.trim()).filter(Boolean).join("\n");
 }
 
+// ---------- apply a voucher to the bookings dataset straight away (same safeguards as the data feed) ----------
+const MON3 = {jan: "01", feb: "02", mar: "03", apr: "04", may: "05", jun: "06", jul: "07", aug: "08", sep: "09", oct: "10", nov: "11", dec: "12"};
+const normName = (n) => String(n || "").toLowerCase().replace(/\.pdf$/, "").replace(/[^a-z\s]/g, " ").replace(/^\s*(mr|ms|mrs|miss|dr)\b/, " ").replace(/\s+/g, "");   // PDFs sometimes split words ("Chaturved i")
+const titleOf = (n) => { const m = String(n || "").match(/^\s*(mr|ms|mrs|miss)\b/i); return m ? (m[1].toLowerCase() === "mr" ? "M" : "F") : ""; };
+function vDate(text, label) {
+  const m = String(text).match(new RegExp("(?:" + label + ")\\s*[:\\-–]?\\s*([0-9 ]{1,3})\\s*[-/ ]\\s*([A-Za-z]{3})[a-z]*\\s*[-/ ]\\s*([0-9 ]{4,6})", "i"));
+  if (!m) return "";
+  const d = m[1].replace(/\s/g, "").padStart(2, "0"), mo = MON3[m[2].toLowerCase()], y = m[3].replace(/\s/g, "");
+  return mo && /^\d{4}$/.test(y) ? y + "-" + mo + "-" + d : "";
+}
+const roomList = (p) => { const m = String(p.room_nos || "").trim().match(/^(\S*?)(\d+)\s+to\s+\S*?(\d+)$/); const out = [];
+  if (m && +m[3] - +m[2] < 50) for (let i = +m[2]; i <= +m[3]; i++) out.push(m[1] + i); return out; };
+async function applyVoucher(env, text, file) {
+  const vName = (String(text).match(/Guest\s*Name\s*[:\-–]?\s*\n?\s*([^\n]+)/i) || [])[1] || file;
+  const vRoom = (String(text).match(/Room\s*No\.?\s*[:\-–]?\s*(\d{1,4})\b/i) || [])[1];
+  const arr = vDate(text, "Arrival\\s*Date|Check[\\s-]*in(?:\\s*Date)?"), dep = vDate(text, "Departure\\s*Date|Check[\\s-]*out(?:\\s*Date)?");
+  if (!vRoom || !arr) return "no room number or arrival date found";
+  const ds = await env.DB.prepare("SELECT json FROM datasets WHERE id = 'bookings'").first(), ps = await env.DB.prepare("SELECT json FROM datasets WHERE id = 'properties'").first();
+  if (!ds || !ps) return "no bookings data";
+  const bookings = JSON.parse(ds.json), props = JSON.parse(ps.json), key = normName(vName);
+  let cands = bookings.filter((b) => b.status === "Confirmed" && normName(b.guest) === key && b.check_in === arr);
+  if (!cands.length) cands = bookings.filter((b) => b.status === "Confirmed" && normName(b.guest) === key && b.check_in < (dep || arr) && arr < b.check_out);
+  if (cands.length !== 1) return cands.length ? "several bookings match " + vName : "no booking found for " + vName + " arriving " + arr;
+  const b = cands[0];
+  if (/^\d/.test(b.room || "")) return "room already set (" + b.room + ")";
+  const rooms = roomList(props.find((p) => p.property === b.property) || {});
+  const digits = (r) => r.replace(/\D/g, "");
+  let hits = rooms.filter((r) => r === vRoom || digits(r).endsWith(vRoom.padStart(2, "0")));
+  if (hits.length !== 1) hits = rooms.filter((r) => digits(r).endsWith(String(+vRoom)));
+  const room = hits.length === 1 ? hits[0] : "";
+  if (!room) return "room " + vRoom + " does not match " + b.property + " room numbers";
+  const vt = titleOf(vName.replace(/\s+\./, ".")), bt = titleOf(b.guest);
+  if (vt && bt && vt !== bt) return "conflict: voucher title differs from booking (" + vName.trim() + " vs " + b.guest + ")";
+  const mates = bookings.filter((o) => o !== b && o.status === "Confirmed" && o.property === b.property && o.room === room && o.check_in < b.check_out && b.check_in < o.check_out);
+  const single = (x) => !/^d|twin|shar/i.test(String(x.occupancy || "").trim());
+  if (mates.length >= 2) return "conflict: room " + room + " would hold 3+ guests";
+  if (mates.length === 1 && (single(b) || single(mates[0]))) return "conflict: " + room + " already has " + mates[0].guest + " (single occupancy)";
+  if (mates.length === 1 && titleOf(mates[0].guest) && bt && titleOf(mates[0].guest) !== bt) return "conflict: mixed-gender sharing in " + room;
+  b.room = room;
+  const today = new Intl.DateTimeFormat("en-CA", {timeZone: "Asia/Kolkata"}).format(new Date());
+  await env.DB.prepare("UPDATE datasets SET json = ?, updated_at = ? WHERE id = 'bookings'").bind(JSON.stringify(bookings), today).run();
+  return "room " + room + " set for " + b.guest + " (" + b.check_in + ")";
+}
+
 // ---------- voucher intake (Apps Script posts operator voucher PDFs here) ----------
 const V_GUEST = /(?:Guest(?:\s*Name)?|Name of (?:the )?Guest)\s*[:\-–]\s*([^\n]+)/i;
 const V_ROOM = /Room\s*(?:No\.?|Number|#)?\s*[:\-–]?\s*([A-Z]?\d{1,4}(?:\s*-\s*\d{1,4})?)/i;
@@ -302,6 +346,14 @@ async function vouchers(req, env) {
   if (!env.VOUCHER_TOKEN || !safeEq(tok, env.VOUCHER_TOKEN)) return json({error: "Unauthorized."}, 401);
   let b; try { b = await req.json(); } catch (e) { return json({error: "Bad request."}, 400); }
   await ensureVouchers(env);
+  if (b.reapply) {                                     // re-check stored vouchers whose room was not applied yet
+    try { await env.DB.prepare("ALTER TABLE vouchers ADD COLUMN applied TEXT").run(); } catch (e) { /* exists */ }
+    const {results} = await env.DB.prepare("SELECT key, file, text FROM vouchers WHERE applied IS NULL OR applied NOT LIKE 'room % set for%' ORDER BY received_ist").all();
+    const out = [];
+    for (const v of results) { let a; try { a = await applyVoucher(env, v.text, v.file); } catch (e) { a = "not applied: " + e.message; }
+      await env.DB.prepare("UPDATE vouchers SET applied = ? WHERE key = ?").bind(a.slice(0, 300), v.key).run(); out.push(v.file + ": " + a); }
+    return json({reapplied: out});
+  }
   if (Array.isArray(b.known)) {                       // which of these keys are already stored
     const keys = b.known.slice(0, 500).map(String), have = [];
     for (let i = 0; i < keys.length; i += 50) { const part = keys.slice(i, i + 50);
@@ -318,7 +370,10 @@ async function vouchers(req, env) {
   await env.DB.prepare("INSERT OR REPLACE INTO vouchers (key, received_ist, sender, subject, file, guest, room_guess, occupancy_guess, text, pdf, created) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)")
     .bind(key, String(b.received || "").slice(0, 40), String(b.from || "").slice(0, 200), String(b.subject || "").slice(0, 300), file, guest,
       vGuess(V_ROOM, text), vGuess(V_OCC, text), text.slice(0, 100000), bytes.length < 1800000 ? bytes : null, new Date().toISOString()).run();
-  return json({ok: true, chars: text.length, guest, room: vGuess(V_ROOM, text), occupancy: vGuess(V_OCC, text)});
+  let applied = ""; try { applied = await applyVoucher(env, text, file); } catch (e) { applied = "not applied: " + e.message; }
+  try { await env.DB.prepare("ALTER TABLE vouchers ADD COLUMN applied TEXT").run(); } catch (e) { /* column exists */ }
+  await env.DB.prepare("UPDATE vouchers SET applied = ? WHERE key = ?").bind(applied.slice(0, 300), key).run();
+  return json({ok: true, chars: text.length, guest, room: vGuess(V_ROOM, text), occupancy: vGuess(V_OCC, text), applied});
 }
 
 async function dashboard(env, user) {

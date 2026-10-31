@@ -1,0 +1,13 @@
+property,guest,grade,base,check_in,check_out,nights,room,status,concur_tr,note,gender,occupancy
+My Home Bhooja,Mr. Arjun Mehta,E1,Bengaluru,2026-10-27,2026-10-30,3,1001-103,Confirmed,SAMPLE01,,Male,Single
+My Home Bhooja,Ms. Kavya Rao,M7,Pune,2026-10-27,2026-10-28,1,Not assigned,Confirmed,SAMPLE02,,Female,Single
+My Home Bhooja,Mr. Rohan Iyer,E2,Chennai,2026-10-28,2026-10-30,2,1001-101,Confirmed,SAMPLE03,,Male,Double
+My Home Bhooja,Mr. Vikram Shah,E2,Powai,2026-10-28,2026-10-30,2,1001-101,Confirmed,SAMPLE04,Sharing with Rohan Iyer,Male,Double
+My Home Bhooja,Mr. Sameer Kulkarni,Not stated,Not stated,2026-10-29,2026-10-31,2,—,Not available,SAMPLE05,Property had no rooms for these dates,Male,Single
+My Home Bhooja,Ms. Neha Joshi,E3,Bengaluru,2026-11-02,2026-11-04,2,Not assigned,Confirmed,SAMPLE06,,Female,Single
+My Home Bhooja,Mr. Aditya Verma,E1,Pune,2026-11-03,2026-11-04,1,1001-102,Confirmed,SAMPLE07,,Male,Single
+My Home Bhooja,Ms. Ananya Das,M6,Chennai,2026-11-05,2026-11-07,2,1001-104,Confirmed,SAMPLE08,,Female,Double
+My Home Bhooja,Ms. Ritu Menon,E2,Bengaluru,2026-11-05,2026-11-07,2,1001-104,Confirmed,SAMPLE09,Sharing with Ananya Das,Female,Double
+My Home Bhooja,Mr. Karan Malhotra,M8,Powai,2026-11-10,2026-11-12,2,Not assigned,Confirmed,SAMPLE10,,Male,Single
+My Home Bhooja,Mr. Nikhil Bose,E1,Pune,2026-11-16,2026-11-18,2,Not assigned,Confirmed,SAMPLE11,,Male,Single
+My Home Bhooja,Ms. Pooja Pillai,E3,Bengaluru,2026-11-20,2026-11-21,1,Not assigned,Confirmed,SAMPLE12,,Female,Single

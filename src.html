@@ -1,0 +1,651 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width,initial-scale=1">
+<meta name="robots" content="noindex,nofollow">
+<title>Guest House Dashboard · Zuna</title>
+<style>/*__CSS__*/</style>
+</head>
+<body class="bg-zuna-50/60 text-zuna-900 antialiased font-sans">
+__SPLASH__
+<script>(function(){var s=document.getElementById('splash'),h=document.getElementById('spHi'),n=null,t0=Date.now(),done=false;
+try{n=sessionStorage.getItem('zp.hi');sessionStorage.removeItem('zp.hi')}catch(e){}
+if(n){s.classList.add('sp-cont');h.textContent='Welcome, '+n}else{h.textContent='Welcome back'}
+function hide(){if(done)return;done=true;setTimeout(function(){s.classList.add('sp-hide');setTimeout(function(){s.remove()},600)},Math.max(0,(n?700:250)-(Date.now()-t0)))}
+window.addEventListener('load',function(){setTimeout(hide,150)});setTimeout(hide,10000)})();</script>
+<script src="https://cdn.jsdelivr.net/npm/apexcharts@3.54.1/dist/apexcharts.min.js"></script>
+<div id="app" class="min-h-screen lg:grid lg:grid-cols-[256px_minmax(0,1fr)]">
+
+  <!-- Sidebar -->
+  <aside id="side" class="fixed inset-y-0 left-0 z-50 w-64 -translate-x-full lg:translate-x-0 lg:sticky lg:top-0 lg:h-screen transition-[transform,width] duration-300 bg-zuna-900 text-white flex flex-col border-t-4 border-mint-500">
+    <div class="px-5 pt-5 flex items-center gap-2 sb-full">
+      <span class="bg-white rounded-lg px-3 py-2 flex"><img data-logo alt="LTM" src="__LTM__" class="h-7"></span>
+    </div>
+    <div class="sb-mini hidden pt-5 justify-center"><span class="w-12 h-10 rounded-xl bg-white grid place-items-center px-1.5"><img alt="LTM" src="__LTM__" class="w-full h-auto"></span></div>
+    <div class="px-5 mt-5 flex items-start gap-2 sb-full">
+      <div class="min-w-0 flex-1">
+        <p class="text-base font-semibold leading-tight">Guest Houses</p>
+        <p class="text-xs text-zuna-200 mt-0.5">Inventory &amp; occupancy</p>
+      </div>
+      <button id="sbClose" title="Collapse sidebar" aria-label="Collapse sidebar" class="hidden lg:grid place-items-center w-8 h-8 rounded-lg text-zuna-200 hover:text-white hover:bg-white/10 transition-colors"><i data-i="panel-left-close" class="w-[18px] h-[18px]"></i></button>
+      <button id="sbCloseM" title="Close menu" aria-label="Close menu" class="lg:hidden grid place-items-center w-8 h-8 rounded-lg text-zuna-200 hover:text-white hover:bg-white/10"><i data-i="x" class="w-[18px] h-[18px]"></i></button>
+    </div>
+    <div class="sb-mini hidden mt-4 justify-center"><button id="sbOpen" title="Expand sidebar" aria-label="Expand sidebar" class="grid place-items-center w-10 h-10 rounded-xl text-zuna-200 hover:text-white hover:bg-white/10 transition-colors"><i data-i="panel-left-open" class="w-[18px] h-[18px]"></i></button></div>
+    <nav id="nav" class="mt-6 px-3 flex flex-col gap-1">
+      <button data-view="overview" class="navbtn" title="Overview"><i data-i="layout-dashboard"></i><span class="sb-label">Overview</span></button>
+      <button data-view="rack" class="navbtn" title="Room rack"><i data-i="bed-double"></i><span class="sb-label">Room rack</span></button>
+      <button data-view="calendar" class="navbtn" title="Availability"><i data-i="calendar-days"></i><span class="sb-label">Availability</span></button>
+      <button data-view="bookings" class="navbtn" title="Bookings"><i data-i="list-checks"></i><span class="sb-label">Bookings</span><span id="navCount" class="sb-label ml-auto text-xs font-bold rounded-full px-2 py-0.5 bg-white/15">0</span></button>
+      <button data-view="houses" class="navbtn" title="Guest houses"><i data-i="building-2"></i><span class="sb-label">Guest houses</span></button>
+    </nav>
+    <div class="mt-auto border-t border-white/10 p-3 flex items-center gap-3 sb-user">
+      <span id="userAv" class="w-9 h-9 shrink-0 rounded-full bg-mint-500 text-zuna-900 grid place-items-center text-xs font-bold">—</span>
+      <div class="min-w-0 flex-1 sb-label"><p id="userName" class="text-sm font-semibold truncate">—</p><p id="userMail" class="text-xs text-zuna-300 truncate">—</p></div>
+      <a href="/logout" id="logoutBtn" title="Log out" aria-label="Log out" class="grid place-items-center w-9 h-9 shrink-0 rounded-lg text-zuna-200 hover:text-white hover:bg-white/10 transition-colors"><i data-i="log-out" class="w-[18px] h-[18px]"></i></a>
+    </div>
+  </aside>
+  <div id="scrimSide" class="fixed inset-0 z-40 bg-zuna-900/40 backdrop-blur-sm hidden lg:hidden"></div>
+
+  <!-- Main -->
+  <div class="min-w-0 flex flex-col">
+    <header class="sticky top-0 z-30 bg-white/80 backdrop-blur-md border-b border-zuna-100">
+      <div class="px-4 lg:px-8 py-3 flex flex-wrap xl:flex-nowrap items-center gap-3">
+        <button id="menuBtn" class="lg:hidden grid place-items-center w-9 h-9 rounded-lg ring-1 ring-zuna-100 bg-white" aria-label="Menu"><i data-i="menu" class="w-4 h-4"></i></button>
+        <div class="mr-auto min-w-0">
+          <h1 id="viewTitle" class="text-lg font-bold tracking-tight">Overview</h1>
+          <p id="viewSub" class="text-xs text-zuna-500 truncate">—</p>
+        </div>
+        <div id="rangeWrap" class="flex items-center gap-1 rounded-xl bg-zuna-50 p-1 ring-1 ring-zuna-100 overflow-x-auto max-w-full">
+          <button data-range="7" class="rangebtn">7 days</button>
+          <button data-range="30" class="rangebtn">30 days</button>
+          <button data-range="month" class="rangebtn">This month</button>
+          <button data-range="all" class="rangebtn">Full period</button>
+        </div>
+        <div id="propWrap" class="relative">
+          <i data-i="hotel" class="w-4 h-4 absolute left-3 top-1/2 -translate-y-1/2 text-zuna-400 pointer-events-none"></i>
+          <select id="propSel" aria-label="Guest house" class="w-[210px] max-w-full truncate appearance-none pl-9 pr-9 py-2 rounded-xl bg-white ring-1 ring-zuna-100 shadow-sm text-sm font-semibold focus:outline-none focus:ring-2 focus:ring-mint-500 cursor-pointer"></select>
+          <svg class="w-4 h-4 absolute right-3 top-1/2 -translate-y-1/2 text-zuna-400 pointer-events-none" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5"><path d="m6 9 6 6 6-6"/></svg>
+        </div>
+      </div>
+    </header>
+
+    <main class="px-4 lg:px-8 py-5 w-full max-w-[1500px]">
+
+      <!-- OVERVIEW -->
+      <section data-view="overview" class="view space-y-4">
+        <div id="alerts" class="hidden"></div>
+        <div id="today" class="grid grid-cols-2 md:grid-cols-5 gap-3"></div>
+        <div id="kpis" class="grid grid-cols-2 md:grid-cols-3 xl:grid-cols-6 gap-3"></div>
+        <div class="grid grid-cols-1 xl:grid-cols-3 gap-4">
+          <div class="card xl:col-span-2">
+            <div class="card-h">
+              <div><h3 class="card-t">Nightly occupancy</h3><p class="card-s">Rooms occupied each night · click a bar for details</p></div>
+              <div class="ml-auto flex items-center gap-3 text-xs text-zuna-500"><span class="flex items-center gap-1.5"><i class="w-2.5 h-2.5 rounded-sm bg-mint-500"></i>Occupied</span><span class="flex items-center gap-1.5"><i class="w-2.5 h-2.5 rounded-sm bg-zuna-100"></i>Vacant</span></div>
+            </div>
+            <div class="px-3 pb-2"><div id="chartMain" class="min-h-[230px]"></div></div>
+          </div>
+          <div class="card">
+            <div class="card-h"><div><h3 class="card-t">Room-nights</h3><p class="card-s" id="donutSub">Selected period</p></div></div>
+            <div class="px-3 pb-3"><div id="chartDonut" class="min-h-[230px]"></div></div>
+          </div>
+        </div>
+        <div class="grid grid-cols-1 xl:grid-cols-3 gap-4">
+          <div class="card">
+            <div class="card-h"><div><h3 class="card-t">Upcoming arrivals</h3><p class="card-s" id="arrSub">—</p></div></div>
+            <ul id="arrivals" class="divide-y divide-zuna-50"></ul>
+          </div>
+          <div class="card">
+            <div class="card-h"><div><h3 class="card-t">Stays by grade</h3><p class="card-s">Confirmed stays, full period</p></div></div>
+            <div id="byGrade" class="p-5 space-y-3"></div>
+          </div>
+          <div class="card">
+            <div class="card-h"><div><h3 class="card-t">Stays by base location</h3><p class="card-s">Where guests travel from</p></div></div>
+            <div id="byBase" class="p-5 space-y-3"></div>
+          </div>
+        </div>
+      </section>
+
+      <!-- RACK -->
+      <section data-view="rack" class="view hidden">
+        <div class="card">
+          <div class="card-h">
+            <div><h3 class="card-t">Room rack</h3><p class="card-s">Each row is a room, each column a night. Click any cell for details.</p></div>
+            <div class="ml-auto flex flex-wrap items-center gap-3 text-xs text-zuna-500"><span class="flex items-center gap-1.5"><i class="w-2.5 h-2.5 rounded-sm bg-mint-500"></i>Occupied</span><span class="flex items-center gap-1.5"><i class="w-2.5 h-2.5 rounded-sm bg-zuna-50 ring-1 ring-zuna-100"></i>Vacant</span><span class="flex items-center gap-1.5"><i class="w-2.5 h-2.5 rounded-sm bg-amber-500"></i>Request declined</span><span class="flex items-center gap-1.5"><i class="w-2.5 h-2.5 rounded-sm bg-mint-500 text-[8px] leading-[10px] text-center font-bold text-zuna-900">2</i>Shared (double)</span><span class="flex items-center gap-1.5"><i class="w-2.5 h-2.5 rounded-sm bg-rose-500"></i>Mixed gender – not allowed</span></div>
+          </div>
+          <div id="rack" class="p-5 overflow-x-auto"></div>
+        </div>
+      </section>
+
+      <!-- CALENDAR -->
+      <section data-view="calendar" class="view hidden">
+        <div class="card">
+          <div class="card-h">
+            <div><h3 class="card-t">Night-wise availability</h3><p class="card-s">Rooms free each night · click a date for details</p></div>
+            <div class="flex items-center gap-2 mx-auto">
+              <button id="calPrev" class="iconbtn" aria-label="Previous month"><i data-i="chevron-left" class="w-4 h-4"></i></button>
+              <span id="calMonth" class="w-36 text-center font-semibold">—</span>
+              <button id="calNext" class="iconbtn" aria-label="Next month"><i data-i="chevron-right" class="w-4 h-4"></i></button>
+            </div>
+            <div class="flex gap-2"><button class="btn-primary" data-dl="nightly-pdf"><i data-i="download" class="w-4 h-4"></i>PDF</button><button class="btn" data-dl="nightly-xlsx"><i data-i="download" class="w-4 h-4"></i>Excel</button></div>
+          </div>
+          <div class="p-5 space-y-3">
+            <div class="flex flex-wrap gap-4 text-xs text-zuna-500"><span class="flex items-center gap-1.5"><i class="w-3 h-3 rounded bg-white ring-1 ring-zuna-100"></i>All rooms free</span><span class="flex items-center gap-1.5"><i class="w-3 h-3 rounded bg-mint-100"></i>Partly occupied</span><span class="flex items-center gap-1.5"><i class="w-3 h-3 rounded bg-mint-500"></i>Full</span><span class="flex items-center gap-1.5"><b class="text-amber-500">▲</b>Request declined</span></div>
+            <div id="cal" class="grid grid-cols-7 gap-1.5 sm:gap-2"></div>
+          </div>
+        </div>
+      </section>
+
+      <!-- BOOKINGS -->
+      <section data-view="bookings" class="view hidden">
+        <div class="card">
+          <div class="card-h">
+            <div><h3 class="card-t">Booking register</h3><p class="card-s">Click a booking for full details</p></div>
+            <div class="ml-auto flex gap-2"><button class="btn-primary" data-dl="register-pdf"><i data-i="download" class="w-4 h-4"></i>PDF</button><button class="btn" data-dl="register-xlsx"><i data-i="download" class="w-4 h-4"></i>Excel</button></div>
+          </div>
+          <div class="px-5 py-3 flex flex-wrap items-center gap-3 border-b border-zuna-50">
+            <div id="bfilters" class="flex flex-wrap gap-1 rounded-xl bg-zuna-50 p-1 ring-1 ring-zuna-100"></div>
+            <label class="relative ml-auto w-full sm:w-72"><i data-i="search" class="w-4 h-4 absolute left-3 top-1/2 -translate-y-1/2 text-zuna-400"></i><input id="bsearch" type="search" placeholder="Search guest, grade, room…" class="w-full pl-9 pr-3 py-2 rounded-xl ring-1 ring-zuna-100 bg-white text-sm placeholder:text-zuna-300 focus:outline-none focus:ring-2 focus:ring-mint-500"></label>
+          </div>
+          <div class="overflow-x-auto">
+            <table class="w-full text-sm">
+              <thead><tr class="text-left text-xs font-semibold text-zuna-500 bg-zuna-50/70">
+                <th data-k="guest" class="th">Guest</th><th data-k="grade" class="th">Grade</th><th data-k="_g" class="th">Gender</th><th data-k="_occ" class="th">Occupancy</th><th data-k="check_in" class="th">Check-in</th><th data-k="check_out" class="th">Check-out</th><th data-k="nights" class="th text-right">Nights</th><th data-k="room" class="th">Room</th><th data-k="state" class="th">Status</th>
+              </tr></thead>
+              <tbody id="btbody" class="divide-y divide-zuna-50"></tbody>
+            </table>
+          </div>
+          <p id="bempty" class="hidden p-8 text-center text-sm text-zuna-400">No bookings match.</p>
+        </div>
+      </section>
+
+      <!-- HOUSES -->
+      <section data-view="houses" class="view hidden">
+        <div id="houses" class="grid grid-cols-1 md:grid-cols-2 2xl:grid-cols-3 gap-4"></div>
+      </section>
+    </main>
+  </div>
+</div>
+
+<!-- Drawer -->
+<div id="scrim" class="fixed inset-0 z-50 bg-zuna-900/40 backdrop-blur-[2px] opacity-0 pointer-events-none transition-opacity"></div>
+<aside id="drawer" class="fixed top-0 right-0 z-[60] h-full w-full sm:w-[440px] bg-white shadow-2xl translate-x-full transition-transform duration-300 flex flex-col border-l-4 border-mint-500" aria-hidden="true">
+  <div class="flex items-start gap-3 p-5 border-b border-zuna-100"><div class="min-w-0"><h3 id="dTitle" class="text-lg font-bold">—</h3><p id="dSub" class="text-xs text-zuna-500"></p></div><button id="dClose" class="iconbtn ml-auto" aria-label="Close"><i data-i="x" class="w-4 h-4"></i></button></div>
+  <div id="dBody" class="p-5 overflow-y-auto space-y-5"></div>
+</aside>
+<div id="toast" class="fixed bottom-6 left-1/2 -translate-x-1/2 translate-y-4 opacity-0 transition-all z-[70] bg-zuna-900 text-white text-sm font-semibold px-4 py-2.5 rounded-xl shadow-xl flex items-center gap-2"><span class="w-2 h-2 rounded-full bg-mint-500"></span><span id="toastText"></span></div>
+
+<!-- Tailwind component classes (kept here so the build sees them) -->
+<template id="tw-safelist"><div class="navbtn rangebtn card card-h card-t card-s btn btn-primary iconbtn th badge"></div></template>
+
+<script>
+window.__LTMGH_DATA = __DATA__;
+const REPORT_DATE = '2026-10-31';
+const ICONS = __ICONS__;
+</script>
+<script>
+(function () {
+const DATA = window.__LTMGH_DATA || {};
+const $ = (s, r = document) => r.querySelector(s), $$ = (s, r = document) => [...r.querySelectorAll(s)];
+const h = (tag, cls, text) => { const e = document.createElement(tag); if (cls) e.className = cls; if (text != null) e.textContent = text; return e; };
+const icon = (name, cls = 'w-4 h-4') => { const s = document.createElementNS('http://www.w3.org/2000/svg', 'svg'); s.setAttribute('viewBox', '0 0 24 24'); s.setAttribute('fill', 'none'); s.setAttribute('stroke', 'currentColor'); s.setAttribute('stroke-width', '2'); s.setAttribute('stroke-linecap', 'round'); s.setAttribute('stroke-linejoin', 'round'); s.setAttribute('class', cls); s.innerHTML = ICONS[name] || ''; return s; };
+const hydrateIcons = (root = document) => $$('i[data-i]', root).forEach((i) => { const s = icon(i.dataset.i, (i.getAttribute('class') || 'w-[18px] h-[18px]') + ' shrink-0'); i.replaceWith(s); });
+const MON = ['Jan','Feb','Mar','Apr','May','Jun','Jul','Aug','Sep','Oct','Nov','Dec'], DAY = ['Sun','Mon','Tue','Wed','Thu','Fri','Sat'];
+const DAYL = ['Sunday','Monday','Tuesday','Wednesday','Thursday','Friday','Saturday'], MONL = ['January','February','March','April','May','June','July','August','September','October','November','December'];
+const D = (s) => new Date(s + 'T00:00:00Z'), iso = (d) => d.toISOString().slice(0, 10);
+const addDays = (s, n) => iso(new Date(D(s).getTime() + n * 864e5));
+const fShort = (s) => { const d = D(s); return d.getUTCDate() + ' ' + MON[d.getUTCMonth()]; };
+const fDay = (s) => { const d = D(s); return DAY[d.getUTCDay()] + ' ' + d.getUTCDate() + ' ' + MON[d.getUTCMonth()]; };
+const fLong = (s) => { const d = D(s); return d.getUTCDate() + ' ' + MON[d.getUTCMonth()] + ' ' + d.getUTCFullYear(); };
+const fFull = (s) => { const d = D(s); return DAYL[d.getUTCDay()] + ', ' + d.getUTCDate() + ' ' + MONL[d.getUTCMonth()] + ' ' + d.getUTCFullYear(); };
+const pct = (v) => (Math.round(v * 1000) / 10).toFixed(1) + '%';
+const today = new Intl.DateTimeFormat('en-CA', {timeZone: 'Asia/Kolkata'}).format(new Date());
+const cleanName = (n) => n.replace(/^(Mr|Ms|Mrs|Miss|Dr)\.?\s+/i, '');
+const initials = (n) => cleanName(n).split(/\s+/).filter(Boolean).slice(0, 2).map((w) => w[0]).join('').toUpperCase();
+const MINT = '#02C988', INDIGO = '#12005A', LILAC = '#e6e2f6';
+
+const props = DATA.properties || [], bookings = DATA.bookings || [], period = (DATA.period || [])[0] || {from: today, to: today};
+/* gender + occupancy: explicit fields win (gender: M/F/Male/Female, occupancy: Single/Double); otherwise gender from Mr/Ms, Double when two guests share an assigned room */
+const genderOf = (b) => { const g = String(b.gender || '').trim().toLowerCase(); if (/^(m|male)$/.test(g)) return 'Male'; if (/^(f|female)$/.test(g)) return 'Female';
+  if (/^mr\.?\s/i.test(b.guest || '')) return 'Male'; if (/^(ms|mrs|miss)\.?\s/i.test(b.guest || '')) return 'Female'; return 'Not stated'; };
+const hasRoom = (b) => /^\d/.test(b.room || '');
+const overlaps = (a, b) => a.check_in < b.check_out && b.check_in < a.check_out;
+bookings.forEach((b) => { b._g = genderOf(b); });
+bookings.forEach((b) => {
+  b._mates = b.status === 'Confirmed' && hasRoom(b) ? bookings.filter((o) => o !== b && o.status === 'Confirmed' && o.property === b.property && o.room === b.room && overlaps(o, b)) : [];
+  b._occ = /^(d|twin|shar)/i.test(String(b.occupancy || '').trim()) || b._mates.length ? 'Double' : 'Single';
+  b._clash = b._mates.filter((o) => b._g !== 'Not stated' && o._g !== 'Not stated' && o._g !== b._g);
+});
+const clashNights = (b, o) => { const a = b.check_in > o.check_in ? b.check_in : o.check_in, z = b.check_out < o.check_out ? b.check_out : o.check_out; return [a, z]; };
+const clashText = (b) => b._clash.map((o) => { const [a, z] = clashNights(b, o); return cleanName(b.guest) + ' (' + b._g.toLowerCase() + ') and ' + cleanName(o.guest) + ' (' + o._g.toLowerCase() + ') share room ' + b.room + ', ' + fShort(a) + ' – ' + fShort(z); }).join('; ');
+const RULE = 'Double occupancy is allowed only for two male or two female guests.';
+const state = {view: 'overview', prop: (props.find((p) => p.status === 'Live') || props[0] || {}).property, range: 'all', bfilter: 'all', bsearch: '', bsort: {k: 'check_in', dir: 1}, calMonth: null};
+try { const s = JSON.parse(localStorage.getItem('ltmgh') || '{}'); if (s.range) state.range = s.range; } catch (e) {}
+const save = () => { try { localStorage.setItem('ltmgh', JSON.stringify({range: state.range})); } catch (e) {} };
+
+const P = () => props.find((p) => p.property === state.prop) || {};
+const myB = () => bookings.filter((b) => b.property === state.prop);
+const stateOf = (b) => b.status !== 'Confirmed' ? 'Not accommodated' : b.check_out <= today ? 'Completed' : b.check_in <= today ? 'In house' : 'Upcoming';
+const nightsFor = (prop) => {
+  const p = props.find((x) => x.property === prop) || {}, rooms = +p.rooms || 0, bs = bookings.filter((b) => b.property === prop), out = [];
+  for (let n = period.from; n <= period.to; n = addDays(n, 1)) {
+    const cov = bs.filter((b) => b.check_in <= n && n < b.check_out);
+    const inH = cov.filter((b) => b.status === 'Confirmed'), dec = cov.filter((b) => b.status !== 'Confirmed');
+    const assigned = new Set(inH.filter(hasRoom).map((b) => b.room)), un = inH.filter((b) => !hasRoom(b));
+    const used = Math.min(rooms || Infinity, assigned.size + un.filter((b) => b._occ !== 'Double').length + Math.ceil(un.filter((b) => b._occ === 'Double').length / 2));
+    const clash = inH.filter((b) => b._clash.some((o) => o.check_in <= n && n < o.check_out));
+    out.push({night: n, total: rooms, booked: used, vacant: Math.max(0, rooms - used), occ: rooms ? used / rooms : 0, guests: inH, declined: dec, clash});
+  }
+  return out;
+};
+const nightsAll = () => nightsFor(state.prop);
+const rangeBounds = () => {
+  if (state.range === 'all') return [period.from, period.to];
+  if (state.range === 'month') { const d = D(today); return [iso(new Date(Date.UTC(d.getUTCFullYear(), d.getUTCMonth(), 1))), iso(new Date(Date.UTC(d.getUTCFullYear(), d.getUTCMonth() + 1, 0)))]; }
+  return [today, addDays(today, +state.range - 1)];
+};
+const nightsInRange = () => { const [a, b] = rangeBounds(); return nightsAll().filter((x) => x.night >= a && x.night <= b); };
+const rangeLabel = () => { const [a, b] = rangeBounds(); return fShort(a) + ' – ' + fLong(b); };
+
+/* ---------- toast / drawer ---------- */
+let tt; const toast = (m) => { const t = $('#toast'); $('#toastText').textContent = m; t.classList.remove('opacity-0', 'translate-y-4'); clearTimeout(tt); tt = setTimeout(() => t.classList.add('opacity-0', 'translate-y-4'), 2200); };
+const openDrawer = (title, sub, body) => {
+  $('#dTitle').textContent = title; $('#dSub').textContent = sub || ''; $('#dBody').replaceChildren(body);
+  $('#drawer').classList.remove('translate-x-full'); $('#scrim').classList.remove('opacity-0', 'pointer-events-none'); $('#drawer').setAttribute('aria-hidden', 'false');
+  setTimeout(() => $('#dClose').focus(), 60);
+};
+const closeDrawer = () => { $('#drawer').classList.add('translate-x-full'); $('#scrim').classList.add('opacity-0', 'pointer-events-none'); $('#drawer').setAttribute('aria-hidden', 'true'); };
+$('#dClose').onclick = closeDrawer; $('#scrim').onclick = closeDrawer;
+document.addEventListener('keydown', (e) => { if (e.key === 'Escape') closeDrawer(); });
+
+const BADGE = {Upcoming: 'bg-mint-50 text-mint-700 ring-mint-200', 'In house': 'bg-mint-500 text-zuna-900 ring-mint-500', Completed: 'bg-zuna-50 text-zuna-500 ring-zuna-100', 'Not accommodated': 'bg-rose-50 text-rose-700 ring-rose-200'};
+const badge = (s) => h('span', 'badge ' + (BADGE[s] || BADGE.Completed), s);
+const genderTag = (g) => h('span', 'inline-flex items-center rounded-md px-2 py-0.5 text-xs font-semibold ring-1 ' + (g === 'Male' ? 'bg-zuna-50 text-zuna-700 ring-zuna-100' : g === 'Female' ? 'bg-mint-50 text-mint-700 ring-mint-200' : 'bg-white text-zuna-400 ring-zuna-100'), g);
+const occTag = (o) => { const t = h('span', 'inline-flex items-center gap-1 rounded-md px-2 py-0.5 text-xs font-semibold ring-1 ' + (o === 'Double' ? 'bg-zuna-900 text-white ring-zuna-900' : 'bg-white text-zuna-700 ring-zuna-100')); t.appendChild(icon(o === 'Double' ? 'users' : 'user-round', 'w-3.5 h-3.5')); t.appendChild(document.createTextNode(o)); return t; };
+const warnIcon = (title, cls = 'w-4 h-4') => { const s = h('span', 'inline-grid place-items-center text-rose-600 shrink-0'); s.appendChild(icon('triangle-alert', cls)); s.title = title; s.setAttribute('role', 'img'); s.setAttribute('aria-label', title); return s; };
+const warnBox = (title, text) => { const b = h('div', 'flex gap-3 rounded-xl bg-rose-50 ring-1 ring-rose-200 p-3.5 text-sm text-rose-800'); b.appendChild(warnIcon(title, 'w-5 h-5')); const m = h('div', 'space-y-0.5'); m.appendChild(h('p', 'font-semibold', title)); m.appendChild(h('p', 'text-rose-700', text)); b.appendChild(m); return b; };
+const gradeTag = (g) => h('span', 'inline-flex items-center rounded-md px-2 py-0.5 text-xs font-bold ring-1 ring-zuna-100 bg-white text-zuna-700', g);
+const avatar = (n, size = 'w-9 h-9 text-xs') => h('span', 'grid place-items-center shrink-0 rounded-full bg-gradient-to-br from-mint-100 to-zuna-100 text-zuna-800 font-bold ' + size, initials(n));
+const stat3 = (items) => { const g = h('div', 'grid grid-cols-3 gap-2'); items.forEach(([v, l]) => { const c = h('div', 'rounded-xl bg-zuna-50 ring-1 ring-zuna-100 p-3 text-center'); c.appendChild(h('div', 'text-xl font-bold tabular-nums', String(v))); c.appendChild(h('div', 'text-xs text-zuna-500 mt-0.5', l)); g.appendChild(c); }); return g; };
+const kv = (pairs) => { const dl = h('dl', 'grid grid-cols-[120px_1fr] gap-x-4 gap-y-2.5 text-sm'); pairs.forEach(([k, v]) => { dl.appendChild(h('dt', 'text-zuna-500 font-medium', k)); dl.appendChild(h('dd', 'font-medium', v || '—')); }); return dl; };
+
+const guestItem = (b, extra) => {
+  const li = h('li', 'flex items-center gap-3 px-5 py-3 hover:bg-zuna-50/70 cursor-pointer transition-colors');
+  li.appendChild(avatar(b.guest));
+  const m = h('div', 'min-w-0 flex-1');
+  const nm = h('p', 'flex items-center gap-1.5 min-w-0'); nm.appendChild(h('span', 'font-semibold text-sm truncate', cleanName(b.guest)));
+  if (b._clash && b._clash.length) nm.appendChild(warnIcon('Mixed-gender sharing: ' + clashText(b), 'w-3.5 h-3.5'));
+  m.appendChild(nm);
+  m.appendChild(h('p', 'text-xs text-zuna-500 truncate', fShort(b.check_in) + ' → ' + fShort(b.check_out) + ' · ' + b.nights + (+b.nights === 1 ? ' night' : ' nights')));
+  const meta = h('p', 'mt-0.5 flex items-center gap-1 text-xs text-zuna-400 whitespace-nowrap');
+  meta.appendChild(icon(b._occ === 'Double' ? 'users' : 'user-round', 'w-3.5 h-3.5 shrink-0'));
+  meta.appendChild(h('span', b._g === 'Female' ? 'text-mint-700 font-medium' : b._g === 'Male' ? 'text-zuna-600 font-medium' : '', b._g));
+  meta.appendChild(h('span', null, '·')); meta.appendChild(h('span', b._occ === 'Double' ? 'text-zuna-900 font-semibold' : '', b._occ));
+  m.appendChild(meta);
+  li.appendChild(m);
+  if (extra) li.appendChild(extra);
+  li.appendChild(gradeTag(b.grade));
+  li.onclick = () => bookingDrawer(b);
+  return li;
+};
+const nightDrawer = (n) => {
+  const box = h('div', 'space-y-5');
+  box.appendChild(stat3([[n.total, 'Rooms'], [n.booked, 'Occupied'], [n.vacant, 'Vacant']]));
+  const occ = h('div'); const bar = h('div', 'h-2 rounded-full bg-zuna-50 overflow-hidden'); const f = h('div', 'h-full bg-mint-500 rounded-full'); f.style.width = (n.occ * 100) + '%'; bar.appendChild(f); occ.appendChild(h('div', 'flex justify-between text-xs text-zuna-500 mb-1.5', null)); occ.firstChild.append(h('span', null, 'Occupancy'), h('span', 'font-semibold text-zuna-900', pct(n.occ))); occ.appendChild(bar); box.appendChild(occ);
+  if (n.clash && n.clash.length) box.appendChild(warnBox('Mixed-gender room sharing', [...new Set(n.clash.map((b) => [b, ...b._clash].map((x) => cleanName(x.guest)).sort().join(' and ') + ' in room ' + b.room))].join('; ') + '. ' + RULE));
+  box.appendChild(h('p', 'text-sm font-semibold text-zuna-900', 'Guests in house'));
+  if (n.guests.length) { const ul = h('ul', 'rounded-xl ring-1 ring-zuna-100 divide-y divide-zuna-50 overflow-hidden -mt-3'); n.guests.forEach((g) => ul.appendChild(guestItem(g))); box.appendChild(ul); }
+  else box.appendChild(h('p', 'text-sm text-zuna-400 -mt-3', 'No Zuna guests this night.'));
+  if (n.declined.length) { box.appendChild(h('p', 'text-sm font-semibold text-amber-700', 'Requests declined by property')); const ul = h('ul', 'rounded-xl ring-1 ring-amber-200 divide-y divide-amber-100 overflow-hidden -mt-3'); n.declined.forEach((g) => ul.appendChild(guestItem(g))); box.appendChild(ul); }
+  openDrawer(fFull(n.night), P().property + ' · ' + P().city, box);
+};
+const bookingDrawer = (b) => {
+  const st = stateOf(b), box = h('div', 'space-y-5');
+  const top = h('div', 'flex items-center gap-3'); top.appendChild(avatar(b.guest, 'w-12 h-12 text-base')); const t = h('div', 'space-y-1'); t.appendChild(badge(st)); t.appendChild(h('p', 'text-xs text-zuna-500', b.property)); top.appendChild(t); box.appendChild(top);
+  box.appendChild(stat3([[fShort(b.check_in), 'Check-in'], [fShort(b.check_out), 'Check-out'], [b.nights, +b.nights === 1 ? 'Night' : 'Nights']]));
+  if (b._clash.length) box.insertBefore(warnBox('Mixed-gender room sharing', clashText(b) + '. ' + RULE), box.firstChild);
+  box.appendChild(kv([['Gender', b._g], ['Occupancy', b._occ + (b._mates.length ? ' · with ' + b._mates.map((o) => cleanName(o.guest) + ' (' + o._g + ')').join(', ') : '')], ['Grade', b.grade], ['Base location', b.base], ['Room', b.room], ['Concur TR', b.concur_tr], ['Remarks', b.note]]));
+  openDrawer(cleanName(b.guest), fFull(b.check_in) + ' → ' + fShort(b.check_out), box);
+};
+
+/* ---------- count-up ---------- */
+const countUp = (node, to, fmt) => {
+  if (matchMedia('(prefers-reduced-motion: reduce)').matches) { node.textContent = fmt(to); return; }
+  const t0 = performance.now(), dur = 800;
+  const step = (t) => { const k = Math.min(1, (t - t0) / dur), e = 1 - Math.pow(1 - k, 3); node.textContent = fmt(to * e); if (k < 1) requestAnimationFrame(step); };
+  requestAnimationFrame(step);
+};
+const int = (v) => Math.round(v).toLocaleString('en-IN');
+
+/* ---------- charts ---------- */
+const charts = {};
+const killChart = (k) => { if (charts[k]) { try { charts[k].destroy(); } catch (e) {} delete charts[k]; } };
+const hasApex = () => typeof window.ApexCharts === 'function';
+const noChart = (el) => { el.replaceChildren(h('p', 'p-8 text-center text-sm text-zuna-400', 'Chart unavailable — check your internet connection.')); };
+const sparkline = (el, data, color) => {
+  if (!hasApex()) return;
+  const c = new ApexCharts(el, {chart: {type: 'area', height: 38, sparkline: {enabled: true}, animations: {enabled: true, speed: 600}}, series: [{data}], stroke: {curve: 'smooth', width: 2}, colors: [color],
+    fill: {type: 'gradient', gradient: {shadeIntensity: 1, opacityFrom: .35, opacityTo: 0, stops: [0, 100]}}, tooltip: {enabled: false}});
+  c.render(); return c;
+};
+
+/* ---------- OVERVIEW ---------- */
+const renderOverview = () => {
+  const all = nightsAll(), rn = nightsInRange(), bs = myB();
+  const tn = all.find((x) => x.night === today);
+  const conf = bs.filter((b) => b.status === 'Confirmed');
+  const arr = conf.filter((b) => b.check_in === today), dep = conf.filter((b) => b.check_out === today), tom = conf.filter((b) => b.check_in === addDays(today, 1));
+  const A = $('#alerts'); A.replaceChildren();
+  const cl = conf.filter((b) => b._clash.length && b.check_out > today);
+  if (cl.length) {
+    const seen = new Set(), pairs = [];
+    cl.forEach((b) => b._clash.forEach((o) => { const k = [b.guest, o.guest].sort().join('|') + b.room; if (!seen.has(k) && o.check_out > today) { seen.add(k); pairs.push([b, o]); } }));
+    const box = h('div', 'flex flex-col sm:flex-row sm:items-center gap-3 rounded-2xl bg-rose-50 ring-1 ring-rose-200 px-4 py-3');
+    const l = h('div', 'flex items-start gap-3 min-w-0 flex-1'); l.appendChild(warnIcon('Mixed-gender room sharing', 'w-5 h-5 mt-0.5'));
+    const m = h('div', 'min-w-0'); m.appendChild(h('p', 'text-sm font-semibold text-rose-800', pairs.length + (pairs.length === 1 ? ' room-sharing conflict' : ' room-sharing conflicts') + ': male and female guests in the same room'));
+    m.appendChild(h('p', 'text-xs text-rose-700', pairs.map(([b, o]) => { const [a, z] = clashNights(b, o); return cleanName(b.guest) + ' & ' + cleanName(o.guest) + ' · room ' + b.room + ' · ' + fShort(a) + ' – ' + fShort(z); }).join('   |   ') + '. ' + RULE));
+    l.appendChild(m); box.appendChild(l);
+    const btn = h('button', 'shrink-0 rounded-lg bg-rose-600 hover:bg-rose-700 text-white text-xs font-semibold px-3 py-2', 'Review'); btn.onclick = () => { state.bfilter = 'conflict'; go('bookings'); }; box.appendChild(btn);
+    A.appendChild(box);
+  }
+  A.classList.toggle('hidden', !cl.length);
+  const T = $('#today'); T.replaceChildren();
+  const tcell = (ic, tint, lbl, val, sub, onClick) => {
+    const c = h('button', 'card text-left p-3.5 flex items-center gap-3 hover:-translate-y-0.5 hover:shadow-md transition-all');
+    const i = h('span', 'hidden xl:grid place-items-center w-10 h-10 rounded-xl shrink-0 ' + tint); i.appendChild(icon(ic, 'w-5 h-5')); c.appendChild(i);
+    const m = h('div', 'min-w-0'); m.appendChild(h('p', 'text-xs font-semibold text-zuna-500 truncate', lbl)); const v = h('p', 'text-xl font-bold leading-tight tabular-nums'); v.textContent = val; m.appendChild(v); m.appendChild(h('p', 'text-xs text-zuna-400 truncate', sub)); c.appendChild(m);
+    if (onClick) c.onclick = onClick; else c.disabled = true;
+    T.appendChild(c);
+  };
+  const names = (l) => l.length ? l.map((g) => cleanName(g.guest)).join(', ') : 'None';
+  tcell('moon', 'bg-zuna-900 text-mint-400', 'In house tonight', tn ? tn.guests.length : 0, tn && tn.guests.length ? names(tn.guests) : 'No guests', tn ? () => nightDrawer(tn) : null);
+  tcell('door-open', 'bg-mint-50 text-mint-600', 'Free tonight', tn ? tn.vacant : (+P().rooms || 0), 'of ' + (P().rooms || 0) + ' rooms', tn ? () => nightDrawer(tn) : null);
+  tcell('log-in', 'bg-zuna-50 text-zuna-700', 'Arriving today', arr.length, names(arr), arr[0] ? () => bookingDrawer(arr[0]) : null);
+  tcell('log-out', 'bg-zuna-50 text-zuna-700', 'Departing today', dep.length, names(dep), dep[0] ? () => bookingDrawer(dep[0]) : null);
+  tcell('sunrise', 'bg-amber-50 text-amber-600', 'Arriving tomorrow', tom.length, names(tom), tom[0] ? () => bookingDrawer(tom[0]) : null);
+
+  const avail = rn.reduce((s, x) => s + x.total, 0), sold = rn.reduce((s, x) => s + x.booked, 0), occ = avail ? sold / avail : 0;
+  const [a, b] = rangeBounds(); const inR = bs.filter((x) => x.check_in <= b && x.check_out > a);
+  const nConf = inR.filter((x) => x.status === 'Confirmed').length, nDec = inR.filter((x) => x.status !== 'Confirmed').length;
+  const K = $('#kpis'); K.replaceChildren(); ['k1','k2','k3','k4'].forEach(killChart);
+  const kpi = (id, lbl, val, fmt, sub, ic, spark, color, onClick, hero) => {
+    const c = h('div', 'card p-4 flex flex-col gap-1 overflow-hidden transition-all hover:-translate-y-0.5 hover:shadow-md ' + (hero ? 'bg-gradient-to-br from-zuna-900 to-zuna-700 text-white ring-0' : ''));
+    const top = h('div', 'flex items-center justify-between gap-2'); top.appendChild(h('p', 'text-xs font-semibold truncate ' + (hero ? 'text-zuna-200' : 'text-zuna-500'), lbl));
+    const i = h('span', 'grid place-items-center w-7 h-7 rounded-lg shrink-0 ' + (hero ? 'bg-mint-500 text-zuna-900' : 'bg-zuna-50 text-zuna-600')); i.appendChild(icon(ic, 'w-4 h-4')); top.appendChild(i); c.appendChild(top);
+    const v = h('p', 'text-2xl font-bold tracking-tight tabular-nums', fmt(0)); c.appendChild(v); countUp(v, val, fmt);
+    c.appendChild(h('p', 'text-xs truncate ' + (hero ? 'text-zuna-200' : 'text-zuna-400'), sub));
+    if (spark) { const s = h('div', '-mx-1 -mb-2 mt-1'); c.appendChild(s); requestAnimationFrame(() => { charts[id] = sparkline(s, spark, color); }); }
+    if (onClick) { c.classList.add('cursor-pointer'); c.tabIndex = 0; c.onclick = onClick; c.onkeydown = (e) => { if (e.key === 'Enter') onClick(); }; }
+    K.appendChild(c);
+  };
+  kpi('k1', 'Occupancy', occ, pct, sold + ' of ' + avail + ' room-nights', 'percent', rn.map((x) => Math.round(x.occ * 100)), MINT, null, true);
+  kpi('k2', 'Available', avail, int, rn.length + ' nights × ' + (P().rooms || 0) + ' rooms', 'bed', null);
+  kpi('k3', 'Sold', sold, int, 'Room-nights booked', 'circle-check', rn.map((x) => x.booked), MINT);
+  kpi('k4', 'Vacant', avail - sold, int, 'Room-nights free', 'door-open', null, '#7d68c6');
+  kpi('k5', 'Stays', nConf, int, 'View bookings →', 'users', null, null, () => { state.bfilter = 'all'; go('bookings'); });
+  kpi('k6', 'Declined', nDec, int, 'Not accommodated →', 'circle-x', null, null, () => { state.bfilter = 'Not accommodated'; go('bookings'); });
+
+  drawMain(rn); drawDonut(sold, avail - sold);
+
+  const up = conf.filter((x) => x.check_out > today).sort((p, q) => p.check_in.localeCompare(q.check_in));
+  $('#arrSub').textContent = up.length + (up.length === 1 ? ' upcoming stay' : ' upcoming stays');
+  const L = $('#arrivals'); L.replaceChildren();
+  if (!up.length) L.appendChild(h('li', 'p-8 text-center text-sm text-zuna-400', 'No upcoming stays.'));
+  up.slice(0, 6).forEach((g) => L.appendChild(guestItem(g, stateOf(g) === 'In house' ? badge('In house') : null)));
+  if (up.length > 6) { const m = h('li', 'px-5 py-3 text-sm font-semibold text-mint-700 hover:bg-zuna-50 cursor-pointer flex items-center gap-1', 'View all ' + up.length); m.appendChild(icon('arrow-right', 'w-4 h-4')); m.onclick = () => { state.bfilter = 'Upcoming'; go('bookings'); }; L.appendChild(m); }
+
+  barList($('#byGrade'), conf, (b) => b.grade);
+  barList($('#byBase'), conf, (b) => b.base);
+};
+const barList = (el, rows, key) => {
+  el.replaceChildren();
+  const m = new Map(); rows.forEach((r) => { const k = key(r) || 'Not stated'; m.set(k, (m.get(k) || 0) + 1); });
+  const items = [...m.entries()].sort((a, b) => b[1] - a[1]);
+  if (!items.length) { el.appendChild(h('p', 'text-sm text-zuna-400', 'No stays yet.')); return; }
+  const max = items[0][1];
+  items.forEach(([k, v]) => {
+    const r = h('div', 'flex items-center gap-3');
+    const bar = h('div', 'relative flex-1 h-8 rounded-lg bg-zuna-50 overflow-hidden');
+    const f = h('div', 'absolute inset-y-0 left-0 rounded-lg bg-mint-100 transition-[width] duration-700'); f.style.width = '0%'; bar.appendChild(f);
+    bar.appendChild(h('span', 'relative z-10 px-3 leading-8 text-sm font-medium', k));
+    r.appendChild(bar); r.appendChild(h('span', 'w-8 text-right text-sm font-bold tabular-nums', String(v)));
+    el.appendChild(r); requestAnimationFrame(() => requestAnimationFrame(() => { f.style.width = (v / max * 100) + '%'; }));
+  });
+};
+const drawMain = (rn) => {
+  const el = $('#chartMain'); killChart('main'); el.replaceChildren();
+  if (!hasApex()) return noChart(el);
+  const rooms = Math.max(1, ...rn.map((x) => x.total));
+  const many = rn.length > 31;
+  charts.main = new ApexCharts(el, {
+    chart: {type: 'bar', height: 240, stacked: true, toolbar: {show: false}, fontFamily: 'inherit', animations: {enabled: true, speed: 500},
+      events: {dataPointSelection: (e, ctx, cfg) => nightDrawer(rn[cfg.dataPointIndex])}},
+    series: [{name: 'Occupied', data: rn.map((x) => x.booked)}, {name: 'Vacant', data: rn.map((x) => x.vacant)}],
+    colors: [MINT, LILAC],
+    plotOptions: {bar: {columnWidth: many ? '78%' : '58%', borderRadius: 4, borderRadiusApplication: 'end', borderRadiusWhenStacked: 'last'}},
+    dataLabels: {enabled: false}, legend: {show: false},
+    grid: {borderColor: '#efedf8', strokeDashArray: 4, padding: {left: 4, right: 4}},
+    xaxis: {categories: rn.map((x) => x.night), tickAmount: Math.min(rn.length, many ? 12 : 31),
+      labels: {rotate: 0, hideOverlappingLabels: true, style: {colors: '#5d5887', fontSize: '12px'}, formatter: (v) => { if (!v) return ''; const d = D(v); return d.getUTCDate() + (d.getUTCDate() === 1 || v === rn[0].night ? ' ' + MON[d.getUTCMonth()] : ''); }},
+      axisBorder: {show: false}, axisTicks: {show: false}},
+    yaxis: {max: rooms, tickAmount: rooms, labels: {style: {colors: '#5d5887', fontSize: '12px'}, formatter: (v) => Math.round(v)}},
+    states: {hover: {filter: {type: 'darken', value: .9}}, active: {filter: {type: 'none'}}},
+    tooltip: {shared: true, intersect: false, custom: ({dataPointIndex: i}) => { const n = rn[i]; return '<div style="padding:10px 12px;font-size:12px;min-width:170px"><b style="color:#12005A">' + fDay(n.night) + '</b><div style="display:flex;justify-content:space-between;margin-top:6px;color:#5d5887">Occupied<b style="color:#12005A">' + n.booked + ' / ' + n.total + '</b></div><div style="display:flex;justify-content:space-between;color:#5d5887">Occupancy<b style="color:#12005A">' + pct(n.occ) + '</b></div>' + (n.guests.length ? '<div style="margin-top:6px;color:#12005A">' + n.guests.map((g) => cleanName(g.guest).replace(/</g, '&lt;')).join('<br>') + '</div>' : '') + (n.declined.length ? '<div style="margin-top:4px;color:#d97706">Declined: ' + n.declined.length + '</div>' : '') + '</div>'; }},
+    annotations: {xaxis: rn.some((x) => x.night === today) ? [{x: today, borderColor: INDIGO, strokeDashArray: 3, label: {text: 'Today', borderColor: INDIGO, style: {background: INDIGO, color: '#fff', fontSize: '11px'}}}] : []}
+  });
+  charts.main.render();
+};
+const drawDonut = (sold, vac) => {
+  const el = $('#chartDonut'); killChart('donut'); el.replaceChildren();
+  $('#donutSub').textContent = rangeLabel();
+  if (!hasApex()) return noChart(el);
+  charts.donut = new ApexCharts(el, {
+    chart: {type: 'donut', height: 250, fontFamily: 'inherit', animations: {enabled: true, speed: 600}},
+    series: [sold, vac], labels: ['Occupied', 'Vacant'], colors: [MINT, LILAC], stroke: {width: 3, colors: ['#fff']},
+    dataLabels: {enabled: false}, legend: {position: 'bottom', fontSize: '12px', labels: {colors: '#5d5887'}, markers: {size: 6}},
+    plotOptions: {pie: {donut: {size: '72%', labels: {show: true, name: {offsetY: 18, color: '#5d5887', fontSize: '12px'}, value: {offsetY: -14, fontSize: '26px', fontWeight: 700, color: INDIGO, formatter: (v) => v},
+      total: {show: true, label: 'Occupancy', color: '#5d5887', fontSize: '12px', formatter: () => (sold + vac ? pct(sold / (sold + vac)) : '0.0%')}}}}},
+    tooltip: {y: {formatter: (v) => v + ' room-nights'}}
+  });
+  charts.donut.render();
+};
+
+/* ---------- RACK ---------- */
+const renderRack = () => {
+  const p = P(), rooms = +p.rooms || 0, rn = nightsInRange(), box = $('#rack'); box.replaceChildren();
+  if (!rooms || !rn.length) { box.appendChild(h('p', 'p-8 text-center text-sm text-zuna-400', 'No rooms to show.')); return; }
+  const roomNames = (() => { const m = (p.room_nos || '').match(/^(\S+?)(\d+)\s+to\s+\S*?(\d+)$/); if (m) { const o = []; for (let i = +m[2]; i <= +m[3]; i++) o.push(m[1] + i); if (o.length === rooms) return o; } return Array.from({length: rooms}, (_, i) => 'Room ' + (i + 1)); })();
+  const grid = roomNames.map(() => ({}));
+  const conf = myB().filter((b) => b.status === 'Confirmed').sort((a, b) => (hasRoom(b) - hasRoom(a)) || a.check_in.localeCompare(b.check_in));
+  conf.forEach((b) => {
+    const free = (i) => { for (let n = b.check_in; n < b.check_out; n = addDays(n, 1)) if (grid[i][n]) return false; return true; };
+    let r = roomNames.indexOf(b.room);
+    if (r < 0) r = grid.findIndex((_, i) => free(i)); if (r < 0) return;
+    for (let n = b.check_in; n < b.check_out; n = addDays(n, 1)) (grid[r][n] = grid[r][n] || []).push(b);
+  });
+  const dec = new Set(); myB().filter((b) => b.status !== 'Confirmed').forEach((b) => { for (let n = b.check_in; n < b.check_out; n = addDays(n, 1)) dec.add(n); });
+  const t = h('table', 'border-separate [border-spacing:4px]');
+  const r1 = h('tr'), r2 = h('tr'); r1.appendChild(h('th')); r2.appendChild(h('th'));
+  rn.forEach((n, i) => { const d = D(n.night); r1.appendChild(h('th', 'text-left text-xs font-bold text-zuna-900', i === 0 || d.getUTCDate() === 1 ? MON[d.getUTCMonth()] : '')); const w = d.getUTCDay(); r2.appendChild(h('th', 'text-xs font-semibold ' + (w === 0 || w === 6 ? 'text-mint-600' : 'text-zuna-400') + (n.night === today ? ' !text-zuna-900 underline decoration-2 decoration-mint-500' : ''), String(d.getUTCDate()))); });
+  const th = h('thead'); th.append(r1, r2); t.appendChild(th);
+  const tb = h('tbody');
+  roomNames.forEach((name, ri) => {
+    const tr = h('tr'); tr.appendChild(h('td', 'sticky left-0 bg-white pr-3 text-xs font-bold whitespace-nowrap z-10', name));
+    rn.forEach((n) => {
+      const gs = grid[ri][n.night] || [], g = gs[0], past = n.night < today;
+      const mixed = gs.length > 1 && new Set(gs.map((x) => x._g).filter((x) => x !== 'Not stated')).size > 1;
+      let cls = 'w-7 min-w-7 h-8 rounded-md cursor-pointer transition-transform hover:scale-110 hover:shadow-md text-center align-middle text-xs font-bold ';
+      cls += mixed ? 'bg-rose-500 text-white ring-2 ring-rose-300' : g ? (past ? 'bg-mint-300 text-zuna-900' : 'bg-mint-500 text-zuna-900') : (dec.has(n.night) && ri === rooms - 1 ? 'bg-amber-100 ring-1 ring-amber-300' : 'bg-zuna-50 ring-1 ring-zuna-100');
+      if (n.night === today) cls += ' outline outline-2 outline-offset-1 outline-zuna-900';
+      const td = h('td', cls); td.tabIndex = 0;
+      td.title = fDay(n.night) + ' · ' + name + (g ? ' · ' + gs.map((x) => cleanName(x.guest) + ' (' + x._g + ')').join(' + ') + (gs.length > 1 ? ' · Double' : ' · Single') : ' · Vacant') + (mixed ? ' · MIXED GENDER — not allowed' : '');
+      if (mixed) td.appendChild(icon('triangle-alert', 'w-4 h-4 mx-auto')); else if (gs.length > 1) td.textContent = '2';
+      td.onclick = () => g ? bookingDrawer(g) : nightDrawer(n); td.onkeydown = (e) => { if (e.key === 'Enter') td.onclick(); };
+      tr.appendChild(td);
+    });
+    tb.appendChild(tr);
+  });
+  t.appendChild(tb); box.appendChild(t);
+};
+
+/* ---------- CALENDAR ---------- */
+const months = () => [...new Set(nightsAll().map((n) => n.night.slice(0, 7)))];
+const renderCal = () => {
+  const all = nightsAll(), by = new Map(all.map((n) => [n.night, n])), ms = months();
+  if (!state.calMonth || !ms.includes(state.calMonth)) state.calMonth = ms.includes(today.slice(0, 7)) ? today.slice(0, 7) : ms[0];
+  const ym = state.calMonth, idx = ms.indexOf(ym);
+  $('#calMonth').textContent = MONL[+ym.slice(5) - 1] + ' ' + ym.slice(0, 4);
+  $('#calPrev').disabled = idx <= 0; $('#calNext').disabled = idx >= ms.length - 1;
+  const c = $('#cal'); c.replaceChildren();
+  ['Mon','Tue','Wed','Thu','Fri','Sat','Sun'].forEach((w) => c.appendChild(h('div', 'text-center text-xs font-semibold text-zuna-500 pb-1', w)));
+  const first = D(ym + '-01'), lead = (first.getUTCDay() + 6) % 7, days = new Date(Date.UTC(first.getUTCFullYear(), first.getUTCMonth() + 1, 0)).getUTCDate();
+  for (let i = 0; i < lead; i++) c.appendChild(h('div'));
+  for (let d = 1; d <= days; d++) {
+    const s = ym + '-' + String(d).padStart(2, '0'), n = by.get(s);
+    if (!n) { const x = h('div', 'rounded-xl ring-1 ring-zuna-50 p-2 min-h-[84px] text-xs font-semibold text-zuna-200', String(d)); c.appendChild(x); continue; }
+    const full = n.total && n.booked >= n.total, part = n.booked && !full;
+    let cls = 'relative text-left rounded-xl p-2 sm:p-2.5 min-h-[84px] flex flex-col justify-between transition-all hover:-translate-y-0.5 hover:shadow-lg focus:outline-none focus:ring-2 focus:ring-mint-500 ';
+    cls += full ? 'bg-mint-500 text-zuna-900 ring-1 ring-mint-500' : part ? 'bg-mint-50 ring-1 ring-mint-200' : 'bg-white ring-1 ring-zuna-100';
+    if (s < today) cls += ' opacity-60';
+    if (s === today) cls += ' !ring-2 !ring-zuna-900';
+    const b = h('button', cls); b.type = 'button';
+    b.appendChild(h('span', 'text-xs font-bold ' + (full ? 'text-zuna-900' : 'text-zuna-400'), String(d)));
+    const mid = h('span', 'flex items-baseline gap-1'); mid.appendChild(h('span', 'text-2xl font-bold leading-none tabular-nums', String(n.vacant))); mid.appendChild(h('span', 'text-[11px] ' + (full ? 'text-zuna-800' : 'text-zuna-500') + ' hidden sm:inline', 'free')); b.appendChild(mid);
+    const dots = h('span', 'flex gap-0.5'); for (let i = 0; i < n.total && i < 10; i++) dots.appendChild(h('i', 'w-1.5 h-1.5 rounded-full ' + (i < n.booked ? (full ? 'bg-zuna-900' : 'bg-mint-500') : (full ? 'bg-white/50' : 'bg-zuna-100')))); b.appendChild(dots);
+    if (n.declined.length) b.appendChild(h('span', 'absolute top-1.5 right-2 text-xs text-amber-500', '▲'));
+    b.setAttribute('aria-label', fFull(s) + ': ' + n.vacant + ' of ' + n.total + ' rooms free');
+    b.onclick = () => nightDrawer(n);
+    c.appendChild(b);
+  }
+};
+$('#calPrev').onclick = () => { const ms = months(), i = ms.indexOf(state.calMonth); if (i > 0) { state.calMonth = ms[i - 1]; renderCal(); } };
+$('#calNext').onclick = () => { const ms = months(), i = ms.indexOf(state.calMonth); if (i < ms.length - 1) { state.calMonth = ms[i + 1]; renderCal(); } };
+
+/* ---------- BOOKINGS ---------- */
+const renderBookings = () => {
+  const bs = myB().map((b) => Object.assign({}, b, {state: stateOf(b)}));
+  const F = $('#bfilters'); F.replaceChildren();
+  const isConf = (b) => b._clash && b._clash.length > 0;
+  ['all', 'Upcoming', 'In house', 'Completed', 'Not accommodated', 'conflict'].forEach((k) => {
+    const n = k === 'all' ? bs.length : k === 'conflict' ? bs.filter(isConf).length : bs.filter((b) => b.state === k).length;
+    if ((k === 'In house' || k === 'conflict') && !n) return;
+    const on = state.bfilter === k;
+    const b = h('button', 'flex items-center gap-1.5 rounded-lg px-3 py-1.5 text-xs font-semibold transition-all ' + (on ? 'bg-zuna-900 text-white shadow' : 'text-zuna-600 hover:bg-white'));
+    if (k === 'conflict') { b.classList.add(on ? 'bg-rose-600' : 'text-rose-700'); b.appendChild(icon('triangle-alert', 'w-3.5 h-3.5')); }
+    b.appendChild(document.createTextNode(k === 'all' ? 'All' : k === 'conflict' ? 'Gender conflict' : k)); b.appendChild(h('span', 'rounded-full px-1.5 text-[11px] font-bold ' + (on ? 'bg-mint-500 text-zuna-900' : 'bg-zuna-100 text-zuna-600'), String(n)));
+    b.onclick = () => { state.bfilter = k; renderBookings(); }; F.appendChild(b);
+  });
+  const q = state.bsearch.toLowerCase();
+  if (state.bfilter === 'conflict' && !bs.some(isConf)) state.bfilter = 'all';
+  const rows = bs.filter((b) => (state.bfilter === 'all' || (state.bfilter === 'conflict' ? isConf(b) : b.state === state.bfilter)) && (!q || [b.guest, b.grade, b.room, b.base, b.concur_tr, b._g, b._occ].join(' ').toLowerCase().includes(q)));
+  const {k, dir} = state.bsort;
+  rows.sort((a, b) => (k === 'nights' ? +a[k] - +b[k] : String(a[k]).localeCompare(String(b[k]))) * dir || a.check_in.localeCompare(b.check_in));
+  $$('th[data-k]').forEach((th) => { th.dataset.sort = th.dataset.k === k ? (dir > 0 ? '↑' : '↓') : ''; });
+  const tb = $('#btbody'); tb.replaceChildren();
+  rows.forEach((b) => {
+    const tr = h('tr', (isConf(b) ? 'bg-rose-50/70 hover:bg-rose-50 ' : 'hover:bg-zuna-50/70 ') + 'cursor-pointer transition-colors'); tr.tabIndex = 0;
+    const g = h('td', 'pl-5 pr-3 py-3'); const w = h('div', 'flex items-center gap-3'); w.appendChild(avatar(b.guest, 'w-8 h-8 text-xs')); const nm = h('div', 'min-w-0'); const nl = h('p', 'flex items-center gap-1.5 font-semibold whitespace-nowrap', cleanName(b.guest)); if (isConf(b)) nl.appendChild(warnIcon('Mixed-gender sharing: ' + clashText(b) + '. ' + RULE)); nm.appendChild(nl); nm.appendChild(h('p', 'text-xs text-zuna-400', b.base)); w.appendChild(nm); g.appendChild(w); tr.appendChild(g);
+    const gr = h('td', 'px-3 py-3'); gr.appendChild(gradeTag(b.grade)); tr.appendChild(gr);
+    const ge = h('td', 'px-3 py-3'); ge.appendChild(genderTag(b._g)); tr.appendChild(ge);
+    const oc = h('td', 'px-3 py-3'); const ot = occTag(b._occ); if (b._mates.length) ot.title = 'Sharing with ' + b._mates.map((o) => cleanName(o.guest) + ' (' + o._g + ')').join(', '); oc.appendChild(ot); tr.appendChild(oc);
+    const ci = h('td', 'px-3 py-3 whitespace-nowrap tabular-nums', fShort(b.check_in)); ci.title = fFull(b.check_in); tr.appendChild(ci);
+    const co = h('td', 'px-3 py-3 whitespace-nowrap tabular-nums', fShort(b.check_out)); co.title = fFull(b.check_out); tr.appendChild(co);
+    tr.appendChild(h('td', 'px-3 py-3 text-right font-semibold tabular-nums', b.nights));
+    tr.appendChild(h('td', 'px-3 py-3 whitespace-nowrap ' + (/^\d/.test(b.room) ? 'font-medium' : 'text-zuna-400'), b.room));
+    const st = h('td', 'pl-3 pr-5 py-3'); st.appendChild(badge(b.state)); tr.appendChild(st);
+    tr.onclick = () => bookingDrawer(b); tr.onkeydown = (e) => { if (e.key === 'Enter') bookingDrawer(b); };
+    tb.appendChild(tr);
+  });
+  $('#bempty').classList.toggle('hidden', rows.length > 0);
+};
+$$('th[data-k]').forEach((th) => th.onclick = () => { const k = th.dataset.k; state.bsort = {k, dir: state.bsort.k === k ? -state.bsort.dir : 1}; renderBookings(); });
+$('#bsearch').addEventListener('input', (e) => { state.bsearch = e.target.value; renderBookings(); });
+
+/* ---------- HOUSES ---------- */
+const copy = async (t) => { try { await navigator.clipboard.writeText(t); toast('Copied ' + t); } catch (e) { toast(t); } };
+const renderHouses = () => {
+  const box = $('#houses'); box.replaceChildren();
+  props.forEach((p) => {
+    const live = p.status === 'Live';
+    const c = h('div', 'card overflow-hidden flex flex-col transition-all hover:-translate-y-0.5 hover:shadow-lg');
+    const hero = h('div', 'p-5 flex items-start gap-4 ' + (live ? 'bg-gradient-to-br from-zuna-900 to-zuna-700 text-white' : 'bg-zuna-50/60'));
+    const m = h('div', 'min-w-0 flex-1');
+    m.appendChild(h('p', 'text-lg font-bold', p.property));
+    const loc = h('p', 'flex items-center gap-1 text-xs mt-0.5 ' + (live ? 'text-zuna-200' : 'text-zuna-500')); loc.appendChild(icon('map-pin', 'w-3.5 h-3.5')); loc.appendChild(document.createTextNode(p.city + ' · ' + p.rooms + ' rooms')); m.appendChild(loc);
+    const bd = h('span', 'inline-flex items-center gap-1.5 mt-3 rounded-full px-2.5 py-0.5 text-xs font-bold ' + (live ? 'bg-mint-500 text-zuna-900' : 'bg-white text-zuna-500 ring-1 ring-zuna-100'), live ? 'Live' : 'Coming soon'); m.appendChild(bd);
+    hero.appendChild(m);
+    if (live) {
+      const ns = nightsFor(p.property), av = ns.reduce((s, x) => s + x.total, 0), so = ns.reduce((s, x) => s + x.booked, 0), o = av ? so / av : 0, R = 26, C = 2 * Math.PI * R;
+      const ring = h('div', 'relative w-16 h-16 shrink-0');
+      ring.innerHTML = '<svg viewBox="0 0 64 64" class="w-16 h-16 -rotate-90"><circle cx="32" cy="32" r="' + R + '" fill="none" stroke="rgba(255,255,255,.15)" stroke-width="7"/><circle cx="32" cy="32" r="' + R + '" fill="none" stroke="' + MINT + '" stroke-width="7" stroke-linecap="round" stroke-dasharray="' + C + '" stroke-dashoffset="' + (C * (1 - o)) + '"/></svg>';
+      ring.appendChild(h('span', 'absolute inset-0 grid place-items-center text-sm font-bold', Math.round(o * 100) + '%')); ring.title = 'Occupancy, full period'; hero.appendChild(ring);
+    }
+    c.appendChild(hero);
+    const dl = h('dl', 'p-5 grid grid-cols-[84px_1fr] gap-x-3 gap-y-2 text-sm');
+    [['Address', p.address], ['Rooms', p.room_nos], ['Eligible', p.eligible], ['Operator', p.operator]].forEach(([k, v]) => { dl.appendChild(h('dt', 'text-zuna-500 font-medium', k)); dl.appendChild(h('dd', 'font-medium', v)); });
+    c.appendChild(dl);
+    const ct = h('div', 'hidden px-5 pb-4 space-y-2');
+    const who = h('div', 'flex items-center gap-2 text-sm font-semibold'); who.appendChild(icon('user-round', 'w-4 h-4 text-zuna-400')); who.appendChild(document.createTextNode(p.poc_name || 'Contact')); ct.appendChild(who);
+    const line = (ic, val, href, label) => { const l = h('div', 'flex flex-wrap items-center gap-2 rounded-xl bg-zuna-50 ring-1 ring-zuna-100 px-3 py-2 text-sm'); l.appendChild(icon(ic, 'w-4 h-4 text-zuna-400')); l.appendChild(h('span', 'flex-1 min-w-0 break-all font-medium', val)); const a = h('a', 'btn !py-1 !px-2.5 !text-xs', label); a.href = href; l.appendChild(a); const b = h('button', 'btn !py-1 !px-2.5 !text-xs', 'Copy'); b.onclick = () => copy(val); l.appendChild(b); ct.appendChild(l); };
+    (p.poc_phone || '').split(/;\s*/).filter(Boolean).forEach((v) => line('phone', v, 'tel:' + v.replace(/\s/g, ''), 'Call'));
+    (p.poc_email || '').split(/;\s*/).filter(Boolean).forEach((v) => line('mail', v, 'mailto:' + v, 'Email'));
+    c.appendChild(ct);
+    const ft = h('div', 'mt-auto flex items-center gap-2 px-5 py-3 border-t border-zuna-100 bg-zuna-50/40');
+    const cb = h('button', 'btn'); cb.appendChild(icon('phone', 'w-4 h-4')); const cbt = h('span', null, 'Contacts'); cb.appendChild(cbt);
+    cb.onclick = () => { ct.classList.toggle('hidden'); cbt.textContent = ct.classList.contains('hidden') ? 'Contacts' : 'Hide contacts'; }; ft.appendChild(cb);
+    if (live) { const vb = h('button', 'btn-primary ml-auto'); vb.appendChild(document.createTextNode('Open report')); vb.appendChild(icon('arrow-right', 'w-4 h-4')); vb.onclick = () => { state.prop = p.property; $('#propSel').value = p.property; go('overview'); }; ft.appendChild(vb); }
+    c.appendChild(ft);
+    box.appendChild(c);
+  });
+};
+
+/* ---------- routing ---------- */
+const TITLES = {overview: 'Overview', rack: 'Room rack', calendar: 'Night-wise availability', bookings: 'Booking register', houses: 'All guest houses'};
+const render = () => {
+  $$('#nav button').forEach((b) => b.toggleAttribute('data-active', b.dataset.view === state.view));
+  $$('.view').forEach((v) => v.classList.toggle('hidden', v.dataset.view !== state.view));
+  $('#viewTitle').textContent = TITLES[state.view];
+  const p = P();
+  $('#viewSub').textContent = state.view === 'houses' ? props.length + ' guest houses · ' + props.filter((x) => x.status === 'Live').length + ' live' : p.property + ', ' + p.city + ' · ' + (state.view === 'calendar' || state.view === 'bookings' ? fShort(period.from) + ' – ' + fLong(period.to) : rangeLabel());
+  $('#rangeWrap').classList.toggle('invisible', !(state.view === 'overview' || state.view === 'rack'));
+  $('#propWrap').classList.toggle('invisible', state.view === 'houses');
+  $$('#rangeWrap button').forEach((b) => b.toggleAttribute('data-active', b.dataset.range === state.range));
+  $('#navCount').textContent = myB().length;
+  ({overview: renderOverview, rack: renderRack, calendar: renderCal, bookings: renderBookings, houses: renderHouses})[state.view]();
+};
+const closeSide = () => { $('#side').classList.add('-translate-x-full'); $('#scrimSide').classList.add('hidden'); };
+const go = (v) => { state.view = v; try { history.replaceState(null, '', '#' + v); } catch (e) {} closeSide(); render(); window.scrollTo({top: 0, behavior: 'smooth'}); };
+$$('#nav button').forEach((b) => b.onclick = () => go(b.dataset.view));
+$$('#rangeWrap button').forEach((b) => b.onclick = () => { state.range = b.dataset.range; save(); render(); });
+const sel = $('#propSel');
+props.forEach((p) => { const o = new Option(p.property + (p.status === 'Live' ? '' : ' (soon)'), p.property); o.disabled = p.status !== 'Live'; sel.appendChild(o); });
+sel.value = state.prop; sel.onchange = () => { state.prop = sel.value; state.calMonth = null; render(); toast('Showing ' + sel.value); };
+$('#menuBtn').onclick = () => { $('#side').classList.remove('-translate-x-full'); $('#scrimSide').classList.remove('hidden'); };
+$('#scrimSide').onclick = closeSide;
+if ($('#updated')) $('#updated').textContent = fLong(REPORT_DATE);
+const USER = __USER__;
+(() => {
+  const nm = USER.name || USER.email || 'User';
+  $('#userName').textContent = nm; $('#userMail').textContent = USER.email && USER.email.includes('@') ? USER.email : 'Signed in';
+  $('#userAv').textContent = nm.split(/\s+/).map((w) => w[0]).slice(0, 2).join('').toUpperCase();
+  let col = false; try { col = localStorage.getItem('ltmgh.sb') === '1'; } catch (e) {}
+  const setCol = (v) => { document.documentElement.classList.toggle('sb-c', v); try { localStorage.setItem('ltmgh.sb', v ? '1' : '0'); } catch (e) {} setTimeout(() => window.dispatchEvent(new Event('resize')), 320); };
+  setCol(col);
+  $('#sbClose').onclick = () => setCol(true); $('#sbOpen').onclick = () => setCol(false);
+  $('#sbCloseM').onclick = () => closeSide();
+  $('#logoutBtn').addEventListener('click', (e) => { e.preventDefault(); document.body.classList.add('opacity-0', 'transition-opacity', 'duration-300'); setTimeout(() => { location.href = '/logout'; }, 280); });
+})();
+
+hydrateIcons();
+const hs = location.hash.slice(1); if (TITLES[hs]) state.view = hs;
+render();
+window.addEventListener('load', () => { if (state.view === 'overview' && hasApex() && !charts.main) render(); });
+
+window.__ltm = {P, myB, nightsAll, period, stateOf, fDay, fShort, fLong, toast, today};
+})();
+</script>
+<script>
+/*__EXPORT__*/
+</script>
+</body>
+</html>

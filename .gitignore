@@ -1,0 +1,20 @@
+node_modules/
+# build outputs (run `npm run build`)
+out.css
+login.html
+login_page.html
+page.html
+preview.html
+worker.js
+worker.mjs
+# local data, secrets, generated passwords
+var/
+*.sqlite
+*.sqlite-*
+.env
+users.json
+accounts_out/
+*.credentials.csv
+# screenshots / recordings
+*.png
+*.mp4

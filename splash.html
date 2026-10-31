@@ -1,0 +1,32 @@
+<style>
+#splash{position:fixed;inset:0;z-index:9999;display:grid;place-items:center;overflow:hidden;background:radial-gradient(120% 90% at 50% 38%,#2a1680 0,#12005A 55%,#0b003a 100%);font-family:"Segoe UI","Segoe UI Variable",system-ui,-apple-system,Roboto,"Helvetica Neue",Arial,sans-serif;transition:opacity .5s ease,visibility .5s}
+#splash::before{content:"";position:absolute;inset:0;background-image:linear-gradient(rgba(255,255,255,.045) 1px,transparent 1px),linear-gradient(90deg,rgba(255,255,255,.045) 1px,transparent 1px);background-size:40px 40px}
+#splash::after{content:"";position:absolute;width:520px;height:520px;left:50%;top:42%;transform:translate(-50%,-50%);border-radius:50%;background:radial-gradient(circle,rgba(2,201,136,.16),rgba(2,201,136,0) 65%)}
+#splash.sp-off{display:none}
+#splash.sp-hide{opacity:0;visibility:hidden}
+#splash .sp-in{position:relative;z-index:1;display:flex;flex-direction:column;align-items:center;text-align:center;padding:0 24px}
+#splash .sp-tile{position:relative;width:148px;height:148px;border-radius:32px;background:#fff;display:grid;place-items:center;box-shadow:0 24px 60px rgba(11,0,58,.55);animation:spPop .6s cubic-bezier(.2,.8,.2,1) both}
+#splash .sp-tile img{width:112px;height:auto}
+#splash .sp-ring{position:absolute;inset:-12px;border-radius:40px;border:2px solid rgba(2,201,136,.55);animation:spRing 2s cubic-bezier(.2,.6,.3,1) infinite}
+#splash .sp-ring.r2{animation-delay:1s}
+#splash .sp-hi{margin:40px 0 0;color:#fff;font-size:24px;font-weight:700;letter-spacing:-.01em;animation:spUp .6s .15s cubic-bezier(.2,.8,.2,1) both}
+#splash .sp-sub{margin:6px 0 0;color:#cdc5ec;font-size:14px;font-weight:500;animation:spUp .6s .25s cubic-bezier(.2,.8,.2,1) both}
+#splash .sp-bar{width:220px;height:4px;margin-top:24px;border-radius:4px;background:rgba(255,255,255,.12);overflow:hidden;animation:spUp .6s .35s cubic-bezier(.2,.8,.2,1) both}
+#splash .sp-bar i{display:block;width:40%;height:100%;border-radius:4px;background:#02C988;box-shadow:0 0 12px #02C988;animation:spBar 1.25s ease-in-out infinite}
+#splash .sp-foot{position:absolute;z-index:1;bottom:28px;left:0;right:0;text-align:center;color:#a99bdc;font-size:12px}
+@keyframes spRing{0%{transform:scale(.96);opacity:.9}100%{transform:scale(1.32);opacity:0}}
+@keyframes spPop{from{transform:scale(.85);opacity:0}to{transform:none;opacity:1}}
+@keyframes spUp{from{transform:translateY(10px);opacity:0}to{transform:none;opacity:1}}
+@keyframes spBar{0%{transform:translateX(-110%)}100%{transform:translateX(260%)}}
+#splash.sp-cont .sp-tile,#splash.sp-cont .sp-hi,#splash.sp-cont .sp-sub,#splash.sp-cont .sp-bar{animation:none}
+@media (prefers-reduced-motion:reduce){#splash *{animation:none!important}}
+</style>
+<div id="splash" class="__SPCLASS__" role="status" aria-live="polite">
+  <div class="sp-in">
+    <div class="sp-tile"><span class="sp-ring"></span><span class="sp-ring r2"></span><img src="__ZUNA__" alt="Zuna"></div>
+    <p class="sp-hi" id="spHi">Welcome</p>
+    <p class="sp-sub">Preparing your guest house dashboard</p>
+    <div class="sp-bar"><i></i></div>
+  </div>
+  <p class="sp-foot">Zuna Guest House Management</p>
+</div>

@@ -1,0 +1,31 @@
+@tailwind base;
+@tailwind components;
+@tailwind utilities;
+@layer components {
+  .navbtn { @apply flex items-center gap-3 w-full px-3 py-2.5 rounded-xl text-sm font-medium text-zuna-200 hover:bg-white/10 hover:text-white transition-colors; }
+  .navbtn[data-active] { @apply bg-mint-500 text-zuna-900 font-bold shadow-lg shadow-mint-500/25; }
+  .navbtn[data-active] #navCount { @apply bg-zuna-900/15; }
+  .rangebtn { @apply whitespace-nowrap rounded-lg px-3 py-1.5 text-xs font-semibold text-zuna-500 hover:text-zuna-900 transition-all; }
+  .rangebtn[data-active] { @apply bg-white text-zuna-900 shadow ring-1 ring-zuna-100; }
+  .card { @apply bg-white rounded-2xl ring-1 ring-zuna-100 shadow-[0_1px_2px_rgba(18,0,90,.04),0_1px_3px_rgba(18,0,90,.06)]; }
+  .card-h { @apply flex flex-wrap items-center gap-3 px-5 pt-4 pb-3; }
+  .card-t { @apply text-sm font-bold; }
+  .card-s { @apply text-xs text-zuna-500; }
+  .btn { @apply inline-flex items-center gap-1.5 rounded-xl bg-white px-3 py-2 text-xs font-semibold text-zuna-800 ring-1 ring-zuna-100 shadow-sm hover:ring-mint-500 hover:text-mint-700 active:scale-95 transition-all; }
+  .btn-primary { @apply inline-flex items-center gap-1.5 rounded-xl bg-zuna-900 px-3 py-2 text-xs font-semibold text-white shadow-sm hover:bg-zuna-700 active:scale-95 transition-all; }
+  .iconbtn { @apply grid place-items-center w-9 h-9 rounded-xl bg-white ring-1 ring-zuna-100 hover:ring-mint-500 disabled:opacity-40 disabled:pointer-events-none transition-all; }
+  .th { @apply px-3 py-3 first:pl-5 last:pr-5 font-bold cursor-pointer select-none whitespace-nowrap hover:text-zuna-900; }
+  .th::after { content: attr(data-sort); @apply ml-1 text-mint-600; }
+  .badge { @apply inline-flex items-center whitespace-nowrap rounded-full px-2.5 py-0.5 text-[11px] font-bold ring-1; }
+}
+.apexcharts-tooltip { border-radius: 12px !important; border: 1px solid #e6e2f6 !important; box-shadow: 0 12px 32px rgba(18,0,90,.14) !important; }
+.apexcharts-bar-area { cursor: pointer; }
+@media (min-width: 1024px) {
+  html.sb-c #app { grid-template-columns: 76px minmax(0,1fr); }
+  html.sb-c #side { width: 76px; }
+  html.sb-c #side .sb-full, html.sb-c #side .sb-label { display: none !important; }
+  html.sb-c #side .sb-mini { display: flex !important; }
+  html.sb-c #side .navbtn { justify-content: center; padding-left: 0; padding-right: 0; }
+  html.sb-c #side .sb-user { flex-direction: column; gap: .5rem; }
+  #app { transition: grid-template-columns .3s ease; }
+}

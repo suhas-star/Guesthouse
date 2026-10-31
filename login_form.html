@@ -1,0 +1,273 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width,initial-scale=1">
+<meta name="robots" content="noindex,nofollow">
+<title>Sign in · Zuna</title>
+<style>/*__CSS__*/</style>
+<style>
+@keyframes fadeUp{from{opacity:0;transform:translateY(14px)}to{opacity:1;transform:none}}
+@keyframes rise{from{opacity:0;transform:perspective(1200px) translateY(40px) rotateX(10deg) scale(.96)}to{opacity:1;transform:perspective(1200px) translateY(0) rotateX(0) scale(1)}}
+@keyframes grow{from{transform:scaleY(0)}to{transform:scaleY(1)}}
+@keyframes bob{0%,100%{transform:translateY(0)}50%{transform:translateY(-8px)}}
+@keyframes drift1{0%,100%{transform:translate(0,0) scale(1)}50%{transform:translate(-60px,40px) scale(1.15)}}
+@keyframes drift2{0%,100%{transform:translate(0,0) scale(1)}50%{transform:translate(50px,-30px) scale(1.1)}}
+@keyframes pan{from{background-position:0 0,0 0}to{background-position:40px 40px,40px 40px}}
+@keyframes shake{10%,90%{transform:translateX(-1px)}20%,80%{transform:translateX(3px)}30%,50%,70%{transform:translateX(-6px)}40%,60%{transform:translateX(6px)}}
+@keyframes sheen{from{transform:translateX(-120%) skewX(-20deg)}to{transform:translateX(220%) skewX(-20deg)}}
+@keyframes spin{to{transform:rotate(360deg)}}
+@keyframes pop{0%{transform:scale(.4);opacity:0}70%{transform:scale(1.15);opacity:1}100%{transform:scale(1)}}
+@keyframes wipe{from{clip-path:circle(0% at var(--x,50%) var(--y,50%))}to{clip-path:circle(150% at var(--x,50%) var(--y,50%))}}
+@keyframes shimmer{from{transform:translateX(-100%)}to{transform:translateX(100%)}}
+@keyframes ping2{75%,100%{transform:scale(2.2);opacity:0}}
+.a-in{opacity:0;animation:fadeUp .7s cubic-bezier(.2,.8,.2,1) forwards;animation-delay:var(--d,0ms)}
+.a-rise{opacity:0;animation:rise 1s cubic-bezier(.2,.8,.2,1) .35s forwards}
+.bar>i{display:block;position:absolute;inset:auto 0 0 0;border-radius:4px;background:#02C988;transform-origin:bottom;transform:scaleY(0);animation:grow .8s cubic-bezier(.2,.8,.2,1) forwards}
+.bob{animation:bob 4.5s ease-in-out infinite}
+.blob1{animation:drift1 14s ease-in-out infinite}.blob2{animation:drift2 18s ease-in-out infinite}
+.gridpan{background-image:linear-gradient(rgba(255,255,255,.05) 1px,transparent 1px),linear-gradient(90deg,rgba(255,255,255,.05) 1px,transparent 1px);background-size:40px 40px;animation:pan 6s linear infinite}
+.shake{animation:shake .5s cubic-bezier(.36,.07,.19,.97)}
+.btn-sheen{position:relative;overflow:hidden}
+.btn-sheen::after{content:"";position:absolute;inset:0;width:40%;background:linear-gradient(90deg,transparent,rgba(255,255,255,.28),transparent);transform:translateX(-120%) skewX(-20deg)}
+.btn-sheen:hover::after{animation:sheen .9s ease}
+.spin{animation:spin .8s linear infinite}
+.pop{animation:pop .45s cubic-bezier(.2,.8,.2,1) forwards}
+.wipe{animation:wipe .7s cubic-bezier(.7,0,.3,1) forwards}
+.shim{position:absolute;inset:0;background:linear-gradient(90deg,transparent,rgba(2,201,136,.10),transparent);animation:shimmer 3.2s ease-in-out infinite}
+.field{transition:box-shadow .2s,background-color .2s}
+.field:focus-within{box-shadow:0 0 0 2px #12005A,0 0 0 6px rgba(2,201,136,.18);background:#fff}
+.field input:-webkit-autofill{-webkit-box-shadow:0 0 0 40px #fff inset;-webkit-text-fill-color:#12005A}
+@media (prefers-reduced-motion:reduce){*,*::before,*::after{animation-duration:.01ms!important;animation-iteration-count:1!important;transition-duration:.01ms!important}}
+</style>
+</head>
+<body class="bg-white text-zuna-900 antialiased font-sans">
+<main class="min-h-screen grid lg:grid-cols-[1fr_1.15fr]">
+
+  <!-- Left: form -->
+  <section class="flex flex-col px-6 py-8 sm:px-10 lg:px-14 lg:py-12">
+    <div class="a-in h-9" style="--d:0ms"></div>
+
+    <form id="f" class="my-auto w-full max-w-sm py-10" novalidate autocomplete="on">
+      <div class="a-in flex justify-center" style="--d:60ms"><img alt="Zuna" src="__ZUNA__" class="h-14"></div>
+      <p class="a-in mt-12 text-center text-sm text-zuna-500" style="--d:200ms">Sign in to view your guest house inventory, bookings and reports.</p>
+
+      <div id="err" role="alert" class="hidden mt-6 rounded-xl bg-red-50 ring-1 ring-red-200 px-4 py-3 text-sm text-red-700 font-medium"></div>
+
+      <div class="mt-7 space-y-4">
+        <label class="a-in field relative block rounded-xl ring-1 ring-zuna-200 bg-zuna-50/50" style="--d:260ms">
+          <span class="absolute left-4 top-2 text-xs font-semibold text-zuna-500">Email or user ID</span>
+          <input id="email" name="username" autocomplete="username" required class="w-full bg-transparent px-4 pt-6 pb-2.5 text-sm font-medium focus:outline-none" placeholder="name@company.com">
+        </label>
+        <label class="a-in field relative block rounded-xl ring-1 ring-zuna-200 bg-zuna-50/50" style="--d:320ms">
+          <span class="absolute left-4 top-2 text-xs font-semibold text-zuna-500">Password</span>
+          <input id="pw" type="password" name="password" autocomplete="current-password" required class="w-full bg-transparent pl-4 pr-12 pt-6 pb-2.5 text-sm font-medium focus:outline-none" placeholder="••••••••">
+          <button type="button" id="eye" aria-label="Show password" class="absolute right-2 top-1/2 -translate-y-1/2 grid place-items-center w-9 h-9 rounded-lg text-zuna-400 hover:text-zuna-900 hover:bg-zuna-50">
+            <svg id="eyeOn" class="w-[18px] h-[18px]" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"><path d="M2 12s3-7 10-7 10 7 10 7-3 7-10 7S2 12 2 12Z"/><circle cx="12" cy="12" r="3"/></svg>
+            <svg id="eyeOff" class="hidden w-[18px] h-[18px]" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"><path d="M9.9 4.2A10 10 0 0 1 12 4c7 0 10 8 10 8a13 13 0 0 1-1.7 2.7M6.6 6.6A13.5 13.5 0 0 0 2 12s3 7 10 7a9.7 9.7 0 0 0 5.4-1.6M2 2l20 20M9.9 9.9a3 3 0 0 0 4.2 4.2"/></svg>
+          </button>
+        </label>
+        <p id="caps" class="hidden text-xs font-semibold text-amber-600 -mt-1">Caps Lock is on</p>
+      </div>
+
+      <div class="a-in mt-4 flex items-center justify-between text-xs" style="--d:380ms">
+        <label class="flex items-center gap-2 text-zuna-600 cursor-pointer select-none">
+          <input id="remember" type="checkbox" checked class="peer sr-only">
+          <span class="w-4 h-4 rounded grid place-items-center ring-1 ring-zuna-300 bg-white peer-checked:bg-zuna-900 peer-checked:ring-zuna-900 peer-focus-visible:ring-2 peer-focus-visible:ring-mint-500 transition-colors"><svg class="w-3 h-3 text-white" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="3"><path d="M20 6 9 17l-5-5"/></svg></span>
+          Keep me signed in for 30 days
+        </label>
+        <button type="button" id="forgot" class="font-semibold text-mint-600 hover:text-mint-700">Forgot password?</button>
+      </div>
+
+      <button id="go" type="submit" class="a-in btn-sheen mt-6 w-full h-12 rounded-xl bg-zuna-900 text-white font-semibold text-sm shadow-lg shadow-zuna-900/25 hover:bg-zuna-800 active:scale-[.98] transition-all flex items-center justify-center gap-2 disabled:cursor-wait" style="--d:440ms">
+        <span id="goTxt">Sign in</span>
+        <svg id="goArrow" class="w-4 h-4 transition-transform" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round"><path d="M5 12h14M13 6l6 6-6 6"/></svg>
+        <svg id="goSpin" class="hidden w-5 h-5 spin" viewBox="0 0 24 24" fill="none"><circle cx="12" cy="12" r="9" stroke="currentColor" stroke-opacity=".25" stroke-width="3"/><path d="M21 12a9 9 0 0 0-9-9" stroke="#02C988" stroke-width="3" stroke-linecap="round"/></svg>
+        <svg id="goOk" class="hidden w-5 h-5" viewBox="0 0 24 24" fill="none" stroke="#02C988" stroke-width="3" stroke-linecap="round" stroke-linejoin="round"><path d="M20 6 9 17l-5-5"/></svg>
+      </button>
+
+      <p class="a-in mt-6 flex items-center justify-center gap-1.5 text-xs text-zuna-400" style="--d:500ms"><svg class="w-3.5 h-3.5 text-mint-500" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M12 22s8-4 8-10V5l-8-3-8 3v7c0 6 8 10 8 10Z"/><path d="m9 12 2 2 4-4"/></svg>Encrypted session · Your data stays confidential</p>
+    </form>
+
+    <form id="fp" class="hidden my-auto w-full max-w-sm py-10" novalidate autocomplete="on">
+      <div class="flex justify-center"><img alt="Zuna" src="__ZUNA__" class="h-14"></div>
+      <h1 class="mt-10 text-xl font-bold text-center">Reset your password</h1>
+      <p id="fpLead" class="mt-2 text-center text-sm text-zuna-500">Enter the email address you sign in with. We'll email you a 6-digit code.</p>
+
+      <div id="fpErr" role="alert" class="hidden mt-5 rounded-xl bg-red-50 ring-1 ring-red-200 px-4 py-3 text-sm text-red-700 font-medium"></div>
+      <div id="fpOk" role="status" class="hidden mt-5 rounded-xl bg-mint-50 ring-1 ring-mint-200 px-4 py-3 text-sm text-zuna-700"></div>
+
+      <div id="fpStep1" class="mt-6 space-y-4">
+        <label class="field relative block rounded-xl ring-1 ring-zuna-200 bg-zuna-50/50">
+          <span class="absolute left-4 top-2 text-xs font-semibold text-zuna-500">Email address</span>
+          <input id="fpEmail" type="email" name="username" autocomplete="username" class="w-full bg-transparent px-4 pt-6 pb-2.5 text-sm font-medium focus:outline-none" placeholder="name@company.com">
+        </label>
+        <button id="fpSend" type="submit" class="btn-sheen w-full h-12 rounded-xl bg-zuna-900 text-white font-semibold text-sm shadow-lg shadow-zuna-900/25 hover:bg-zuna-800 active:scale-[.98] transition-all disabled:cursor-wait disabled:opacity-80">Send code</button>
+      </div>
+
+      <div id="fpStep2" class="hidden mt-6 space-y-4">
+        <label class="field relative block rounded-xl ring-1 ring-zuna-200 bg-zuna-50/50">
+          <span class="absolute left-4 top-2 text-xs font-semibold text-zuna-500">6-digit code</span>
+          <input id="fpCode" inputmode="numeric" autocomplete="one-time-code" maxlength="6" class="w-full bg-transparent px-4 pt-6 pb-2.5 text-lg font-bold tracking-[.4em] tabular-nums focus:outline-none" placeholder="••••••">
+        </label>
+        <label class="field relative block rounded-xl ring-1 ring-zuna-200 bg-zuna-50/50">
+          <span class="absolute left-4 top-2 text-xs font-semibold text-zuna-500">New password</span>
+          <input id="fpPw" type="password" autocomplete="new-password" class="w-full bg-transparent pl-4 pr-12 pt-6 pb-2.5 text-sm font-medium focus:outline-none" placeholder="At least 10 characters">
+          <button type="button" data-eye="fpPw" aria-label="Show password" class="absolute right-2 top-1/2 -translate-y-1/2 grid place-items-center w-9 h-9 rounded-lg text-zuna-400 hover:text-zuna-900 hover:bg-zuna-50"><svg class="w-[18px] h-[18px]" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"><path d="M2 12s3-7 10-7 10 7 10 7-3 7-10 7S2 12 2 12Z"/><circle cx="12" cy="12" r="3"/></svg></button>
+        </label>
+        <label class="field relative block rounded-xl ring-1 ring-zuna-200 bg-zuna-50/50">
+          <span class="absolute left-4 top-2 text-xs font-semibold text-zuna-500">Confirm new password</span>
+          <input id="fpPw2" type="password" autocomplete="new-password" class="w-full bg-transparent pl-4 pr-12 pt-6 pb-2.5 text-sm font-medium focus:outline-none" placeholder="Re-enter the password">
+          <button type="button" data-eye="fpPw2" aria-label="Show password" class="absolute right-2 top-1/2 -translate-y-1/2 grid place-items-center w-9 h-9 rounded-lg text-zuna-400 hover:text-zuna-900 hover:bg-zuna-50"><svg class="w-[18px] h-[18px]" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"><path d="M2 12s3-7 10-7 10 7 10 7-3 7-10 7S2 12 2 12Z"/><circle cx="12" cy="12" r="3"/></svg></button>
+        </label>
+        <ul id="fpRules" class="grid grid-cols-2 gap-x-3 gap-y-1 text-xs text-zuna-500">
+          <li data-rule="len" class="flex items-center gap-1.5"><i class="w-1.5 h-1.5 rounded-full bg-zuna-200"></i>10+ characters</li>
+          <li data-rule="mix" class="flex items-center gap-1.5"><i class="w-1.5 h-1.5 rounded-full bg-zuna-200"></i>Letters and numbers</li>
+          <li data-rule="same" class="flex items-center gap-1.5"><i class="w-1.5 h-1.5 rounded-full bg-zuna-200"></i>Passwords match</li>
+        </ul>
+        <button id="fpSet" type="submit" class="btn-sheen w-full h-12 rounded-xl bg-zuna-900 text-white font-semibold text-sm shadow-lg shadow-zuna-900/25 hover:bg-zuna-800 active:scale-[.98] transition-all disabled:cursor-wait disabled:opacity-80">Set new password</button>
+        <p class="text-center text-xs text-zuna-500">Didn't get it? Check spam, or <button type="button" id="fpResend" class="font-semibold text-mint-600 hover:text-mint-700 disabled:text-zuna-400 disabled:cursor-default">send a new code</button></p>
+      </div>
+
+      <p class="mt-6 text-center"><button type="button" id="fpBack" class="text-sm font-semibold text-zuna-600 hover:text-zuna-900">&larr; Back to sign in</button></p>
+    </form>
+
+    <p class="a-in w-full max-w-sm text-center text-xs text-zuna-400" style="--d:560ms">© <span id="yr">2026</span> Zuna Travel Solutions · Hyderabad</p>
+  </section>
+
+  <!-- Right: animated preview -->
+  <section class="hidden lg:flex relative overflow-hidden m-3 rounded-3xl bg-zuna-900 p-12 flex-col justify-center">
+    <div class="absolute inset-0 gridpan"></div>
+    <div class="blob1 absolute -top-28 -right-24 w-[420px] h-[420px] rounded-full bg-mint-500/20 blur-3xl"></div>
+    <div class="blob2 absolute -bottom-40 -left-24 w-[460px] h-[460px] rounded-full bg-zuna-600/60 blur-3xl"></div>
+
+    <div class="relative">
+      <h2 class="a-in text-[34px] font-bold text-white leading-tight tracking-tight" style="--d:200ms">Every room, every night.<br><span class="text-mint-400">One live view.</span></h2>
+      <p class="a-in mt-3 text-zuna-200 text-sm max-w-md" style="--d:320ms">Occupancy, guests and night-wise availability across your hotels and guest houses, updated every morning.</p>
+    </div>
+
+    <div class="relative mt-10 w-full max-w-[540px]">
+      <div class="a-rise relative rounded-2xl bg-white shadow-2xl shadow-black/40 p-5 overflow-hidden">
+        <div class="flex items-center justify-between">
+          <p class="text-sm font-bold">Overview</p>
+          <span class="flex items-center gap-1.5 text-[10px] font-semibold text-mint-700 bg-mint-50 rounded-full px-2 py-0.5"><span class="relative flex w-1.5 h-1.5"><span class="absolute inset-0 rounded-full bg-mint-500" style="animation:ping2 1.6s cubic-bezier(0,0,.2,1) infinite"></span><span class="relative w-1.5 h-1.5 rounded-full bg-mint-500"></span></span>Live</span>
+        </div>
+        <div class="mt-4 grid grid-cols-3 gap-3">
+          <div class="rounded-xl bg-zuna-900 text-white p-3"><p class="text-[10px] text-zuna-200">Occupancy</p><p class="text-xl font-bold tabular-nums"><span data-count="62" data-suffix="%">0%</span></p></div>
+          <div class="rounded-xl ring-1 ring-zuna-100 p-3"><p class="text-[10px] text-zuna-500">Room-nights sold</p><p class="text-xl font-bold tabular-nums" data-count="74">0</p></div>
+          <div class="rounded-xl ring-1 ring-zuna-100 p-3"><p class="text-[10px] text-zuna-500">Free tonight</p><p class="text-xl font-bold tabular-nums" data-count="2">0</p></div>
+        </div>
+        <div class="relative mt-4 rounded-xl ring-1 ring-zuna-100 p-3 overflow-hidden">
+          <div class="shim"></div>
+          <div class="relative flex items-center justify-between"><p class="text-[10px] font-semibold text-zuna-500">Nightly occupancy</p><p class="text-[10px] text-zuna-400">4 rooms</p></div>
+          <div id="bars" class="relative mt-2 h-24 flex items-end gap-1"></div>
+        </div>
+        <div class="mt-3 grid grid-cols-4 gap-1.5" id="rack"></div>
+      </div>
+      <div class="bob absolute -bottom-6 -right-6">
+        <div class="a-in rounded-xl bg-white shadow-xl p-3 pr-4 flex items-center gap-3" style="--d:1400ms">
+          <span class="w-9 h-9 rounded-lg bg-mint-500 text-white grid place-items-center"><svg class="w-4 h-4" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round"><path d="M20 6 9 17l-5-5"/></svg></span>
+          <div><p class="text-[10px] text-zuna-500">Booking confirmed</p><p class="text-xs font-bold">Room 102 · 2 nights</p></div>
+        </div>
+      </div>
+      <div class="bob absolute -top-5 -left-6" style="animation-delay:-2s">
+        <div class="a-in rounded-xl bg-zuna-800 ring-1 ring-white/15 shadow-xl px-3 py-2 flex items-center gap-2 text-white" style="--d:1700ms">
+          <svg class="w-4 h-4 text-mint-400" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"><path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z"/><path d="M14 2v6h6"/></svg>
+          <p class="text-[11px] font-semibold">PDF &amp; Excel reports</p>
+        </div>
+      </div>
+    </div>
+    <p class="relative mt-12 text-[11px] text-zuna-300">Illustrative preview</p>
+  </section>
+</main>
+<div id="wipe" class="hidden fixed inset-0 z-50 bg-zuna-50"></div>
+
+<script>
+(() => {
+  const $ = (s) => document.querySelector(s);
+  $('#yr').textContent = new Date().getFullYear();
+  // bars + rack
+  const H = [2,3,3,1,2,4,3,2,1,2,3,4,4,3,2,1,2,3,3,2,1,2,3,2];
+  const bars = $('#bars');
+  H.forEach((h, i) => { const b = document.createElement('div'); b.className = 'bar relative flex-1 h-full rounded bg-zuna-50'; const f = document.createElement('i'); f.style.height = h * 25 + '%'; f.style.animationDelay = (700 + i * 45) + 'ms'; if (h === 4) f.style.background = '#12005A'; b.appendChild(f); bars.appendChild(b); });
+  const rack = $('#rack');
+  ['Room 101','Room 102','Room 103','Room 104'].forEach((r, i) => { const d = document.createElement('div'); d.className = 'a-in rounded-lg px-2 py-1.5 text-[10px] font-semibold ' + (i === 3 ? 'bg-zuna-50 text-zuna-500' : 'bg-mint-50 text-mint-700'); d.style.setProperty('--d', (1100 + i * 90) + 'ms'); d.textContent = r + (i === 3 ? ' · free' : ' · in'); rack.appendChild(d); });
+  // count-up
+  setTimeout(() => document.querySelectorAll('[data-count]').forEach((el) => {
+    const end = +el.dataset.count, suf = el.dataset.suffix || '', t0 = performance.now();
+    const step = (t) => { const p = Math.min(1, (t - t0) / 1200); el.textContent = Math.round(end * (1 - Math.pow(1 - p, 3))) + suf; if (p < 1) requestAnimationFrame(step); };
+    requestAnimationFrame(step);
+  }), 800);
+
+  // form
+  const f = $('#f'), em = $('#email'), pw = $('#pw'), err = $('#err'), go = $('#go');
+  try { const last = localStorage.getItem('zp.user'); if (last) { em.value = last; } } catch (e) {}
+  (em.value ? pw : em).focus();
+  $('#eye').onclick = () => { const show = pw.type === 'password'; pw.type = show ? 'text' : 'password'; $('#eyeOn').classList.toggle('hidden', show); $('#eyeOff').classList.toggle('hidden', !show); $('#eye').setAttribute('aria-label', show ? 'Hide password' : 'Show password'); pw.focus(); };
+  const capsChk = (e) => { if (e.getModifierState) $('#caps').classList.toggle('hidden', !e.getModifierState('CapsLock')); };
+  pw.addEventListener('keyup', capsChk); pw.addEventListener('keydown', capsChk);
+  const showErr = (m) => { err.textContent = m; err.classList.remove('hidden'); f.classList.remove('shake'); void f.offsetWidth; f.classList.add('shake'); };
+  const busy = (on) => { go.disabled = on; $('#goTxt').textContent = on ? 'Signing in…' : 'Sign in'; $('#goArrow').classList.toggle('hidden', on); $('#goSpin').classList.toggle('hidden', !on); };
+  [em, pw].forEach((i) => i.addEventListener('input', () => err.classList.add('hidden')));
+  f.addEventListener('submit', async (e) => {
+    e.preventDefault();
+    if (!em.value.trim() || !pw.value) { showErr('Enter your email or user ID and password.'); (em.value.trim() ? pw : em).focus(); return; }
+    busy(true);
+    try {
+      const r = await fetch('/api/login', { method: 'POST', headers: { 'content-type': 'application/json' }, body: JSON.stringify({ email: em.value.trim(), password: pw.value, remember: $('#remember').checked }), credentials: 'same-origin' });
+      const j = await r.json().catch(() => ({}));
+      if (!r.ok) { busy(false); showErr(j.error || 'Sign in failed. Please try again.'); pw.select(); return; }
+      try { localStorage.setItem('zp.user', em.value.trim()); } catch (e2) {}
+      $('#goSpin').classList.add('hidden'); $('#goOk').classList.remove('hidden'); $('#goOk').classList.add('pop'); $('#goTxt').textContent = 'Welcome' + (j.name ? ', ' + j.name.split(' ')[0] : '');
+      const rc = go.getBoundingClientRect(), w = $('#wipe');
+      w.style.setProperty('--x', (rc.left + rc.width / 2) + 'px'); w.style.setProperty('--y', (rc.top + rc.height / 2) + 'px');
+      setTimeout(() => { w.classList.remove('hidden'); w.classList.add('wipe'); }, 450);
+      setTimeout(() => location.replace('/'), 1100);
+    } catch (e3) { busy(false); showErr('Network problem. Check your connection and try again.'); }
+  });
+
+  // ---- forgot / reset password ----
+  const fp = $('#fp'), fpErr = $('#fpErr'), fpOk = $('#fpOk'), fpEmail = $('#fpEmail'), fpCode = $('#fpCode'), fpPw = $('#fpPw'), fpPw2 = $('#fpPw2');
+  let fpStep = 1, fpTimer = null;
+  const post = async (u, b) => { const r = await fetch(u, { method: 'POST', headers: { 'content-type': 'application/json' }, body: JSON.stringify(b), credentials: 'same-origin' }); return { ok: r.ok, j: await r.json().catch(() => ({})) }; };
+  const fpMsg = (el, m) => { [fpErr, fpOk].forEach((x) => x.classList.add('hidden')); if (m) { el.textContent = m; el.classList.remove('hidden'); } };
+  const fpShake = () => { fp.classList.remove('shake'); void fp.offsetWidth; fp.classList.add('shake'); };
+  const showReset = (on) => { f.classList.toggle('hidden', on); fp.classList.toggle('hidden', !on); };
+  const goStep = (n) => { fpStep = n; $('#fpStep1').classList.toggle('hidden', n !== 1); $('#fpStep2').classList.toggle('hidden', n !== 2);
+    $('#fpLead').textContent = n === 1 ? "Enter the email address you sign in with. We'll email you a 6-digit code." : 'If ' + fpEmail.value.trim() + ' has an account, a 6-digit code is on its way. It expires in 15 minutes.'; };
+  const cooldown = () => { const b = $('#fpResend'); let s = 60; b.disabled = true; clearInterval(fpTimer);
+    const tick = () => { b.textContent = s > 0 ? 'send a new code (' + s + 's)' : 'send a new code'; if (s-- <= 0) { b.disabled = false; clearInterval(fpTimer); } }; tick(); fpTimer = setInterval(tick, 1000); };
+  $('#forgot').onclick = () => { fpEmail.value = em.value.trim().includes('@') ? em.value.trim() : ''; fpMsg(); goStep(1); showReset(true); (fpEmail.value ? $('#fpSend') : fpEmail).focus(); };
+  $('#fpBack').onclick = () => { showReset(false); err.classList.add('hidden'); (em.value ? pw : em).focus(); };
+  document.querySelectorAll('[data-eye]').forEach((b) => b.onclick = () => { const i = $('#' + b.dataset.eye); i.type = i.type === 'password' ? 'text' : 'password'; b.setAttribute('aria-label', i.type === 'password' ? 'Show password' : 'Hide password'); i.focus(); });
+  const rules = () => { const p = fpPw.value, ok = { len: p.length >= 10, mix: /[A-Za-z]/.test(p) && /[0-9]/.test(p), same: !!p && p === fpPw2.value };
+    document.querySelectorAll('#fpRules li').forEach((li) => { const g = ok[li.dataset.rule]; li.classList.toggle('text-mint-700', g); li.classList.toggle('text-zuna-500', !g); li.firstElementChild.className = 'w-1.5 h-1.5 rounded-full ' + (g ? 'bg-mint-500' : 'bg-zuna-200'); }); return ok.len && ok.mix && ok.same; };
+  [fpPw, fpPw2].forEach((i) => i.addEventListener('input', () => { rules(); fpErr.classList.add('hidden'); }));
+  fpCode.addEventListener('input', () => { fpCode.value = fpCode.value.replace(/\D/g, '').slice(0, 6); fpErr.classList.add('hidden'); if (fpCode.value.length === 6) fpPw.focus(); });
+  const sendCode = async () => {
+    const e = fpEmail.value.trim(); if (!/^[^@\s]+@[^@\s]+\.[^@\s]+$/.test(e)) { fpMsg(fpErr, 'Enter a valid email address.'); fpShake(); fpEmail.focus(); return false; }
+    $('#fpSend').disabled = true; $('#fpSend').textContent = 'Sending…';
+    try { const { ok, j } = await post('/api/forgot', { email: e }); if (!ok) { fpMsg(fpErr, j.error || 'Something went wrong. Please try again.'); fpShake(); return false; } }
+    catch (x) { fpMsg(fpErr, 'Network problem. Check your connection and try again.'); return false; }
+    finally { $('#fpSend').disabled = false; $('#fpSend').textContent = 'Send code'; }
+    cooldown(); return true;
+  };
+  $('#fpResend').onclick = async () => { if (await sendCode()) { fpMsg(fpOk, 'A new code has been sent. Use the most recent one.'); fpCode.value = ''; fpCode.focus(); } };
+  fp.addEventListener('submit', async (ev) => {
+    ev.preventDefault();
+    if (fpStep === 1) { if (await sendCode()) { fpMsg(); goStep(2); fpCode.focus(); } return; }
+    if (fpCode.value.length !== 6) { fpMsg(fpErr, 'Enter the 6-digit code from the email.'); fpShake(); fpCode.focus(); return; }
+    if (!rules()) { fpMsg(fpErr, fpPw.value !== fpPw2.value && fpPw.value.length >= 10 && /[A-Za-z]/.test(fpPw.value) && /[0-9]/.test(fpPw.value) ? 'The two passwords do not match.' : 'Use at least 10 characters, with both letters and numbers.'); fpShake(); fpPw.focus(); return; }
+    const b = $('#fpSet'); b.disabled = true; b.textContent = 'Saving…';
+    try {
+      const { ok, j } = await post('/api/reset', { email: fpEmail.value.trim(), code: fpCode.value, password: fpPw.value });
+      if (!ok) { b.disabled = false; b.textContent = 'Set new password'; fpMsg(fpErr, j.error || 'Something went wrong. Please try again.'); fpShake(); (j.field === 'password' ? fpPw : fpCode).focus(); if (/expired|Too many/.test(j.error || '')) { fpCode.value = ''; } return; }
+      b.textContent = 'Password updated · signing you in…';
+      em.value = fpEmail.value.trim(); pw.value = fpPw.value; fpPw.value = fpPw2.value = fpCode.value = '';
+      setTimeout(() => { showReset(false); f.requestSubmit(); }, 500);
+    } catch (x) { b.disabled = false; b.textContent = 'Set new password'; fpMsg(fpErr, 'Network problem. Check your connection and try again.'); }
+  });
+})();
+</script>
+</body>
+</html>

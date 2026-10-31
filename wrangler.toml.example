@@ -1,0 +1,15 @@
+# Cloudflare deployment (optional; the dashboard "Edit code" route works too).
+# Copy to wrangler.toml, set your own D1 database id, then: npm run build && npx wrangler deploy
+name = "ltmgh"
+main = "worker.js"
+compatibility_date = "2026-10-01"
+
+[[d1_databases]]
+binding = "DB"
+database_name = "ltmgh"
+database_id = "<your-d1-database-id>"
+
+[vars]
+# PRIMARY_HOST = "gh.zuna.ai"
+# MAIL_FROM = "Zuna Hotel Desk <noreply@zuna.ai>"
+# Secret (not here): npx wrangler secret put RESEND_API_KEY

@@ -1,0 +1,22 @@
+{
+  "name": "guesthouse-portal",
+  "version": "1.0.0",
+  "private": true,
+  "description": "Guest house inventory & occupancy portal (Zuna Travel Solutions)",
+  "license": "UNLICENSED",
+  "engines": {
+    "node": ">=22.13"
+  },
+  "scripts": {
+    "build": "python3 build.py",
+    "start": "node --disable-warning=ExperimentalWarning server/server.mjs",
+    "admin": "node --disable-warning=ExperimentalWarning server/admin.mjs",
+    "dev": "npm run build && INSECURE_COOKIES=1 PORT=8080 npm start",
+    "test": "node --disable-warning=ExperimentalWarning test/smoke.mjs"
+  },
+  "dependencies": {
+    "apexcharts": "^3.54.1",
+    "lucide-static": "^0.460.0",
+    "tailwindcss": "^3.4.17"
+  }
+}

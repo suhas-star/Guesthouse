@@ -1,0 +1,7 @@
+node_modules
+var
+accounts_out
+*.sqlite
+.env
+.git
+*.png

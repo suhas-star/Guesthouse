@@ -79,6 +79,26 @@ env = {DB, PRIMARY_HOST: 'gh.zuna.ai'};
 r = await worker.fetch(new Request('https://ltmgh.zuna.ai/x?y=1'), env);
 check('old host redirects to PRIMARY_HOST', r.status === 301 && r.headers.get('location') === 'https://gh.zuna.ai/x?y=1');
 
+// voucher intake: a tiny hand-made PDF with a Flate-compressed content stream
+{
+  const zlib = await import('node:zlib');
+  const content = zlib.deflateSync(Buffer.from('BT /F1 12 Tf 72 720 Td (Guest Name: Mr. Test Guest) Tj 0 -16 Td (Room No: 03) Tj 0 -16 Td (Occupancy: Single) Tj ET'));
+  const parts = ['%PDF-1.4\n', '1 0 obj << /Type /Catalog /Pages 2 0 R >> endobj\n', '2 0 obj << /Type /Pages /Kids [3 0 R] /Count 1 >> endobj\n',
+    '3 0 obj << /Type /Page /Parent 2 0 R /Resources << /Font << /F1 4 0 R >> >> /Contents 5 0 R >> endobj\n',
+    '4 0 obj << /Type /Font /Subtype /Type1 /BaseFont /Helvetica >> endobj\n', `5 0 obj << /Length ${content.length} /Filter /FlateDecode >> stream\n`];
+  const pdf = Buffer.concat([Buffer.from(parts.join('')), content, Buffer.from('\nendstream endobj\ntrailer << /Root 1 0 R >>\n%%EOF')]);
+  const vpost = (body, tok) => worker.fetch(new Request(ORIGIN + '/api/vouchers', {method: 'POST', headers: {'content-type': 'application/json', authorization: 'Bearer ' + tok}, body: JSON.stringify(body)}), env);
+  env = {DB, VOUCHER_TOKEN: 'v-secret'};
+  check('voucher intake refuses a wrong token', (await vpost({known: []}, 'wrong')).status === 401);
+  r = await vpost({key: 'm1#0', received: '2026-10-30 13:36', from: 'bookings@example.com', subject: 'Re: Booking', file: 'Mr. Test Guest.pdf', pdf: pdf.toString('base64')}, 'v-secret');
+  const vj = await r.json();
+  check('voucher PDF text extracted (guest, room, occupancy)', r.status === 200 && vj.guest === 'Mr. Test Guest' && vj.room === '03' && vj.occupancy === 'Single', JSON.stringify(vj));
+  r = await vpost({known: ['m1#0', 'm2#0']}, 'v-secret');
+  check('voucher "known" lookup', JSON.stringify((await r.json()).known) === '["m1#0"]');
+  env = {DB};
+  check('voucher intake off without VOUCHER_TOKEN', (await vpost({known: []}, '')).status === 401);
+}
+
 globalThis.fetch = realFetch;
 console.log(`\n${pass} passed, ${fail} failed`);
 process.exit(fail ? 1 : 0);

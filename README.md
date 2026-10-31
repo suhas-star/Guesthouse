@@ -150,6 +150,7 @@ server {
 | `RESEND_API_KEY` | both (secret) | empty | Enables "Forgot password" e-mails through resend.com. Without it the reset screen asks users to contact the Zuna Hotel Desk. |
 | `MAIL_FROM` | both | `Zuna Hotel Desk <noreply@zuna.ai>` | Sender of reset e-mails (domain must be verified in Resend). |
 | `PRIMARY_HOST` | both | empty | Canonical host; other `*.zuna.ai` hosts answering for the app 301-redirect to it. |
+| `VOUCHER_TOKEN` | both (secret) | empty | Enables `POST /api/vouchers` (see below). Long random string shared with the mail job. |
 | `TRUST_PROXY` | self-hosted | `1` | Use `X-Forwarded-Proto` / `X-Forwarded-Host` from the proxy. |
 | `INSECURE_COOKIES` | self-hosted | `0` | `1` drops the `Secure` cookie flag for plain-HTTP testing only. |
 
@@ -183,6 +184,21 @@ status (Live / Coming soon), poc_name, poc_phone, poc_email`.
 
 Self-hosted: load CSV/JSON files with `npm run admin -- load-data <bookings.csv> <properties.csv> <period.json>`
 (see `data/` for the exact columns), or write the rows directly with any SQLite client.
+
+## Voucher intake
+
+Operators e-mail a confirmation voucher (PDF) for each booking. A small mail job (Google Apps Script, every 10 minutes)
+posts each new voucher to `POST /api/vouchers` with `Authorization: Bearer <VOUCHER_TOKEN>`:
+
+```json
+{"known": ["<key>", "..."]}                       // → {"known": [keys already stored]}
+{"key": "<msgId>#<n>", "received": "2026-10-30 13:36", "from": "...", "subject": "...", "file": "x.pdf", "pdf": "<base64>"}
+```
+
+The app extracts the PDF's text itself (no external service: Flate/ASCII85/Hex streams, object streams, ToUnicode
+font maps) and stores it in table `vouchers` (`key, received_ist, sender, subject, file, guest, room_guess,
+occupancy_guess, text, pdf, created`). The data feed reads that table to fill room numbers, occupancy and gender.
+Scanned (image-only) PDFs have no text layer and are stored with empty text.
 
 ## User accounts
 

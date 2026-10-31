@@ -25,8 +25,9 @@ const env = {
   RESEND_API_KEY: E.RESEND_API_KEY || '',
   MAIL_FROM: E.MAIL_FROM || undefined,
   PRIMARY_HOST: E.PRIMARY_HOST || '',
+  VOUCHER_TOKEN: E.VOUCHER_TOKEN || '',
 };
-const trust = E.TRUST_PROXY !== '0', MAX_BODY = 64 * 1024;
+const trust = E.TRUST_PROXY !== '0', MAX_BODY = 12 * 1024 * 1024;  // vouchers carry base64 PDFs
 
 const server = http.createServer(async (req, res) => {
   try {

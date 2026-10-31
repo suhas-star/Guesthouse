@@ -8,6 +8,7 @@ export const SCHEMA = `
 CREATE TABLE IF NOT EXISTS datasets (id TEXT PRIMARY KEY, json TEXT NOT NULL, updated_at TEXT NOT NULL);
 CREATE TABLE IF NOT EXISTS users (email TEXT PRIMARY KEY, name TEXT, salt TEXT, hash TEXT, active INTEGER DEFAULT 1, failed INTEGER DEFAULT 0, locked_until TEXT, last_login TEXT);
 CREATE TABLE IF NOT EXISTS sessions (token_hash TEXT PRIMARY KEY, email TEXT, expires TEXT, created TEXT);
+CREATE TABLE IF NOT EXISTS vouchers (key TEXT PRIMARY KEY, received_ist TEXT, sender TEXT, subject TEXT, file TEXT, guest TEXT, room_guess TEXT, occupancy_guess TEXT, text TEXT, pdf BLOB, created TEXT);
 CREATE TABLE IF NOT EXISTS resets (email TEXT PRIMARY KEY, code_hash TEXT NOT NULL, expires TEXT NOT NULL, tries INTEGER DEFAULT 0, created TEXT NOT NULL);
 `;
 

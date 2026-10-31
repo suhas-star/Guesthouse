@@ -151,7 +151,7 @@ window.addEventListener('load',function(){setTimeout(hide,150)});setTimeout(hide
           <div class="overflow-x-auto">
             <table class="w-full text-sm">
               <thead><tr class="text-left text-xs font-semibold text-zuna-500 bg-zuna-50/70">
-                <th data-k="guest" class="th">Guest</th><th data-k="grade" class="th">Grade</th><th data-k="_g" class="th">Gender</th><th data-k="_occ" class="th">Occupancy</th><th data-k="check_in" class="th">Check-in</th><th data-k="check_out" class="th">Check-out</th><th data-k="nights" class="th text-right">Nights</th><th data-k="room" class="th">Room</th><th data-k="state" class="th">Status</th>
+                <th data-k="guest" class="th">Guest</th><th data-k="grade" class="th">Grade</th><th data-k="_g" class="th">Gender</th><th data-k="_occ" class="th">Occupancy</th><th data-k="check_in" class="th">Stay</th><th data-k="room" class="th">Room</th><th data-k="state" class="th">Status</th>
               </tr></thead>
               <tbody id="btbody" class="divide-y divide-zuna-50"></tbody>
             </table>
@@ -162,7 +162,7 @@ window.addEventListener('load',function(){setTimeout(hide,150)});setTimeout(hide
 
       <!-- HOUSES -->
       <section data-view="houses" class="view hidden">
-        <div id="houses" class="grid grid-cols-1 md:grid-cols-2 2xl:grid-cols-3 gap-4"></div>
+        <div id="houses" class="space-y-7"></div>
       </section>
     </main>
   </div>
@@ -549,11 +549,9 @@ const renderBookings = () => {
     const gr = h('td', 'px-3 py-3'); gr.appendChild(gradeTag(b.grade)); tr.appendChild(gr);
     const ge = h('td', 'px-3 py-3'); ge.appendChild(genderTag(b._g)); tr.appendChild(ge);
     const oc = h('td', 'px-3 py-3'); const ot = occTag(b._occ); if (b._mates.length) ot.title = 'Sharing with ' + b._mates.map((o) => cleanName(o.guest) + ' (' + o._g + ')').join(', '); oc.appendChild(ot); tr.appendChild(oc);
-    const ci = h('td', 'px-3 py-3 whitespace-nowrap tabular-nums', fShort(b.check_in)); ci.title = fFull(b.check_in); tr.appendChild(ci);
-    const co = h('td', 'px-3 py-3 whitespace-nowrap tabular-nums', fShort(b.check_out)); co.title = fFull(b.check_out); tr.appendChild(co);
-    tr.appendChild(h('td', 'px-3 py-3 text-right font-semibold tabular-nums', b.nights));
+    const st0 = h('td', 'px-3 py-3 whitespace-nowrap tabular-nums'); st0.title = fFull(b.check_in) + ' → ' + fFull(b.check_out); st0.appendChild(h('p', 'font-medium', fShort(b.check_in) + ' → ' + fShort(b.check_out))); st0.appendChild(h('p', 'text-xs text-zuna-400', b.nights + (+b.nights === 1 ? ' night' : ' nights'))); tr.appendChild(st0);
     tr.appendChild(h('td', 'px-3 py-3 whitespace-nowrap ' + (/^\d/.test(b.room) ? 'font-medium' : 'text-zuna-400'), b.room));
-    const st = h('td', 'pl-3 pr-5 py-3'); st.appendChild(badge(b.state)); tr.appendChild(st);
+    const st = h('td', 'pl-3 pr-5 py-3 whitespace-nowrap'); st.appendChild(badge(b.state)); tr.appendChild(st);
     tr.onclick = () => bookingDrawer(b); tr.onkeydown = (e) => { if (e.key === 'Enter') bookingDrawer(b); };
     tb.appendChild(tr);
   });
@@ -566,37 +564,64 @@ $('#bsearch').addEventListener('input', (e) => { state.bsearch = e.target.value;
 const copy = async (t) => { try { await navigator.clipboard.writeText(t); toast('Copied ' + t); } catch (e) { toast(t); } };
 const renderHouses = () => {
   const box = $('#houses'); box.replaceChildren();
-  props.forEach((p) => {
-    const live = p.status === 'Live';
-    const c = h('div', 'card overflow-hidden flex flex-col transition-all hover:-translate-y-0.5 hover:shadow-lg');
-    const hero = h('div', 'p-5 flex items-start gap-4 ' + (live ? 'bg-gradient-to-br from-zuna-900 to-zuna-700 text-white' : 'bg-zuna-50/60'));
-    const m = h('div', 'min-w-0 flex-1');
-    m.appendChild(h('p', 'text-lg font-bold', p.property));
-    const loc = h('p', 'flex items-center gap-1 text-xs mt-0.5 ' + (live ? 'text-zuna-200' : 'text-zuna-500')); loc.appendChild(icon('map-pin', 'w-3.5 h-3.5')); loc.appendChild(document.createTextNode(p.city + ' · ' + p.rooms + ' rooms')); m.appendChild(loc);
-    const bd = h('span', 'inline-flex items-center gap-1.5 mt-3 rounded-full px-2.5 py-0.5 text-xs font-bold ' + (live ? 'bg-mint-500 text-zuna-900' : 'bg-white text-zuna-500 ring-1 ring-zuna-100'), live ? 'Live' : 'Coming soon'); m.appendChild(bd);
-    hero.appendChild(m);
-    if (live) {
-      const ns = nightsFor(p.property), av = ns.reduce((s, x) => s + x.total, 0), so = ns.reduce((s, x) => s + x.booked, 0), o = av ? so / av : 0, R = 26, C = 2 * Math.PI * R;
-      const ring = h('div', 'relative w-16 h-16 shrink-0');
-      ring.innerHTML = '<svg viewBox="0 0 64 64" class="w-16 h-16 -rotate-90"><circle cx="32" cy="32" r="' + R + '" fill="none" stroke="rgba(255,255,255,.15)" stroke-width="7"/><circle cx="32" cy="32" r="' + R + '" fill="none" stroke="' + MINT + '" stroke-width="7" stroke-linecap="round" stroke-dasharray="' + C + '" stroke-dashoffset="' + (C * (1 - o)) + '"/></svg>';
-      ring.appendChild(h('span', 'absolute inset-0 grid place-items-center text-sm font-bold', Math.round(o * 100) + '%')); ring.title = 'Occupancy, full period'; hero.appendChild(ring);
-    }
-    c.appendChild(hero);
-    const dl = h('dl', 'p-5 grid grid-cols-[84px_1fr] gap-x-3 gap-y-2 text-sm');
-    [['Address', p.address], ['Rooms', p.room_nos], ['Eligible', p.eligible], ['Operator', p.operator]].forEach(([k, v]) => { dl.appendChild(h('dt', 'text-zuna-500 font-medium', k)); dl.appendChild(h('dd', 'font-medium', v)); });
-    c.appendChild(dl);
-    const ct = h('div', 'hidden px-5 pb-4 space-y-2');
-    const who = h('div', 'flex items-center gap-2 text-sm font-semibold'); who.appendChild(icon('user-round', 'w-4 h-4 text-zuna-400')); who.appendChild(document.createTextNode(p.poc_name || 'Contact')); ct.appendChild(who);
-    const line = (ic, val, href, label) => { const l = h('div', 'flex flex-wrap items-center gap-2 rounded-xl bg-zuna-50 ring-1 ring-zuna-100 px-3 py-2 text-sm'); l.appendChild(icon(ic, 'w-4 h-4 text-zuna-400')); l.appendChild(h('span', 'flex-1 min-w-0 break-all font-medium', val)); const a = h('a', 'btn !py-1 !px-2.5 !text-xs', label); a.href = href; l.appendChild(a); const b = h('button', 'btn !py-1 !px-2.5 !text-xs', 'Copy'); b.onclick = () => copy(val); l.appendChild(b); ct.appendChild(l); };
-    (p.poc_phone || '').split(/;\s*/).filter(Boolean).forEach((v) => line('phone', v, 'tel:' + v.replace(/\s/g, ''), 'Call'));
-    (p.poc_email || '').split(/;\s*/).filter(Boolean).forEach((v) => line('mail', v, 'mailto:' + v, 'Email'));
-    c.appendChild(ct);
-    const ft = h('div', 'mt-auto flex items-center gap-2 px-5 py-3 border-t border-zuna-100 bg-zuna-50/40');
-    const cb = h('button', 'btn'); cb.appendChild(icon('phone', 'w-4 h-4')); const cbt = h('span', null, 'Contacts'); cb.appendChild(cbt);
-    cb.onclick = () => { ct.classList.toggle('hidden'); cbt.textContent = ct.classList.contains('hidden') ? 'Contacts' : 'Hide contacts'; }; ft.appendChild(cb);
-    if (live) { const vb = h('button', 'btn-primary ml-auto'); vb.appendChild(document.createTextNode('Open report')); vb.appendChild(icon('arrow-right', 'w-4 h-4')); vb.onclick = () => { state.prop = p.property; $('#propSel').value = p.property; go('overview'); }; ft.appendChild(vb); }
-    c.appendChild(ft);
-    box.appendChild(c);
+  const cities = [...new Set(props.map((p) => p.city))].sort((x, y) => (props.some((p) => p.city === y && p.status === 'Live') - props.some((p) => p.city === x && p.status === 'Live')) || x.localeCompare(y));
+  cities.forEach((city) => {
+    const list = props.filter((p) => p.city === city).sort((x, y) => (y.status === 'Live') - (x.status === 'Live'));
+    const sec = h('section', 'space-y-3');
+    const hd = h('div', 'flex items-baseline gap-2 px-1'); hd.appendChild(h('h3', 'text-base font-bold', city));
+    const nLive = list.filter((p) => p.status === 'Live').length;
+    hd.appendChild(h('span', 'text-xs text-zuna-500', list.length + (list.length === 1 ? ' guest house' : ' guest houses') + (nLive ? ' · ' + nLive + ' live' : ' · opening soon')));
+    sec.appendChild(hd);
+    const grid = h('div', 'grid grid-cols-1 md:grid-cols-2 2xl:grid-cols-3 gap-4');
+    list.forEach((p) => {
+      const live = p.status === 'Live';
+      const c = h('div', 'card overflow-hidden flex flex-col transition-all hover:-translate-y-0.5 hover:shadow-lg ' + (live ? 'ring-2 ring-mint-500/60' : ''));
+      // header
+      const top = h('div', 'p-5 pb-4 flex items-start gap-3');
+      const ic = h('span', 'grid place-items-center w-10 h-10 rounded-xl shrink-0 ' + (live ? 'bg-zuna-900 text-mint-400' : 'bg-zuna-50 text-zuna-400')); ic.appendChild(icon('building-2', 'w-5 h-5')); top.appendChild(ic);
+      const m = h('div', 'min-w-0 flex-1'); m.appendChild(h('p', 'text-base font-bold leading-tight', p.property));
+      const meta = h('p', 'mt-1 flex flex-wrap items-center gap-x-2 gap-y-0.5 text-xs text-zuna-500'); meta.appendChild(icon('bed', 'w-3.5 h-3.5'));
+      meta.appendChild(document.createTextNode(p.rooms + ' rooms · ' + p.operator)); m.appendChild(meta); top.appendChild(m);
+      const pill = h('span', 'shrink-0 inline-flex items-center gap-1.5 rounded-full px-2.5 py-1 text-xs font-bold ' + (live ? 'bg-mint-50 text-mint-700 ring-1 ring-mint-200' : 'bg-white text-zuna-500 ring-1 ring-zuna-100'));
+      if (live) { const dot = h('span', 'relative flex w-2 h-2'); dot.appendChild(h('span', 'absolute inset-0 rounded-full bg-mint-500 animate-ping opacity-60')); dot.appendChild(h('span', 'relative w-2 h-2 rounded-full bg-mint-500')); pill.appendChild(dot); }
+      pill.appendChild(document.createTextNode(live ? 'Live' : 'Coming soon')); top.appendChild(pill);
+      c.appendChild(top);
+      // stats strip
+      if (live) {
+        const ns = nightsFor(p.property), av = ns.reduce((t, x) => t + x.total, 0), so = ns.reduce((t, x) => t + x.booked, 0);
+        const tn = ns.find((x) => x.night === today), up = bookings.filter((b) => b.property === p.property && b.status === 'Confirmed' && b.check_in > today).length;
+        const g = h('div', 'mx-5 grid grid-cols-3 rounded-xl bg-zuna-50 ring-1 ring-zuna-100 divide-x divide-zuna-100');
+        [[av ? Math.round(so / av * 100) + '%' : '—', 'Occupancy'], [tn ? tn.vacant + ' of ' + tn.total : (p.rooms || '—'), 'Free tonight'], [up, 'Upcoming stays']].forEach(([v, l]) => {
+          const cell = h('div', 'px-3 py-2.5 text-center'); cell.appendChild(h('p', 'text-lg font-bold tabular-nums leading-tight', String(v))); cell.appendChild(h('p', 'text-[11px] font-medium text-zuna-500', l)); g.appendChild(cell); });
+        c.appendChild(g);
+      } else {
+        const g = h('div', 'mx-5 flex items-center gap-2 rounded-xl bg-zuna-50/70 ring-1 ring-dashed ring-zuna-100 px-3 py-2.5 text-xs text-zuna-500');
+        g.appendChild(icon('clock', 'w-4 h-4 text-zuna-400')); g.appendChild(document.createTextNode('Bookings will show here once this guest house goes live.')); c.appendChild(g);
+      }
+      // details
+      const dl = h('dl', 'px-5 pt-4 pb-4 grid grid-cols-[72px_1fr] gap-x-3 gap-y-2.5 text-sm');
+      const row = (k, node) => { dl.appendChild(h('dt', 'text-zuna-500 font-medium text-xs pt-0.5', k)); const dd = h('dd', 'font-medium min-w-0'); dd.appendChild(typeof node === 'string' ? document.createTextNode(node) : node); dl.appendChild(dd); };
+      const addr = h('span', 'flex items-start gap-1.5'); addr.appendChild(icon('map-pin', 'w-3.5 h-3.5 mt-0.5 shrink-0 text-zuna-400')); addr.appendChild(h('span', null, p.address)); row('Address', addr);
+      row('Rooms', p.room_nos || '—');
+      const chips = h('span', 'flex flex-wrap gap-1.5'); String(p.eligible || '—').split(/;\s*/).forEach((e) => chips.appendChild(h('span', 'inline-flex rounded-md px-2 py-0.5 text-xs font-semibold bg-zuna-50 text-zuna-700 ring-1 ring-zuna-100', e))); row('Eligible', chips);
+      c.appendChild(dl);
+      // contacts (toggle)
+      const ct = h('div', 'hidden px-5 pb-4 space-y-2');
+      const who = h('div', 'flex items-center gap-2 text-sm font-semibold'); who.appendChild(icon('user-round', 'w-4 h-4 text-zuna-400')); who.appendChild(document.createTextNode(p.poc_name || 'Contact')); ct.appendChild(who);
+      const line = (ic2, val, href, label) => { const l = h('div', 'flex flex-wrap items-center gap-2 rounded-xl bg-zuna-50 ring-1 ring-zuna-100 px-3 py-2 text-sm'); l.appendChild(icon(ic2, 'w-4 h-4 text-zuna-400')); l.appendChild(h('span', 'flex-1 min-w-0 break-all font-medium', val));
+        const a1 = h('a', 'text-xs font-semibold text-mint-700 hover:underline', label); a1.href = href; l.appendChild(a1); const cp = h('button', 'text-xs font-semibold text-zuna-500 hover:text-zuna-900', 'Copy'); cp.onclick = () => copy(val); l.appendChild(cp); ct.appendChild(l); };
+      (p.poc_phone || '').split(/;\s*/).filter(Boolean).forEach((v) => line('phone', v, 'tel:' + v.replace(/\s/g, ''), 'Call'));
+      (p.poc_email || '').split(/;\s*/).filter(Boolean).forEach((v) => line('mail', v, 'mailto:' + v, 'Email'));
+      c.appendChild(ct);
+      // footer
+      const ft = h('div', 'mt-auto flex items-center gap-2 px-5 py-3 border-t border-zuna-100 bg-zuna-50/40');
+      const cb = h('button', 'btn'); cb.appendChild(icon('phone', 'w-4 h-4')); const cbt = h('span', null, 'Contacts'); cb.appendChild(cbt);
+      cb.onclick = () => { ct.classList.toggle('hidden'); cbt.textContent = ct.classList.contains('hidden') ? 'Contacts' : 'Hide contacts'; }; ft.appendChild(cb);
+      if (live) { const vb = h('button', 'btn-primary ml-auto'); vb.appendChild(document.createTextNode('Open dashboard')); vb.appendChild(icon('arrow-right', 'w-4 h-4')); vb.onclick = () => { state.prop = p.property; $('#propSel').value = p.property; go('overview'); }; ft.appendChild(vb); }
+      c.appendChild(ft);
+      grid.appendChild(c);
+    });
+    sec.appendChild(grid); box.appendChild(sec);
   });
 };
 

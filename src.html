@@ -10,7 +10,8 @@
 <body class="bg-zuna-50/60 text-zuna-900 antialiased font-sans">
 __SPLASH__
 <script>(function(){var s=document.getElementById('splash'),h=document.getElementById('spHi'),n=null,t0=Date.now(),done=false;
-try{n=sessionStorage.getItem('zp.hi');sessionStorage.removeItem('zp.hi')}catch(e){}
+var q=null;try{n=sessionStorage.getItem('zp.hi');sessionStorage.removeItem('zp.hi');q=sessionStorage.getItem('zp.quiet');sessionStorage.removeItem('zp.quiet')}catch(e){}
+if(q){s.remove();return}
 if(n){s.classList.add('sp-cont');h.textContent='Welcome, '+n}else{h.textContent='Welcome back'}
 function hide(){if(done)return;done=true;setTimeout(function(){s.classList.add('sp-hide');setTimeout(function(){s.remove()},600)},Math.max(0,(n?700:250)-(Date.now()-t0)))}
 window.addEventListener('load',function(){setTimeout(hide,150)});setTimeout(hide,10000)})();</script>
@@ -638,6 +639,15 @@ const USER = __USER__;
 
 hydrateIcons();
 const hs = location.hash.slice(1); if (TITLES[hs]) state.view = hs;
+/* auto-refresh: reload data every 10 minutes while the tab is open (quietly, keeps the current page) */
+const LOADED = Date.now();
+setInterval(() => {
+  if (Date.now() - LOADED < 10 * 60000 || document.visibilityState !== 'visible') return;
+  if ($('#drawer').getAttribute('aria-hidden') === 'false' || document.activeElement === $('#bsearch')) return;
+  try { sessionStorage.setItem('zp.quiet', '1'); } catch (e) {}
+  location.reload();
+}, 30000);
+document.addEventListener('visibilitychange', () => { if (document.visibilityState === 'visible' && Date.now() - LOADED > 10 * 60000 && $('#drawer').getAttribute('aria-hidden') !== 'false') { try { sessionStorage.setItem('zp.quiet', '1'); } catch (e) {} location.reload(); } });
 render();
 window.addEventListener('load', () => { if (state.view === 'overview' && hasApex() && !charts.main) render(); });
 

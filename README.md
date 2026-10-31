@@ -40,10 +40,12 @@ Browser ──HTTPS──> app (Cloudflare Worker, or server/server.mjs on Node)
   `worker.js` (plus an identical `worker.mjs`). Only the chart library is loaded from a CDN
   (`cdn.jsdelivr.net/npm/apexcharts@3.54.1`).
 * Dashboard data is read from the `datasets` table on every page load and injected into the page.
-  A separate daily job (run by Zuna at 07:40 IST) refreshes that table from operator confirmations,
+  A separate hourly job (run by Zuna) refreshes that table from operator confirmations,
   vouchers and travel requests. See [Data feed format](#data-feed-format).
 * Every number on the dashboard is computed in the browser from those three datasets; there is no
   other backend.
+* An open dashboard reloads itself every 10 minutes (quietly, keeping the current page) so new data
+  appears without a manual refresh.
 
 ## Repository layout
 

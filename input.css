@@ -29,3 +29,26 @@
   html.sb-c #side .sb-user { flex-direction: column; gap: .5rem; }
   #app { transition: grid-template-columns .3s ease; }
 }
+
+/* ---------- Zuna-branded scrollbars (page, tables, room rack, drawer, sidebar, login) ---------- */
+/* Chrome / Edge / Safari */
+::-webkit-scrollbar { width: 10px; height: 10px; }
+::-webkit-scrollbar-track { background: #f4f2fb; }
+::-webkit-scrollbar-thumb { background: #a99bdc; border-radius: 999px; border: 2px solid #f4f2fb; }
+::-webkit-scrollbar-thumb:hover { background: #02C988; }
+::-webkit-scrollbar-thumb:active { background: #12005A; }
+::-webkit-scrollbar-corner { background: #f4f2fb; }
+/* dark surfaces (sidebar, indigo panels) */
+.bg-zuna-900::-webkit-scrollbar-track, .bg-zuna-900 ::-webkit-scrollbar-track { background: #12005A; }
+.bg-zuna-900::-webkit-scrollbar-thumb, .bg-zuna-900 ::-webkit-scrollbar-thumb { background: rgba(255, 255, 255, .28); border-color: #12005A; }
+.bg-zuna-900::-webkit-scrollbar-thumb:hover, .bg-zuna-900 ::-webkit-scrollbar-thumb:hover { background: #02C988; }
+/* Firefox (scrollbar-color only, so Chrome keeps the rounded styles above) */
+@supports (-moz-appearance: none) {
+  * { scrollbar-width: thin; scrollbar-color: #a99bdc #f4f2fb; }
+  .bg-zuna-900, .bg-zuna-900 * { scrollbar-color: rgba(255, 255, 255, .28) #12005A; }
+}
+
+/* Focus outlines in brand colours (replaces the browser's default black ring, e.g. on scrollable tables / room rack) */
+:focus { outline: none; }
+:focus-visible { outline: 2px solid #02C988; outline-offset: 2px; }
+.overflow-x-auto:focus-visible, .overflow-auto:focus-visible, [tabindex]:focus-visible { outline: 2px solid #02C988; outline-offset: -2px; border-radius: 12px; }

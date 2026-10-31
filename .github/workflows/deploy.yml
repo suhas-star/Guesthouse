@@ -1,0 +1,73 @@
+# Builds, tests and deploys the portal to Cloudflare Workers on every push to main.
+# Opt-in: runs only when the repository variable CF_DEPLOY is "true", so forks and
+# other environments never deploy by accident.
+#
+# Repository secrets:   CLOUDFLARE_API_TOKEN   (token with "Edit Cloudflare Workers" permission)
+#                       CLOUDFLARE_ACCOUNT_ID
+#                       CF_D1_DATABASE_ID       (D1 database bound as DB)
+# Repository variables: CF_DEPLOY = true
+#                       CF_WORKER_NAME (default ltmgh), CF_DOMAIN (default gh.zuna.ai)
+# Worker secrets (RESEND_API_KEY, VOUCHER_TOKEN) and dashboard variables are kept as they are.
+name: Deploy to Cloudflare
+
+on:
+  push:
+    branches: [main]
+  workflow_dispatch:
+
+concurrency:
+  group: cloudflare-deploy
+  cancel-in-progress: false
+
+jobs:
+  deploy:
+    if: ${{ vars.CF_DEPLOY == 'true' }}
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+          cache: npm
+
+      - uses: actions/setup-python@v5
+        with:
+          python-version: '3.12'
+
+      - name: Install
+        run: npm ci --no-audit --no-fund
+
+      - name: Build
+        run: python3 build.py
+
+      - name: Test
+        run: node --disable-warning=ExperimentalWarning test/smoke.mjs
+
+      - name: Write wrangler config
+        env:
+          WORKER: ${{ vars.CF_WORKER_NAME || 'ltmgh' }}
+          DOMAIN: ${{ vars.CF_DOMAIN || 'gh.zuna.ai' }}
+          D1_ID: ${{ secrets.CF_D1_DATABASE_ID }}
+        run: |
+          test -n "$D1_ID" || { echo "::error::Secret CF_D1_DATABASE_ID is missing"; exit 1; }
+          cat > wrangler.toml <<TOML
+          name = "$WORKER"
+          main = "worker.js"
+          compatibility_date = "2026-10-01"
+          keep_vars = true
+          routes = [{ pattern = "$DOMAIN", custom_domain = true }]
+
+          [[d1_databases]]
+          binding = "DB"
+          database_name = "ltmgh"
+          database_id = "$D1_ID"
+          TOML
+          cat wrangler.toml | sed "s/$D1_ID/***/"
+
+      - name: Deploy
+        env:
+          CLOUDFLARE_API_TOKEN: ${{ secrets.CLOUDFLARE_API_TOKEN }}
+          CLOUDFLARE_ACCOUNT_ID: ${{ secrets.CLOUDFLARE_ACCOUNT_ID }}
+        run: npx --yes wrangler@4 deploy

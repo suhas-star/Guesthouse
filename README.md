@@ -93,6 +93,9 @@ Open `preview.html` in a browser to see the dashboard with the sample data (no s
 3. `npm run build`, then either paste `worker.js` into **Workers & Pages → (worker) → Edit code → Deploy**, or copy
    `wrangler.toml.example` to `wrangler.toml`, set the database id and run `npx wrangler deploy`.
 4. Add the custom domain under **Settings → Domains & Routes**.
+   **Automatic deploys:** `.github/workflows/deploy.yml` builds, tests and deploys on every push to `main` once the
+   repository has secrets `CLOUDFLARE_API_TOKEN`, `CLOUDFLARE_ACCOUNT_ID`, `CF_D1_DATABASE_ID` and the variable
+   `CF_DEPLOY=true` (optional `CF_WORKER_NAME`, `CF_DOMAIN`). Worker secrets and dashboard variables are kept.
 5. Optional settings under **Settings → Variables and Secrets**: `RESEND_API_KEY` (secret), `MAIL_FROM`, `PRIMARY_HOST`.
 
 ## Deploy option B: own server (Node.js or Docker)

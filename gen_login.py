@@ -4,7 +4,7 @@ T='\n'.join(L); fa=T.index('  <section class="flex flex-col px-6'); fb=T.index('
 form=T[fa:fb].replace('<section class="flex flex-col px-6','<section class="flex flex-col items-center px-6',1).replace('<p class="a-in text-xs text-zuna-400" style="--d:560ms">','<p class="a-in w-full max-w-sm text-xs text-zuna-400" style="--d:560ms">',1)
 sa=T.index('<script>'); sb=T.index('</script>',sa)+len('</script>')
 script=T[sa:sb]
-script=script.replace("w = $('#wipe');","w = $('#splash');").replace("w.classList.remove('hidden'); w.classList.add('wipe');","w.classList.remove('sp-off'); w.classList.add('wipe');").replace("$('#goTxt').textContent = 'Welcome' + (j.name ? ', ' + j.name.split(' ')[0] : '');","$('#goTxt').textContent = 'Welcome'; const nm = (j.name || '').trim(); try { sessionStorage.setItem('zp.hi', nm || '-'); } catch (e4) {} $('#spHi').textContent = nm ? 'Welcome, ' + nm : 'Welcome';")
+script=script.replace("w = $('#wipe');","w = $('#splash');").replace("w.classList.remove('hidden'); w.classList.add('sp-fadein');","w.classList.remove('sp-off'); w.classList.add('sp-fadein');").replace("$('#goTxt').textContent = 'Welcome' + (j.name ? ', ' + j.name.split(' ')[0] : '');","$('#goTxt').textContent = 'Welcome'; const nm = (j.name || '').trim(); try { sessionStorage.setItem('zp.hi', nm || '-'); } catch (e4) {} $('#spHi').textContent = nm ? 'Welcome, ' + nm : 'Welcome';")
 script=script.replace("const bars = $('#bars');","const bars = $('#bars'); if (bars)").replace("const rack = $('#rack');","const rack = $('#rack'); if (rack)")
 EXTRA='''<style>
 @keyframes tick{0%,22%{transform:translateY(0)}25%,47%{transform:translateY(-25%)}50%,72%{transform:translateY(-50%)}75%,97%{transform:translateY(-75%)}100%{transform:translateY(0)}}

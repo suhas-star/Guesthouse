@@ -17,7 +17,7 @@ __SPLASH__
 var q=null;try{n=sessionStorage.getItem('zp.hi');sessionStorage.removeItem('zp.hi');q=sessionStorage.getItem('zp.quiet');sessionStorage.removeItem('zp.quiet')}catch(e){}
 if(q||!n){s.remove();return}
 s.classList.add('sp-cont');h.textContent=n==='-'?'Welcome':'Welcome, '+n;
-function hide(){if(done)return;done=true;setTimeout(function(){s.classList.add('sp-hide');setTimeout(function(){s.remove()},450)},Math.max(0,(n?500:200)-(Date.now()-t0)))}
+function hide(){if(done)return;done=true;setTimeout(function(){s.classList.add('sp-hide');setTimeout(function(){s.remove()},450)},Math.max(0,(n?300:200)-(Date.now()-t0)))}
 if(document.readyState!=='loading')setTimeout(hide,150);else document.addEventListener('DOMContentLoaded',function(){setTimeout(hide,150)});setTimeout(hide,4000)})();</script>
 <script async src="https://cdn.jsdelivr.net/npm/apexcharts@3.54.1/dist/apexcharts.min.js" onload="window.dispatchEvent(new Event('apexready'))"></script>
 <div id="app" class="min-h-screen lg:grid lg:grid-cols-[256px_minmax(0,1fr)]">

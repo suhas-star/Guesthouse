@@ -220,10 +220,10 @@
       if (!r.ok) { busy(false); showErr(j.error || 'Sign in failed. Please try again.'); pw.select(); return; }
       try { localStorage.setItem('zp.user', em.value.trim()); } catch (e2) {}
       $('#goSpin').classList.add('hidden'); $('#goOk').classList.remove('hidden'); $('#goOk').classList.add('pop'); $('#goTxt').textContent = 'Welcome' + (j.name ? ', ' + j.name.split(' ')[0] : '');
-      const rc = go.getBoundingClientRect(), w = $('#wipe');
-      w.style.setProperty('--x', (rc.left + rc.width / 2) + 'px'); w.style.setProperty('--y', (rc.top + rc.height / 2) + 'px');
-      setTimeout(() => { w.classList.remove('hidden'); w.classList.add('wipe'); }, 220);
-      setTimeout(() => location.replace('/'), 620);
+      const w = $('#wipe');
+      // welcome screen fades in, its logo animation plays, then the dashboard takes over the same screen
+      setTimeout(() => { w.classList.remove('hidden'); w.classList.add('sp-fadein'); }, 160);
+      setTimeout(() => location.replace('/'), 900);
     } catch (e3) { busy(false); showErr('Network problem. Check your connection and try again.'); }
   });
 

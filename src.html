@@ -894,10 +894,17 @@ const openWeekly = (onGo) => {
   const mStart = (m) => m + '-01', mEnd = (m) => { const [y, mo] = m.split('-').map(Number); return iso(new Date(Date.UTC(y, mo, 0))); };
   const prevMonth = (() => { const d = D(today); return iso(new Date(Date.UTC(d.getUTCFullYear(), d.getUTCMonth() - 1, 1))).slice(0, 7); })();
   const f = h('div', 'space-y-4'); const p = P();
-  f.appendChild(h('p', 'text-sm text-zuna-600', 'Night-by-night occupancy with bed and room occupancy and the guest list. One guest house downloads as an Excel file; all guest houses download as a zip folder with one Excel file each.'));
-  const gw = h('label', 'block'); gw.appendChild(h('span', 'block text-xs font-semibold text-zuna-500 mb-1', 'Guest house'));
-  const gs = h('select', 'w-full rounded-xl bg-white ring-1 ring-zuna-100 px-3 py-2.5 text-sm'); [['*', 'All guest houses (zip)']].concat(props.filter((x) => +x.rooms > 0).map((x) => [x.property, x.property + (x.city ? ', ' + x.city : '')])).forEach(([v, t]) => { const o = h('option', null, t); o.value = v; gs.appendChild(o); });
-  gs.value = p.property; gw.appendChild(gs); f.appendChild(gw);
+  f.appendChild(h('p', 'text-sm text-zuna-600', 'Night-by-night occupancy with bed and room occupancy and the guest list. One guest house downloads as an Excel file; several download as a zip folder with one Excel file each.'));
+  // guest houses: tick one or several (one -> Excel, several -> zip)
+  const ghs = props.filter((x) => +x.rooms > 0), picked = new Set([p.property]);
+  const gw = h('div'); const gh = h('div', 'flex items-center gap-3 mb-1'); gh.appendChild(h('span', 'text-xs font-semibold text-zuna-500', 'Guest houses'));
+  const all = h('button', 'ml-auto text-xs font-semibold text-mint-700 hover:underline', 'Select all'), none = h('button', 'text-xs font-semibold text-zuna-500 hover:underline', 'Clear'); all.type = none.type = 'button'; gh.append(all, none); gw.appendChild(gh);
+  const list = h('div', 'rounded-xl ring-1 ring-zuna-100 bg-white divide-y divide-zuna-50 max-h-72 overflow-y-auto'); list.setAttribute('role', 'group'); list.setAttribute('aria-label', 'Guest houses'); gw.appendChild(list); f.appendChild(gw);
+  const boxes = ghs.map((x) => { const row = h('label', 'flex items-center gap-3 px-3 py-2.5 cursor-pointer hover:bg-zuna-50/60'); const cb = h('input', 'peer sr-only'); cb.type = 'checkbox'; cb.value = x.property; cb.checked = picked.has(x.property);
+    const tick = h('span', 'grid place-items-center w-5 h-5 shrink-0 rounded-md ring-1 ring-zuna-200 bg-white text-transparent peer-checked:bg-mint-500 peer-checked:ring-mint-500 peer-checked:text-zuna-900 peer-focus-visible:ring-2 peer-focus-visible:ring-mint-500 transition-colors'); tick.appendChild(icon('check', 'w-3.5 h-3.5'));
+    const tx = h('span', 'min-w-0 flex-1'); tx.appendChild(h('span', 'block text-sm font-semibold truncate', x.property)); tx.appendChild(h('span', 'block text-xs text-zuna-500', (x.city || '') + (x.status === 'Live' ? '' : (x.city ? ' · ' : '') + 'coming soon')));
+    row.append(cb, tick, tx); list.appendChild(row); cb.addEventListener('change', () => { cb.checked ? picked.add(x.property) : picked.delete(x.property); syncGo(); }); return cb; });
+  all.onclick = () => { boxes.forEach((b) => { b.checked = true; picked.add(b.value); }); syncGo(); }; none.onclick = () => { boxes.forEach((b) => { b.checked = false; }); picked.clear(); syncGo(); };
   // report type
   const tw = h('div'); tw.appendChild(h('span', 'block text-xs font-semibold text-zuna-500 mb-1', 'Report'));
   const seg = h('div', 'grid grid-cols-4 gap-1 rounded-xl bg-zuna-50 p-1 ring-1 ring-zuna-100'); seg.setAttribute('role', 'tablist'); tw.appendChild(seg); f.appendChild(tw);
@@ -924,13 +931,15 @@ const openWeekly = (onGo) => {
   Object.keys(LBL).forEach((m) => { const b = h('button', '', LBL[m]); b.type = 'button'; b.dataset.m = m; b.setAttribute('role', 'tab'); b.onclick = () => pick(m); seg.appendChild(b); });
   f.appendChild(summary);
   const err = h('p', 'hidden text-xs font-semibold text-rose-600'); f.appendChild(err);
-  const go = h('button', 'btn-primary w-full justify-center !py-2.5 !text-sm'); go.appendChild(icon('download', 'w-4 h-4')); const goT = document.createTextNode('Download Excel'); go.appendChild(goT); gs.addEventListener('change', () => { goT.textContent = gs.value === '*' ? 'Download zip folder' : 'Download Excel'; });
+  const go = h('button', 'btn-primary w-full justify-center !py-2.5 !text-sm'); go.appendChild(icon('download', 'w-4 h-4')); const goT = document.createTextNode('Download Excel'); go.appendChild(goT);
+  function syncGo() { const n = picked.size; goT.textContent = n > 1 ? 'Download zip folder (' + n + ' guest houses)' : 'Download Excel'; all.textContent = n === ghs.length ? 'All selected' : 'Select all'; }
   go.onclick = () => { const [a, b] = range();
     if (!a || !b || b < a) { err.textContent = !a || !b ? 'Choose the dates.' : 'The last night must be on or after the first night.'; err.classList.remove('hidden'); return; }
     if (nightsBetween(a, b) > 91) { err.textContent = 'Choose up to 92 nights.'; err.classList.remove('hidden'); return; }
-    err.classList.add('hidden'); onGo(a, b, gs.value, LBL[mode]); };
+    if (!picked.size) { err.textContent = 'Tick at least one guest house.'; err.classList.remove('hidden'); return; }
+    err.classList.add('hidden'); onGo(a, b, ghs.map((x) => x.property).filter((n) => picked.has(n)), LBL[mode]); };
   f.appendChild(go); const w = h('div', 'p-5'); w.appendChild(f);
-  openDrawer(ghReportName(), 'Daily, weekly, monthly or any dates', w); pick(mode);
+  openDrawer(ghReportName(), 'Daily, weekly, monthly or any dates', w); pick(mode); syncGo();
 };
 $$('[data-ghname]').forEach((e) => { e.textContent = ghReportName(); });
 window.__ltm = {openWeekly, props, ghReportName, P, myB, nightsAll, period, stateOf, fDay, fShort, fLong, toast, today, rangeBounds, inRange: (b) => { const [a, z] = rangeBounds(); return state.range === 'all' || (b.check_in <= z && b.check_out > a); }, rangeText: () => rangeLabel(), rackGrid, cleanName, client: DATA.client || null, addDays, monday};

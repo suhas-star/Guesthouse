@@ -330,8 +330,9 @@
   L.weeklyReport = weeklyReport;
   // one guest house -> Excel; all guest houses -> zip folder of the individual Excel files
   const ghReport = async (from, to, which, kind) => {
-    if (which !== '*') return weeklyReport(from, to, L.props.find((x) => x.property === which) || L.P());
-    const files = []; for (const p of L.props.filter((x) => +x.rooms > 0)) { const r = weeklyReport(from, to, p); files.push({name: r.filename, data: new Uint8Array(await r.data.arrayBuffer())}); }
+    const sel = Array.isArray(which) ? which : which === '*' ? L.props.filter((x) => +x.rooms > 0).map((x) => x.property) : [which];
+    if (sel.length === 1) return weeklyReport(from, to, L.props.find((x) => x.property === sel[0]) || L.P());
+    const files = []; for (const p of L.props.filter((x) => sel.includes(x.property))) { const r = weeklyReport(from, to, p); files.push({name: r.filename, data: new Uint8Array(await r.data.arrayBuffer())}); }
     const name = (L.ghReportName() + (kind && kind !== 'Custom dates' ? ' - ' + kind : '') + ' - ' + (from === to ? DMY(from) : DMY(from) + ' to ' + DMY(to))).replace(/\//g, '_').replace(/[^A-Za-z0-9_-]+/g, '_').replace(/_+/g, '_');
     return {filename: name + '.zip', data: zip(files)};
   };

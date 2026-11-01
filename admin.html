@@ -1,6 +1,7 @@
 <!doctype html>
 <html lang="en">
 <head>
+<script>try{if(localStorage.getItem('zp.theme')==='dark')document.documentElement.classList.add('dark')}catch(e){}</script>
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width,initial-scale=1">
 <meta name="robots" content="noindex,nofollow">
@@ -16,13 +17,16 @@ input:checked+.sw{background:#02C988}input:checked+.sw::after{transform:translat
 .lbl{display:block;font-size:.75rem;font-weight:600;color:#5d5887;margin-bottom:.25rem}
 .chip{display:inline-flex;align-items:center;gap:.25rem;border-radius:.5rem;padding:.2rem .55rem;font-size:.75rem;font-weight:600;cursor:pointer;user-select:none;box-shadow:inset 0 0 0 1px #e6e2f6;background:#fff;color:#5d5887}
 .chip[data-on]{background:#12005A;color:#fff;box-shadow:none}
+.sw-mini{position:relative;width:30px;height:18px;border-radius:999px;background:#cdc5ec;transition:background .2s;flex-shrink:0}.sw-mini::after{content:"";position:absolute;top:2px;left:2px;width:14px;height:14px;border-radius:999px;background:#fff;transition:transform .2s}
+[aria-checked=true] .sw-mini{background:#02C988}[aria-checked=true] .sw-mini::after{transform:translateX(12px)}
+html.dark .sw{background:#3a2c8a}html.dark #acctMenu{background:#150c45;color:#eeeaff;--tw-ring-color:#2a2066}html.dark #acctMenu .border-b{border-color:#2a2066}html.dark .inp{box-shadow:inset 0 0 0 1px #2a2066;color:#eeeaff}html.dark .chip{color:#c9c0f2;box-shadow:inset 0 0 0 1px #2a2066}html.dark .dz{border-color:#3a2c8a}html.dark .dz.dz-over{background-color:rgba(2,201,136,.14)!important}
 </style>
 </head>
 <body class="bg-zuna-50/60 text-zuna-900 antialiased font-sans min-h-screen">
 <a href="#detail" class="sr-only focus:not-sr-only focus:fixed focus:top-3 focus:left-3 focus:z-[100] btn-primary">Skip to main content</a>
 <header class="sticky top-0 z-30 bg-zuna-900 text-white border-t-4 border-mint-500">
   <div class="max-w-7xl mx-auto px-4 sm:px-6 h-14 flex items-center gap-3">
-    <a id="hdLogo" href="/" title="Go to dashboard" class="bg-white rounded-lg px-2 py-1 inline-flex transition hover:ring-2 hover:ring-mint-500 focus-visible:ring-2 focus-visible:ring-mint-500"><img src="__ZUNA__" alt="Zuna · go to dashboard" class="h-5"></a>
+    <a id="hdLogo" href="/" title="Go to dashboard" class="logo-box bg-white rounded-lg px-2 py-1 inline-flex transition hover:ring-2 hover:ring-mint-500 focus-visible:ring-2 focus-visible:ring-mint-500"><img src="__ZUNA__" alt="Zuna · go to dashboard" class="h-5"></a>
     <span class="hidden sm:block w-px h-6 bg-white/15"></span>
     <div class="leading-tight"><p id="hdTitle" class="font-bold text-[15px]">Admin console</p><p id="hdSub" class="hidden sm:block text-[11px] text-zuna-200">Guest House Management</p></div>
     <div class="ml-auto flex items-center gap-2 text-sm">
@@ -41,6 +45,7 @@ input:checked+.sw{background:#02C988}input:checked+.sw::after{transform:translat
             <span class="mt-1.5 inline-flex rounded-full px-2 py-0.5 text-[10px] font-bold uppercase tracking-wide bg-mint-50 text-mint-700 ring-1 ring-mint-200" id="meRole">Administrator</span>
           </div>
           <a role="menuitem" href="/" class="flex items-center gap-2.5 rounded-xl px-3 py-2 text-sm font-medium hover:bg-zuna-50"><svg class="w-4 h-4 text-zuna-400" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><rect x="3" y="3" width="7" height="9" rx="1.5"/><rect x="14" y="3" width="7" height="5" rx="1.5"/><rect x="14" y="12" width="7" height="9" rx="1.5"/><rect x="3" y="16" width="7" height="5" rx="1.5"/></svg>Open dashboard</a>
+          <button type="button" role="menuitemcheckbox" id="themeItem" aria-checked="false" class="w-full flex items-center gap-2.5 rounded-xl px-3 py-2 text-sm font-medium hover:bg-zuna-50"><svg class="w-4 h-4 text-zuna-400" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M12 3a6 6 0 0 0 9 9 9 9 0 1 1-9-9Z"/></svg><span class="flex-1 text-left">Dark mode</span><span class="sw-mini"></span></button>
           <a role="menuitem" href="/logout" class="flex items-center gap-2.5 rounded-xl px-3 py-2 text-sm font-medium text-rose-600 hover:bg-rose-50"><svg class="w-4 h-4" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M9 21H5a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h4"/><path d="m16 17 5-5-5-5"/><path d="M21 12H9"/></svg>Log out</a>
         </div>
       </div>
@@ -92,7 +97,9 @@ if (CLIENT_MODE) { tab = 'users'; document.title = 'Users & access · Guest Hous
   $('#meAv').textContent = nm.split(/\s+/).map((w) => w[0]).join('').slice(0, 2).toUpperCase();
   const btn = $('#acct'), menu = $('#acctMenu'), set = (o) => { menu.classList.toggle('hidden', !o); btn.setAttribute('aria-expanded', o ? 'true' : 'false'); };
   btn.onclick = (e) => { e.stopPropagation(); set(menu.classList.contains('hidden')); };
-  document.addEventListener('click', (e) => { if (!menu.contains(e.target)) set(false); }); document.addEventListener('keydown', (e) => { if (e.key === 'Escape') set(false); }); }
+  document.addEventListener('click', (e) => { if (!menu.contains(e.target)) set(false); });
+  const ti = $('#themeItem'), tsync = () => ti.setAttribute('aria-checked', ZUI.theme.get() === 'dark' ? 'true' : 'false');
+  ti.onclick = (e) => { e.stopPropagation(); ZUI.theme.set(ZUI.theme.get() === 'dark' ? 'light' : 'dark'); tsync(); }; tsync(); document.addEventListener('keydown', (e) => { if (e.key === 'Escape') set(false); }); }
 const toast = (m, bad) => { const t = $('#toast'); t.textContent = m; t.style.background = bad ? '#be123c' : '#12005A'; t.classList.remove('opacity-0', 'translate-y-3'); clearTimeout(toast.t); toast.t = setTimeout(() => t.classList.add('opacity-0', 'translate-y-3'), 2600); };
 // signed out elsewhere or session timed out: say so and offer to sign in again
 const sessionExpired = () => { if (sessionExpired.open) return; sessionExpired.open = true;
@@ -188,8 +195,8 @@ const render = () => {
       if (c.logo && !a.dataset.client) { a.dataset.client = '1'; const im = a.querySelector('img'); im.src = c.logo; im.alt = c.name + ' · go to dashboard'; im.className = 'h-6 max-w-[120px] object-contain'; } } }
   const L = $('#clients') || h('div'); L.replaceChildren();
   if (!S.clients.length) L.appendChild(h('p', 'text-sm text-zuna-500', 'No clients yet.'));
-  S.clients.forEach((c) => { const b = h('button', 'w-full card p-3 flex items-center gap-3 text-left transition-all hover:shadow-md ' + (c.id === cur ? '!ring-2 !ring-mint-500' : ''));
-    const lg = h('span', 'w-12 h-9 rounded-lg bg-white ring-1 ring-zuna-100 grid place-items-center overflow-hidden shrink-0'); if (c.logo) { const i = h('img', 'max-h-6 max-w-10 object-contain'); i.src = c.logo; lg.appendChild(i); } else lg.appendChild(h('span', 'text-xs font-bold text-zuna-400', c.name.slice(0, 3).toUpperCase()));
+  S.clients.forEach((c) => { const b = h('button', 'w-full card press p-3 flex items-center gap-3 text-left hover:shadow-md ' + (c.id === cur ? '!ring-2 !ring-mint-500' : ''));
+    const lg = h('span', 'logo-box w-12 h-9 rounded-lg bg-white ring-1 ring-zuna-100 grid place-items-center overflow-hidden shrink-0'); if (c.logo) { const i = h('img', 'max-h-6 max-w-10 object-contain'); i.src = c.logo; lg.appendChild(i); } else lg.appendChild(h('span', 'text-xs font-bold text-zuna-400', c.name.slice(0, 3).toUpperCase()));
     const m = h('div', 'min-w-0'); m.appendChild(h('p', 'font-semibold text-sm truncate', c.name)); m.appendChild(h('p', 'text-xs text-zuna-500', c.guesthouses.length + ' guest houses · ' + c.users.length + ' users' + (c.active ? '' : ' · inactive')));
     b.append(lg, m); b.onclick = () => { cur = c.id; render(); }; L.appendChild(b); });
   const D = $('#detail'); D.replaceChildren(); const c = C();
@@ -211,10 +218,10 @@ const renderGH = (D, c) => {
     due.forEach(({g, d}) => { const r = h('button', 'w-full flex flex-wrap items-center gap-2 rounded-lg px-2 py-1.5 text-left text-sm hover:bg-white'); r.appendChild(h('span', 'font-semibold', d.title)); r.appendChild(h('span', 'text-zuna-500', '· ' + g.property)); const ch = docChip(d); ch.classList.add('ml-auto'); r.appendChild(ch); r.onclick = () => editGH(c, g); w.appendChild(r); });
     D.appendChild(w); }
   const g = h('div', 'grid gap-3 md:grid-cols-2');
-  c.guesthouses.forEach((x) => { const card = h('div', 'card lift p-4 flex gap-3');
+  c.guesthouses.forEach((x) => { const card = h('div', 'card lift press p-4 flex gap-3');
     const th = h('div', 'w-20 h-20 rounded-xl bg-zuna-50 ring-1 ring-zuna-100 overflow-hidden shrink-0 grid place-items-center text-zuna-300 text-xs'); const i = h('img', 'w-full h-full object-cover'); i.src = x.photos && x.photos[0] ? x.photos[0].url : ZUI.art.gh; i.alt = ''; th.appendChild(i);
     const m = h('div', 'min-w-0 flex-1'); const t = h('div', 'flex items-start gap-2'); t.appendChild(h('p', 'font-bold leading-tight', x.property));
-    t.appendChild(h('span', 'ml-auto shrink-0 rounded-full px-2 py-0.5 text-[11px] font-bold ' + (x.status === 'Live' ? 'bg-mint-50 text-mint-700 ring-1 ring-mint-200' : 'bg-zuna-50 text-zuna-500 ring-1 ring-zuna-100'), x.status)); m.appendChild(t);
+    t.appendChild(h('span', 'ml-auto shrink-0 rounded-full px-2 py-0.5 text-[11px] font-bold ' + (x.status === 'Live' ? 'bg-mint-50 text-mint-700 ring-1 ring-mint-200 shine' : 'bg-zuna-50 text-zuna-500 ring-1 ring-zuna-100'), x.status)); m.appendChild(t);
     m.appendChild(h('p', 'text-xs text-zuna-500 mt-0.5', [x.city, x.rooms + ' rooms', (x.room_types || []).length + ' room types'].filter(Boolean).join(' · ')));
     m.appendChild(h('p', 'text-xs text-zuna-500 truncate', 'Eligible: ' + (x.eligible || '—')));
     const hidden = Object.entries(x.show || {}).filter(([, v]) => !v).map(([k]) => k); m.appendChild(h('p', 'text-[11px] mt-1 ' + (hidden.length ? 'text-amber-700' : 'text-mint-700'), hidden.length ? 'Hidden from client: ' + hidden.join(', ') : 'All details visible to client'));
@@ -501,23 +508,22 @@ const renderUsers = (D, c) => {
     go.onclick = async () => { go.disabled = true; try { const r = await api('user', {client_id: c.id, name: n.value, email: e.value, role: rl.value}); if (!r.created) throw new Error('That email already has an account.'); out.replaceChildren(pwBox(e.value.trim().toLowerCase(), r.password)); go.remove(); load(true); } catch (er) { toast(er.message, true); go.disabled = false; } };
     f.append(go, out); modal('Add user · ' + c.name, f); }; bar.appendChild(add); D.appendChild(bar);
   const B = 'btn !py-1 !px-2 text-xs w-full justify-center whitespace-nowrap';
-  const actions = (u) => { const me = u.email === ME.email; const grid = h('div', 'grid grid-cols-[136px_158px_92px] gap-1.5');
-    const rs = ib('button', B, 'Reset password', 'key-round'); rs.setAttribute('aria-label', 'Reset password for ' + u.name); rs.onclick = async () => { if (!(await ZUI.confirm({title: 'Reset password?', message: ['A new password is created for ' + u.name + ' (' + u.email + ').', 'The old password stops working and they are signed out.'], ok: 'Reset password', tone: 'warn'}))) return; try { const r = await api('user/reset', {email: u.email}); modal('New password', pwBox(u.email, r.password)); } catch (er) { toast(er.message, true); } };
+  const actions = (u) => { const me = u.email === ME.email; const grid = h('div', 'grid grid-cols-[84px_112px_84px] gap-1.5');
+    const rs = ib('button', B, 'Reset', 'key-round'); rs.title = 'Reset password'; rs.setAttribute('aria-label', 'Reset password for ' + u.name); rs.onclick = async () => { if (!(await ZUI.confirm({title: 'Reset password?', message: ['A new password is created for ' + u.name + ' (' + u.email + ').', 'The old password stops working and they are signed out.'], ok: 'Reset password', tone: 'warn'}))) return; try { const r = await api('user/reset', {email: u.email}); modal('New password', pwBox(u.email, r.password)); } catch (er) { toast(er.message, true); } };
     grid.appendChild(rs);
     if (me) { grid.append(h('span'), h('span')); return grid; }
     const to = u.role === 'client_admin' ? 'client' : 'client_admin';
-    const rb = ib('button', B, to === 'client_admin' ? 'Make client admin' : 'Make viewer', to === 'client_admin' ? 'shield-check' : 'eye'); rb.setAttribute('aria-label', (to === 'client_admin' ? 'Make client admin: ' : 'Make viewer: ') + u.name);
+    const rb = ib('button', B, to === 'client_admin' ? 'Make admin' : 'Make viewer', to === 'client_admin' ? 'shield-check' : 'eye'); rb.setAttribute('aria-label', (to === 'client_admin' ? 'Make client admin: ' : 'Make viewer: ') + u.name); rb.title = to === 'client_admin' ? 'Make client admin' : 'Make viewer';
     rb.onclick = async () => { if (!(await ZUI.confirm(to === 'client_admin' ? {title: 'Make ' + u.name + ' a client admin?', message: 'They can add users, reset passwords and disable users for ' + c.name + '.', ok: 'Make client admin'} : {title: 'Change ' + u.name + ' to Viewer?', message: 'They keep access to the dashboard but can no longer manage users.', ok: 'Make viewer'}))) return;
       try { await api('user', {email: u.email, name: u.name, active: !!u.active, role: to}); toast('Role updated'); load(true); } catch (er) { toast(er.message, true); } };
-    const tg = ib('button', B + ' ' + (u.active ? 'text-rose-600' : 'text-mint-700'), u.active ? 'Disable' : 'Enable', u.active ? 'ban' : 'circle-check'); tg.setAttribute('aria-label', (u.active ? 'Disable ' : 'Enable ') + u.name);
+    const tg = ib('button', B + ' ' + (u.active ? 'text-rose-600' : 'text-mint-700'), u.active ? 'Disable' : 'Enable', u.active ? 'ban' : 'circle-check'); tg.setAttribute('aria-label', (u.active ? 'Disable ' : 'Enable ') + u.name); tg.title = (u.active ? 'Disable ' : 'Enable ') + u.name;
     tg.onclick = async () => { if (u.active && !(await ZUI.confirm({title: 'Disable ' + u.name + '?', message: 'They are signed out and can no longer log in. You can enable them again at any time.', ok: 'Disable user', tone: 'danger', icon: 'M4.9 4.9l14.2 14.2M12 22a10 10 0 1 0 0-20 10 10 0 0 0 0 20z'}))) return; try { await api('user', {email: u.email, name: u.name, active: !u.active}); toast(u.active ? 'User disabled' : 'User enabled'); load(true); } catch (er) { toast(er.message, true); } };
     grid.append(rb, tg); return grid; };
   const cols = [
     {k: 'user', label: 'User', sort: (u) => (u.name || '').toLowerCase(), render: (u) => { const row = h('div', 'flex items-center gap-3'); row.appendChild(h('span', 'grid place-items-center w-8 h-8 rounded-full text-[11px] font-bold shrink-0 ' + (u.role === 'client_admin' ? 'bg-zuna-900 text-mint-400' : 'bg-zuna-50 text-zuna-600 ring-1 ring-zuna-100'), (u.name || u.email).split(/\s+/).map((w) => w[0]).join('').slice(0, 2).toUpperCase()));
       const tx = h('div', 'min-w-0'); const n1 = h('p', 'font-semibold'); n1.textContent = u.name; if (u.email === ME.email) n1.appendChild(h('span', 'ml-1.5 text-[11px] font-semibold text-zuna-500', '(you)')); tx.append(n1, h('p', 'text-xs text-zuna-500', u.email)); row.appendChild(tx); return row; }},
     {k: 'role', label: 'Role', sort: (u) => u.role, render: (u) => h('span', 'rounded-full px-2 py-0.5 text-[11px] font-bold whitespace-nowrap ' + (u.role === 'client_admin' ? 'bg-zuna-900 text-white' : 'bg-zuna-50 text-zuna-600 ring-1 ring-zuna-100'), ROLE[u.role] || 'Viewer')},
-    {k: 'last', label: 'Last login', td: 'text-zuna-500 whitespace-nowrap', sort: (u) => u.last_login || '', render: (u) => document.createTextNode(u.last_login ? new Date(u.last_login).toLocaleString('en-IN', {dateStyle: 'medium', timeStyle: 'short'}) : 'Never')},
-    {k: 'status', label: 'Status', sort: (u) => u.active ? 0 : 1, render: (u) => h('span', 'rounded-full px-2 py-0.5 text-[11px] font-bold ' + (u.active ? 'bg-mint-50 text-mint-700 ring-1 ring-mint-200' : 'bg-zuna-50 text-zuna-500 ring-1 ring-zuna-100'), u.active ? 'Active' : 'Disabled')},
+    {k: 'status', label: 'Status', sort: (u) => (u.active ? '0' : '1') + (u.last_login || ''), render: (u) => [h('span', 'rounded-full px-2 py-0.5 text-[11px] font-bold ' + (u.active ? 'bg-mint-50 text-mint-700 ring-1 ring-mint-200' : 'bg-zuna-50 text-zuna-500 ring-1 ring-zuna-100'), u.active ? 'Active' : 'Disabled'), h('p', 'text-[11px] text-zuna-500 mt-1 whitespace-nowrap', 'Last login: ' + (u.last_login ? new Date(u.last_login).toLocaleString('en-IN', {day: 'numeric', month: 'short', hour: 'numeric', minute: '2-digit'}) : 'never'))]},
     {k: 'act', label: '', actions: true, render: actions}];
   UF.st = UF.st || {sort: {k: 'user', dir: 1}, page: 1};
   D.appendChild(dataTable({cols, rows: c.users, st: UF.st, noun: 'users', empty: 'No users yet.'}));
@@ -525,7 +531,7 @@ const renderUsers = (D, c) => {
 
 const renderSettings = (D, c) => {
   const card = h('div', 'card p-6 space-y-5 max-w-2xl');
-  const lg = h('div', 'flex items-center gap-4'); const pv = h('div', 'w-36 h-16 rounded-xl bg-white ring-1 ring-zuna-100 grid place-items-center overflow-hidden'); if (c.logo) { const i = h('img', 'max-h-12 max-w-32 object-contain'); i.src = c.logo; pv.appendChild(i); } else pv.appendChild(h('span', 'text-xs text-zuna-400', 'No logo'));
+  const lg = h('div', 'flex items-center gap-4'); const pv = h('div', 'logo-box w-36 h-16 rounded-xl bg-white ring-1 ring-zuna-100 grid place-items-center overflow-hidden'); if (c.logo) { const i = h('img', 'max-h-12 max-w-32 object-contain'); i.src = c.logo; pv.appendChild(i); } else pv.appendChild(h('span', 'text-xs text-zuna-400', 'No logo'));
   const up = ib('label', 'btn cursor-pointer focus-within:ring-mint-500', c.logo ? 'Replace logo' : 'Upload logo', 'upload'); const fi = h('input', 'sr-only'); fi.type = 'file'; fi.accept = 'image/png,image/jpeg,image/webp'; fi.setAttribute('aria-label', 'Client logo'); up.appendChild(fi);
   const prog = h('div', 'w-56');
   const send = async (F) => { if (!F || !/^image\//.test(F.type)) { toast('Use a PNG, JPG or WEBP image.', true); return; } const r = progressRow(F.name); prog.replaceChildren(r.el);

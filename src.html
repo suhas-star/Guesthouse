@@ -1,6 +1,9 @@
 <!doctype html>
 <html lang="en">
 <head>
+<script>try{if(localStorage.getItem('zp.theme')==='dark')document.documentElement.classList.add('dark')}catch(e){}
+/* sidebar starts closed (icons only) before the first paint; opening it lasts for this visit only */
+try{if(sessionStorage.getItem('ltmgh.sb')!=='open')document.documentElement.classList.add('sb-c')}catch(e){document.documentElement.classList.add('sb-c')}</script>
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width,initial-scale=1">
 <meta name="robots" content="noindex,nofollow">
@@ -22,9 +25,9 @@ window.addEventListener('load',function(){setTimeout(hide,150)});setTimeout(hide
   <!-- Sidebar -->
   <aside id="side" class="fixed inset-y-0 left-0 z-50 w-64 -translate-x-full lg:translate-x-0 lg:sticky lg:top-0 lg:h-screen transition-[transform,width] duration-300 bg-zuna-900 text-white flex flex-col border-t-4 border-mint-500">
     <div class="px-5 pt-5 flex items-center gap-2 sb-full">
-      <span class="bg-white rounded-lg px-2.5 py-1.5 inline-flex items-center"><img data-logo alt="LTM" src="__LTM__" class="h-[18px] w-auto"></span>
+      <span class="logo-box bg-white rounded-lg px-2.5 py-1.5 inline-flex items-center"><img data-logo alt="LTM" src="__LTM__" class="h-[18px] w-auto"></span>
     </div>
-    <div class="sb-mini hidden pt-5 justify-center"><span class="w-11 h-9 rounded-lg bg-white grid place-items-center px-1.5"><img alt="LTM" src="__LTM__" class="w-full h-auto max-h-[14px] object-contain"></span></div>
+    <div class="sb-mini hidden pt-5 justify-center"><span class="logo-box w-11 h-9 rounded-lg bg-white grid place-items-center px-1.5"><img alt="LTM" src="__LTM__" class="w-full h-auto max-h-[14px] object-contain"></span></div>
     <div class="px-5 mt-5 flex items-start gap-2 sb-full">
       <div class="min-w-0 flex-1">
         <p class="text-base font-semibold leading-tight">Guest Houses</p>
@@ -44,6 +47,7 @@ window.addEventListener('load',function(){setTimeout(hide,150)});setTimeout(hide
     <div class="mt-auto border-t border-white/10 p-3 flex items-center gap-3 sb-user">
       <span id="userAv" class="w-9 h-9 shrink-0 rounded-full bg-mint-500 text-zuna-900 grid place-items-center text-xs font-bold">—</span>
       <div class="min-w-0 flex-1 sb-label"><p id="userName" class="text-sm font-semibold truncate">—</p><p id="userMail" class="text-xs text-zuna-300 truncate">—</p></div>
+      <button type="button" id="themeBtn" title="Dark mode" aria-label="Switch to dark mode" aria-pressed="false" class="grid place-items-center w-9 h-9 shrink-0 rounded-lg text-zuna-200 hover:text-white hover:bg-white/10 transition-colors"><i data-i="moon" class="w-[18px] h-[18px]"></i></button>
       <a href="/logout" id="logoutBtn" title="Log out" aria-label="Log out" class="grid place-items-center w-9 h-9 shrink-0 rounded-lg text-zuna-200 hover:text-white hover:bg-white/10 transition-colors"><i data-i="log-out" class="w-[18px] h-[18px]"></i></a>
     </div>
   </aside>
@@ -329,6 +333,7 @@ const int = (v) => Math.round(v).toLocaleString('en-IN');
 const charts = {};
 const killChart = (k) => { if (charts[k]) { try { charts[k].destroy(); } catch (e) {} delete charts[k]; } };
 const hasApex = () => typeof window.ApexCharts === 'function';
+const DK = () => document.documentElement.classList.contains('dark');
 const noChart = (el) => { el.replaceChildren(h('p', 'p-8 text-center text-sm text-zuna-400', 'Chart unavailable — check your internet connection.')); };
 const sparkline = (el, data, color) => {
   if (!hasApex()) return;
@@ -359,7 +364,7 @@ const renderOverview = () => {
   A.classList.toggle('hidden', !cl.length);
   const T = $('#today'); T.replaceChildren();
   const tcell = (ic, tint, lbl, val, sub, onClick) => {
-    const c = h('button', 'card text-left p-3.5 flex items-center gap-3 hover:-translate-y-0.5 hover:shadow-md transition-all');
+    const c = h('button', 'card press text-left p-3.5 flex items-center gap-3 hover:-translate-y-0.5 hover:shadow-md');
     const i = h('span', 'hidden xl:grid place-items-center w-10 h-10 rounded-xl shrink-0 ' + tint); i.appendChild(icon(ic, 'w-5 h-5')); c.appendChild(i);
     const m = h('div', 'min-w-0'); m.appendChild(h('p', 'text-xs font-semibold text-zuna-500 truncate', lbl)); const v = h('p', 'text-xl font-bold leading-tight tabular-nums'); v.textContent = val; m.appendChild(v); m.appendChild(h('p', 'text-xs text-zuna-400 truncate', sub)); c.appendChild(m);
     if (onClick) c.onclick = onClick; else c.disabled = true;
@@ -377,7 +382,7 @@ const renderOverview = () => {
   const nConf = inR.filter((x) => x.status === 'Confirmed').length, nDec = inR.filter((x) => x.status !== 'Confirmed').length;
   const K = $('#kpis'); K.replaceChildren(); ['k1','k2','k3','k4'].forEach(killChart);
   const kpi = (id, lbl, val, fmt, sub, ic, spark, color, onClick, hero) => {
-    const c = h('div', 'card p-4 flex flex-col gap-1 overflow-hidden transition-all hover:-translate-y-0.5 hover:shadow-md ' + (hero ? 'bg-gradient-to-br from-zuna-900 to-zuna-700 text-white ring-0' : ''));
+    const c = h('div', 'card press p-4 flex flex-col gap-1 overflow-hidden hover:-translate-y-0.5 hover:shadow-md ' + (hero ? 'bg-gradient-to-br from-zuna-900 to-zuna-700 text-white ring-0' : ''));
     const top = h('div', 'flex items-center justify-between gap-2'); top.appendChild(h('p', 'text-xs font-semibold truncate ' + (hero ? 'text-zuna-200' : 'text-zuna-500'), lbl));
     const i = h('span', 'grid place-items-center w-7 h-7 rounded-lg shrink-0 ' + (hero ? 'bg-mint-500 text-zuna-900' : 'bg-zuna-50 text-zuna-600')); i.appendChild(icon(ic, 'w-4 h-4')); top.appendChild(i); c.appendChild(top);
     const v = h('p', 'text-2xl font-bold tracking-tight tabular-nums', fmt(0)); c.appendChild(v); countUp(v, val, fmt);
@@ -432,13 +437,13 @@ const drawMain = (rn) => {
     colors: [MINT, LILAC],
     plotOptions: {bar: {columnWidth: many ? '78%' : '58%', borderRadius: 4, borderRadiusApplication: 'end', borderRadiusWhenStacked: 'last'}},
     dataLabels: {enabled: false}, legend: {show: false},
-    grid: {borderColor: '#efedf8', strokeDashArray: 4, padding: {left: 4, right: 4}},
+    grid: {borderColor: DK() ? '#2a2066' : '#efedf8', strokeDashArray: 4, padding: {left: 4, right: 4}},
     xaxis: {categories: rn.map((x) => x.night), tickAmount: Math.min(rn.length, many ? 12 : 31),
-      labels: {rotate: 0, hideOverlappingLabels: true, style: {colors: '#5d5887', fontSize: '12px'}, formatter: (v) => { if (!v) return ''; const d = D(v); return d.getUTCDate() + (d.getUTCDate() === 1 || v === rn[0].night ? ' ' + MON[d.getUTCMonth()] : ''); }},
+      labels: {rotate: 0, hideOverlappingLabels: true, style: {colors: (DK() ? '#b3aadf' : '#5d5888'), fontSize: '12px'}, formatter: (v) => { if (!v) return ''; const d = D(v); return d.getUTCDate() + (d.getUTCDate() === 1 || v === rn[0].night ? ' ' + MON[d.getUTCMonth()] : ''); }},
       axisBorder: {show: false}, axisTicks: {show: false}},
-    yaxis: {max: rooms, tickAmount: rooms, labels: {style: {colors: '#5d5887', fontSize: '12px'}, formatter: (v) => Math.round(v)}},
+    yaxis: {max: rooms, tickAmount: rooms, labels: {style: {colors: (DK() ? '#b3aadf' : '#5d5888'), fontSize: '12px'}, formatter: (v) => Math.round(v)}},
     states: {hover: {filter: {type: 'darken', value: .9}}, active: {filter: {type: 'none'}}},
-    tooltip: {shared: true, intersect: false, custom: ({dataPointIndex: i}) => { const n = rn[i]; return '<div style="padding:10px 12px;font-size:12px;min-width:170px"><b style="color:#12005A">' + fDay(n.night) + '</b><div style="display:flex;justify-content:space-between;margin-top:6px;color:#5d5887">Occupied<b style="color:#12005A">' + n.booked + ' / ' + n.total + '</b></div><div style="display:flex;justify-content:space-between;color:#5d5887">Occupancy<b style="color:#12005A">' + pct(n.occ) + '</b></div>' + (n.guests.length ? '<div style="margin-top:6px;color:#12005A">' + n.guests.map((g) => cleanName(g.guest).replace(/</g, '&lt;')).join('<br>') + '</div>' : '') + (n.declined.length ? '<div style="margin-top:4px;color:#d97706">Declined: ' + n.declined.length + '</div>' : '') + '</div>'; }},
+    tooltip: {shared: true, intersect: false, custom: ({dataPointIndex: i}) => { const n = rn[i]; return '<div style="padding:10px 12px;font-size:12px;min-width:170px"><b>' + fDay(n.night) + '</b><div style="display:flex;justify-content:space-between;margin-top:6px;color:#5d5887">Occupied<b>' + n.booked + ' / ' + n.total + '</b></div><div style="display:flex;justify-content:space-between;color:#5d5887">Occupancy<b>' + pct(n.occ) + '</b></div>' + (n.guests.length ? '<div style="margin-top:6px;color:#12005A">' + n.guests.map((g) => cleanName(g.guest).replace(/</g, '&lt;')).join('<br>') + '</div>' : '') + (n.declined.length ? '<div style="margin-top:4px;color:#d97706">Declined: ' + n.declined.length + '</div>' : '') + '</div>'; }},
     annotations: {xaxis: rn.some((x) => x.night === today) ? [{x: today, borderColor: INDIGO, strokeDashArray: 3, label: {text: 'Today', borderColor: INDIGO, style: {background: INDIGO, color: '#fff', fontSize: '11px'}}}] : []}
   });
   charts.main.render();
@@ -449,10 +454,10 @@ const drawDonut = (sold, vac) => {
   if (!hasApex()) return noChart(el);
   charts.donut = new ApexCharts(el, {
     chart: {type: 'donut', height: 250, fontFamily: 'inherit', animations: {enabled: true, speed: 600}},
-    series: [sold, vac], labels: ['Occupied', 'Vacant'], colors: [MINT, LILAC], stroke: {width: 3, colors: ['#fff']},
-    dataLabels: {enabled: false}, legend: {position: 'bottom', fontSize: '12px', labels: {colors: '#5d5887'}, markers: {size: 6}},
-    plotOptions: {pie: {donut: {size: '72%', labels: {show: true, name: {offsetY: 18, color: '#5d5887', fontSize: '12px'}, value: {offsetY: -14, fontSize: '26px', fontWeight: 700, color: INDIGO, formatter: (v) => v},
-      total: {show: true, label: 'Occupancy', color: '#5d5887', fontSize: '12px', formatter: () => (sold + vac ? pct(sold / (sold + vac)) : '0.0%')}}}}},
+    series: [sold, vac], labels: ['Occupied', 'Vacant'], colors: [MINT, LILAC], stroke: {width: 3, colors: [DK() ? '#150c45' : '#fff']},
+    dataLabels: {enabled: false}, legend: {position: 'bottom', fontSize: '12px', labels: {colors: (DK() ? '#b3aadf' : '#5d5888')}, markers: {size: 6}},
+    plotOptions: {pie: {donut: {size: '72%', labels: {show: true, name: {offsetY: 18, color: (DK() ? '#b3aadf' : '#5d5888'), fontSize: '12px'}, value: {offsetY: -14, fontSize: '26px', fontWeight: 700, color: DK() ? '#eeeaff' : INDIGO, formatter: (v) => v},
+      total: {show: true, label: 'Occupancy', color: (DK() ? '#b3aadf' : '#5d5888'), fontSize: '12px', formatter: () => (sold + vac ? pct(sold / (sold + vac)) : '0.0%')}}}}},
     tooltip: {y: {formatter: (v) => v + ' room-nights'}}
   });
   charts.donut.render();
@@ -516,7 +521,7 @@ const renderCal = () => {
     cls += full ? 'bg-mint-500 text-zuna-900 ring-1 ring-mint-500' : part ? 'bg-mint-50 ring-1 ring-mint-200' : 'bg-white ring-1 ring-zuna-100';
     if (s < today) cls += ' opacity-60';
     if (s === today) cls += ' !ring-2 !ring-zuna-900';
-    const b = h('button', cls); b.type = 'button';
+    const b = h('button', cls + ' press'); b.type = 'button';
     b.appendChild(h('span', 'text-xs font-bold ' + (full ? 'text-zuna-900' : 'text-zuna-400'), String(d)));
     const mid = h('span', 'flex items-baseline gap-1'); mid.appendChild(h('span', 'text-2xl font-bold leading-none tabular-nums', String(n.vacant))); mid.appendChild(h('span', 'text-[11px] ' + (full ? 'text-zuna-800' : 'text-zuna-500') + ' hidden sm:inline', 'free')); b.appendChild(mid);
     const dots = h('span', 'flex gap-0.5'); for (let i = 0; i < n.total && i < 10; i++) dots.appendChild(h('i', 'w-1.5 h-1.5 rounded-full ' + (i < n.booked ? (full ? 'bg-zuna-900' : 'bg-mint-500') : (full ? 'bg-white/50' : 'bg-zuna-100')))); b.appendChild(dots);
@@ -589,14 +594,14 @@ const renderHouses = () => {
     const grid = h('div', 'grid grid-cols-1 md:grid-cols-2 2xl:grid-cols-3 gap-4');
     list.forEach((p) => {
       const live = p.status === 'Live';
-      const c = h('div', 'card overflow-hidden flex flex-col transition-all hover:-translate-y-0.5 hover:shadow-lg ' + (live ? 'ring-2 ring-mint-500/60' : ''));
+      const c = h('div', 'card press overflow-hidden flex flex-col hover:-translate-y-0.5 hover:shadow-lg ' + (live ? 'ring-2 ring-mint-500/60' : ''));
       // header
       const top = h('div', 'p-5 pb-4 flex items-start gap-3');
       const ic = h('span', 'grid place-items-center w-10 h-10 rounded-xl shrink-0 ' + (live ? 'bg-zuna-900 text-mint-400' : 'bg-zuna-50 text-zuna-400')); ic.appendChild(icon('building-2', 'w-5 h-5')); top.appendChild(ic);
       const m = h('div', 'min-w-0 flex-1'); m.appendChild(h('p', 'text-base font-bold leading-tight', p.property));
       const meta = h('p', 'mt-1 flex flex-wrap items-center gap-x-2 gap-y-0.5 text-xs text-zuna-500'); meta.appendChild(icon('bed', 'w-3.5 h-3.5'));
       meta.appendChild(document.createTextNode([p.rooms + ' rooms', p.operator].filter(Boolean).join(' · '))); m.appendChild(meta); top.appendChild(m);
-      const pill = h('span', 'shrink-0 inline-flex items-center gap-1.5 rounded-full px-2.5 py-1 text-xs font-bold ' + (live ? 'bg-mint-50 text-mint-700 ring-1 ring-mint-200' : 'bg-white text-zuna-500 ring-1 ring-zuna-100'));
+      const pill = h('span', 'shrink-0 inline-flex items-center gap-1.5 rounded-full px-2.5 py-1 text-xs font-bold ' + (live ? 'bg-mint-50 text-mint-700 ring-1 ring-mint-200 shine' : 'bg-white text-zuna-500 ring-1 ring-zuna-100'));
       if (live) { const dot = h('span', 'relative flex w-2 h-2'); dot.appendChild(h('span', 'absolute inset-0 rounded-full bg-mint-500 animate-ping opacity-60')); dot.appendChild(h('span', 'relative w-2 h-2 rounded-full bg-mint-500')); pill.appendChild(dot); }
       pill.appendChild(document.createTextNode(live ? 'Live' : 'Coming soon')); top.appendChild(pill);
       c.appendChild(top);
@@ -692,28 +697,27 @@ const renderUsersView = () => {
   const t = h('div'); t.appendChild(h('h2', 'card-t', 'Users & access')); t.appendChild(h('p', 'card-s', 'Viewers can see the dashboard. Client admins can also add users, reset passwords and change access.')); hd.appendChild(t);
   const add = h('button', 'btn-primary ml-auto'); add.appendChild(icon('user-plus', 'w-4 h-4')); add.appendChild(document.createTextNode('Add user')); add.onclick = () => openDrawer('Add user', DATA.client ? DATA.client.name : '', userForm()); hd.appendChild(add); card.appendChild(hd);
   const sc = h('div', 'overflow-x-auto'); const tb = h('table', 'w-full text-sm'); const th = h('thead'); const hr = h('tr', 'text-left text-xs font-semibold text-zuna-500 bg-zuna-50/70');
-  ['User', 'Role', 'Last login', 'Status', ''].forEach((x) => { const c = h('th', 'px-5 py-2.5 whitespace-nowrap', x); c.scope = 'col'; if (!x) c.appendChild(h('span', 'sr-only', 'Actions')); hr.appendChild(c); }); th.appendChild(hr); tb.appendChild(th);
+  ['User', 'Role', 'Status', ''].forEach((x) => { const c = h('th', 'px-4 py-2.5 whitespace-nowrap', x); c.scope = 'col'; if (!x) c.appendChild(h('span', 'sr-only', 'Actions')); hr.appendChild(c); }); th.appendChild(hr); tb.appendChild(th);
   const body = h('tbody', 'divide-y divide-zuna-50'); const B = 'btn !py-1 !px-2 text-xs w-full justify-center whitespace-nowrap';
   const ab = (txt, ic, cls) => { const b = h('button', B + ' ' + (cls || '')); b.type = 'button'; b.appendChild(icon(ic, 'w-3.5 h-3.5 shrink-0')); b.appendChild(document.createTextNode(txt)); return b; };
   us.forEach((u) => { const me = u.email === USER.email, tr = h('tr', 'align-middle hover:bg-zuna-50/50 transition-colors');
-    const c1 = h('td', 'px-5 py-3'); const row = h('div', 'flex items-center gap-3'); row.appendChild(h('span', 'grid place-items-center w-8 h-8 rounded-full text-[11px] font-bold shrink-0 ' + (u.role === 'client_admin' ? 'bg-zuna-900 text-mint-400' : 'bg-zuna-50 text-zuna-600 ring-1 ring-zuna-100'), (u.name || u.email).split(/\s+/).map((w) => w[0]).join('').slice(0, 2).toUpperCase()));
+    const c1 = h('td', 'px-4 py-3'); const row = h('div', 'flex items-center gap-3'); row.appendChild(h('span', 'grid place-items-center w-8 h-8 rounded-full text-[11px] font-bold shrink-0 ' + (u.role === 'client_admin' ? 'bg-zuna-900 text-mint-400' : 'bg-zuna-50 text-zuna-600 ring-1 ring-zuna-100'), (u.name || u.email).split(/\s+/).map((w) => w[0]).join('').slice(0, 2).toUpperCase()));
     const tx = h('div', 'min-w-0'); const n1 = h('p', 'font-semibold', u.name); if (me) n1.appendChild(h('span', 'ml-1.5 text-[11px] font-semibold text-zuna-500', '(you)')); tx.append(n1, h('p', 'text-xs text-zuna-500', u.email)); row.appendChild(tx); c1.appendChild(row); tr.appendChild(c1);
-    const c2 = h('td', 'px-5 py-3'); c2.appendChild(h('span', 'rounded-full px-2 py-0.5 text-[11px] font-bold whitespace-nowrap ' + (u.role === 'client_admin' ? 'bg-zuna-900 text-white' : 'bg-zuna-50 text-zuna-600 ring-1 ring-zuna-100'), ROLE_NAME[u.role] || 'Viewer')); tr.appendChild(c2);
-    tr.appendChild(h('td', 'px-5 py-3 text-zuna-500 whitespace-nowrap', u.last_login ? new Date(u.last_login).toLocaleString('en-IN', {dateStyle: 'medium', timeStyle: 'short'}) : 'Never'));
-    const c4 = h('td', 'px-5 py-3'); c4.appendChild(h('span', 'rounded-full px-2 py-0.5 text-[11px] font-bold ' + (u.active ? 'bg-mint-50 text-mint-700 ring-1 ring-mint-200' : 'bg-zuna-50 text-zuna-500 ring-1 ring-zuna-100'), u.active ? 'Active' : 'Disabled')); tr.appendChild(c4);
-    const c5 = h('td', 'px-5 py-3'); const g = h('div', 'grid grid-cols-[136px_158px_92px] gap-1.5 justify-end ml-auto w-max'); c5.appendChild(g);
-    const rs = ab('Reset password', 'key-round'); rs.onclick = async () => { if (!(await ZUI.confirm({title: 'Reset password?', message: ['A new password is created for ' + u.name + ' (' + u.email + ').', 'The old password stops working and they are signed out.'], ok: 'Reset password', tone: 'warn'}))) return;
+    const c2 = h('td', 'px-4 py-3'); c2.appendChild(h('span', 'rounded-full px-2 py-0.5 text-[11px] font-bold whitespace-nowrap ' + (u.role === 'client_admin' ? 'bg-zuna-900 text-white' : 'bg-zuna-50 text-zuna-600 ring-1 ring-zuna-100'), ROLE_NAME[u.role] || 'Viewer')); tr.appendChild(c2);
+    const c4 = h('td', 'px-4 py-3'); c4.appendChild(h('span', 'rounded-full px-2 py-0.5 text-[11px] font-bold ' + (u.active ? 'bg-mint-50 text-mint-700 ring-1 ring-mint-200' : 'bg-zuna-50 text-zuna-500 ring-1 ring-zuna-100'), u.active ? 'Active' : 'Disabled')); c4.appendChild(h('p', 'text-[11px] text-zuna-500 mt-1 whitespace-nowrap', 'Last login: ' + (u.last_login ? new Date(u.last_login).toLocaleString('en-IN', {day: 'numeric', month: 'short', hour: 'numeric', minute: '2-digit'}) : 'never'))); tr.appendChild(c4);
+    const c5 = h('td', 'px-4 py-3'); const g = h('div', 'grid grid-cols-[84px_112px_84px] gap-1.5 justify-end ml-auto w-max'); c5.appendChild(g);
+    const rs = ab('Reset', 'key-round'); rs.title = 'Reset password'; rs.setAttribute('aria-label', 'Reset password for ' + u.name); rs.onclick = async () => { if (!(await ZUI.confirm({title: 'Reset password?', message: ['A new password is created for ' + u.name + ' (' + u.email + ').', 'The old password stops working and they are signed out.'], ok: 'Reset password', tone: 'warn'}))) return;
       try { const r = await mApi('user/reset', {email: u.email}); const w = h('div', 'p-5'); w.appendChild(pwCard(u.email, r.password)); openDrawer('New password', u.name, w); } catch (er) { toast(er.message); } };
     g.appendChild(rs);
     if (me) g.append(h('span'), h('span'));
     else { const to = u.role === 'client_admin' ? 'client' : 'client_admin';
-      const rb = ab(to === 'client_admin' ? 'Make client admin' : 'Make viewer', to === 'client_admin' ? 'shield-check' : 'eye'); rb.onclick = async () => { if (!(await ZUI.confirm(to === 'client_admin' ? {title: 'Make ' + u.name + ' a client admin?', message: 'They can add users, reset passwords and disable users.', ok: 'Make client admin'} : {title: 'Change ' + u.name + ' to Viewer?', message: 'They keep access to the dashboard but can no longer manage users.', ok: 'Make viewer'}))) return;
+      const rb = ab(to === 'client_admin' ? 'Make admin' : 'Make viewer', to === 'client_admin' ? 'shield-check' : 'eye'); rb.title = to === 'client_admin' ? 'Make client admin' : 'Make viewer'; rb.setAttribute('aria-label', rb.title + ': ' + u.name); rb.onclick = async () => { if (!(await ZUI.confirm(to === 'client_admin' ? {title: 'Make ' + u.name + ' a client admin?', message: 'They can add users, reset passwords and disable users.', ok: 'Make client admin'} : {title: 'Change ' + u.name + ' to Viewer?', message: 'They keep access to the dashboard but can no longer manage users.', ok: 'Make viewer'}))) return;
         try { await mApi('user', {email: u.email, name: u.name, active: !!u.active, role: to}); toast('Role updated'); reloadUsers(); } catch (er) { toast(er.message); } };
-      const tg = ab(u.active ? 'Disable' : 'Enable', u.active ? 'ban' : 'circle-check', u.active ? 'text-rose-600' : 'text-mint-700'); tg.onclick = async () => { if (u.active && !(await ZUI.confirm({title: 'Disable ' + u.name + '?', message: 'They are signed out and can no longer log in. You can enable them again at any time.', ok: 'Disable user', tone: 'danger', icon: 'M4.9 4.9l14.2 14.2M12 22a10 10 0 1 0 0-20 10 10 0 0 0 0 20z'}))) return;
+      const tg = ab(u.active ? 'Disable' : 'Enable', u.active ? 'ban' : 'circle-check', u.active ? 'text-rose-600' : 'text-mint-700'); tg.title = (u.active ? 'Disable ' : 'Enable ') + u.name; tg.setAttribute('aria-label', tg.title); tg.onclick = async () => { if (u.active && !(await ZUI.confirm({title: 'Disable ' + u.name + '?', message: 'They are signed out and can no longer log in. You can enable them again at any time.', ok: 'Disable user', tone: 'danger', icon: 'M4.9 4.9l14.2 14.2M12 22a10 10 0 1 0 0-20 10 10 0 0 0 0 20z'}))) return;
         try { await mApi('user', {email: u.email, name: u.name, active: !u.active}); toast(u.active ? 'User disabled' : 'User enabled'); reloadUsers(); } catch (er) { toast(er.message); } };
       g.append(rb, tg); }
     tr.appendChild(c5); body.appendChild(tr); });
-  if (!us.length) { const tr = h('tr'); const td = h('td', 'px-5 py-10 text-center text-zuna-500', 'No users yet.'); td.colSpan = 5; tr.appendChild(td); body.appendChild(tr); }
+  if (!us.length) { const tr = h('tr'); const td = h('td', 'px-5 py-10 text-center text-zuna-500', 'No users yet.'); td.colSpan = 4; tr.appendChild(td); body.appendChild(tr); }
   tb.appendChild(body); sc.appendChild(tb); card.appendChild(sc); box.appendChild(card);
 };
 
@@ -745,7 +749,7 @@ const USER = __USER__;
 ZUI.auto(document.body); ZUI.clickables(document.body);
 (() => {   // client branding + Zuna admin tools
   const cl = DATA.client;
-  if (cl) { $$('#side img[alt="LTM"]').forEach((im) => { im.alt = cl.name; if (cl.logo) im.src = cl.logo; else { const t = h('span', 'text-sm font-black text-zuna-900 px-1', cl.name); im.replaceWith(t); } }); }
+  if (cl) { $$('#side img[alt="LTM"]').forEach((im) => { im.alt = cl.name; if (cl.logo) im.src = cl.logo; else { const mini = !!im.closest('.sb-mini'); const t = h('span', (mini ? 'text-[11px]' : 'text-sm') + ' font-black text-zuna-900 px-1 whitespace-nowrap', mini ? cl.name.split(/\s+/).map((w) => w[0]).join('').slice(0, 3).toUpperCase() : cl.name); t.title = cl.name; im.replaceWith(t); } }); }
   if (USER.manager && !USER.admin) { const nav = $('#nav'); const b = h('button', 'navbtn'); b.dataset.view = 'users'; b.title = 'Users & access'; b.appendChild(icon('users', 'w-[18px] h-[18px] shrink-0')); b.appendChild(h('span', 'sb-label', 'Users & access')); b.onclick = () => go('users'); nav.appendChild(b); }
   if (USER.admin) {
     const nav = $('#nav'); const a = h('a', 'navbtn'); a.href = '/admin'; a.appendChild(icon('shield-check', 'w-[18px] h-[18px] shrink-0')); a.appendChild(h('span', 'sb-label', 'Admin panel')); nav.appendChild(a);
@@ -758,15 +762,16 @@ ZUI.auto(document.body); ZUI.clickables(document.body);
   const nm = USER.name || USER.email || 'User';
   $('#userName').textContent = nm; $('#userMail').textContent = USER.email && USER.email.includes('@') ? USER.email : 'Signed in';
   $('#userAv').textContent = nm.split(/\s+/).map((w) => w[0]).slice(0, 2).join('').toUpperCase();
-  let col = false; try { col = localStorage.getItem('ltmgh.sb') === '1'; } catch (e) {}
-  const setCol = (v) => { document.documentElement.classList.toggle('sb-c', v); try { localStorage.setItem('ltmgh.sb', v ? '1' : '0'); } catch (e) {} setTimeout(() => window.dispatchEvent(new Event('resize')), 320); };
-  setCol(col);
+  try { localStorage.removeItem('ltmgh.sb'); } catch (e) {}   // old 'remember open' setting
+  const setCol = (v) => { document.documentElement.classList.toggle('sb-c', v); try { sessionStorage.setItem('ltmgh.sb', v ? 'closed' : 'open'); } catch (e) {} setTimeout(() => window.dispatchEvent(new Event('resize')), 320); };
   $('#sbClose').onclick = () => setCol(true); $('#sbOpen').onclick = () => setCol(false);
   $('#sbCloseM').onclick = () => closeSide();
   $('#logoutBtn').addEventListener('click', (e) => { e.preventDefault(); document.body.classList.add('opacity-0', 'transition-opacity', 'duration-300'); setTimeout(() => { location.href = '/logout'; }, 280); });
 })();
 
 hydrateIcons();
+{ const tb = $('#themeBtn'); const sync = () => { const dk = ZUI.theme.get() === 'dark'; tb.replaceChildren(icon(dk ? 'sun' : 'moon', 'w-[18px] h-[18px]')); tb.title = dk ? 'Light mode' : 'Dark mode'; tb.setAttribute('aria-label', dk ? 'Switch to light mode' : 'Switch to dark mode'); tb.setAttribute('aria-pressed', dk ? 'true' : 'false'); };
+  tb.onclick = () => { ZUI.theme.set(ZUI.theme.get() === 'dark' ? 'light' : 'dark'); sync(); render(); toast(ZUI.theme.get() === 'dark' ? 'Dark mode on' : 'Light mode on'); }; sync(); }
 const hs = location.hash.slice(1); if (TITLES[hs] && (hs !== 'users' || (USER.manager && !USER.admin))) state.view = hs;
 /* auto-refresh: reload data every 10 minutes while the tab is open (quietly, keeps the current page) */
 const LOADED = Date.now();

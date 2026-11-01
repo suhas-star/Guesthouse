@@ -31,6 +31,11 @@ const ZUI = (() => {
 .zd-cwrap{position:relative}.zd-cwrap>input{padding-right:2.25rem}
 .zd-cwrap>.zd-chev{position:absolute;right:.75rem;top:50%;margin-top:-8px;cursor:pointer}
 @media (prefers-reduced-motion:reduce){.zd-panel{animation:none}}
+html.dark .zd-panel{background:#150c45;box-shadow:0 0 0 1px #2a2066,0 18px 40px -12px rgba(0,0,0,.6)}
+html.dark .zd-opt{color:#eeeaff}html.dark .zd-opt[data-act]{background:#241866}html.dark .zd-sub,html.dark .zd-group,html.dark .zd-empty{color:#b3aadf}html.dark .zd-ph{color:#8f86c4}html.dark .zd-hl{color:#4fd9aa}
+html.dark .zc-card{background:#150c45;color:#eeeaff;box-shadow:0 30px 70px -20px rgba(0,0,0,.7),0 0 0 1px #2a2066}html.dark .zc-m{color:#b3aadf}html.dark .zc-foot{background:#110a3a;border-color:#2a2066}
+html.dark .zc-cancel{background:#150c45;color:#eeeaff;box-shadow:inset 0 0 0 1px #2a2066}html.dark .zc-cancel:hover{background:#241866}html.dark .zc-ok.primary,html.dark .zc-ok.warn{background:#2d1a9e}
+html.dark .zc-list{background:rgba(245,158,11,.13);color:#fcd34d;box-shadow:inset 0 0 0 1px rgba(245,158,11,.35)}
 .zc-ov{position:fixed;inset:0;z-index:2000;display:grid;place-items:center;padding:16px;background:rgba(18,0,90,.42);backdrop-filter:blur(3px);animation:zcFade .15s ease-out}
 .zc-card{width:100%;max-width:440px;background:#fff;border-radius:20px;box-shadow:0 30px 70px -20px rgba(18,0,90,.5),0 0 0 1px rgba(18,0,90,.06);overflow:hidden;animation:zcPop .18s cubic-bezier(.2,.8,.2,1);font-family:inherit;color:#12005A}
 .zc-body{display:flex;gap:16px;padding:24px 24px 20px}
@@ -207,5 +212,8 @@ const ZUI = (() => {
   function clickables(root) { scan(root); new MutationObserver((ms) => ms.forEach((m) => m.addedNodes.forEach(scan))).observe(root, {childList: true, subtree: true}); }
   // busy pointer while something is saving / loading
   let busyN = 0; const busy = async (p) => { busyN++; document.documentElement.classList.add('z-busy'); try { return await p; } finally { if (--busyN <= 0) { busyN = 0; document.documentElement.classList.remove('z-busy'); } } };
-  return {show, close, key, isOpen, select, auto, noFill, chevron, art, confirm, clickables, busy};
+  // optional dark theme, remembered per browser
+  const theme = {get: () => document.documentElement.classList.contains('dark') ? 'dark' : 'light',
+    set: (t) => { document.documentElement.classList.toggle('dark', t === 'dark'); try { localStorage.setItem('zp.theme', t); } catch (e) {} document.dispatchEvent(new CustomEvent('zthemechange', {detail: t})); } };
+  return {show, close, key, isOpen, select, auto, noFill, chevron, art, confirm, clickables, busy, theme};
 })();

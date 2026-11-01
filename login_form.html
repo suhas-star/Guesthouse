@@ -80,12 +80,12 @@
         <button type="button" id="forgot" class="font-semibold text-mint-700 hover:text-zuna-900">Forgot password?</button>
       </div>
 
-      <button id="go" type="submit" class="a-in btn-sheen mt-6 w-full h-12 rounded-xl bg-zuna-900 text-white font-semibold text-sm shadow-lg shadow-zuna-900/25 hover:bg-zuna-800 active:scale-[.98] transition-all flex items-center justify-center gap-2 disabled:cursor-wait" style="--d:440ms">
+      <div class="a-in mt-6" style="--d:440ms"><button id="go" type="submit" class="shine pop3d w-full h-12 rounded-xl bg-zuna-900 text-white font-semibold text-sm hover:bg-zuna-800 flex items-center justify-center gap-2 disabled:cursor-wait">
         <span id="goTxt">Sign in</span>
         <svg id="goArrow" class="w-4 h-4 transition-transform" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round"><path d="M5 12h14M13 6l6 6-6 6"/></svg>
         <svg id="goSpin" class="hidden w-5 h-5 spin" viewBox="0 0 24 24" fill="none"><circle cx="12" cy="12" r="9" stroke="currentColor" stroke-opacity=".25" stroke-width="3"/><path d="M21 12a9 9 0 0 0-9-9" stroke="#02C988" stroke-width="3" stroke-linecap="round"/></svg>
         <svg id="goOk" class="hidden w-5 h-5" viewBox="0 0 24 24" fill="none" stroke="#02C988" stroke-width="3" stroke-linecap="round" stroke-linejoin="round"><path d="M20 6 9 17l-5-5"/></svg>
-      </button>
+      </button></div>
 
       <p class="a-in mt-6 flex items-center justify-center gap-1.5 text-xs text-zuna-400" style="--d:500ms"><svg class="w-3.5 h-3.5 text-mint-500" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M12 22s8-4 8-10V5l-8-3-8 3v7c0 6 8 10 8 10Z"/><path d="m9 12 2 2 4-4"/></svg>Encrypted session · Your data stays confidential</p>
     </form>
@@ -103,7 +103,7 @@
           <span class="absolute left-4 top-2 text-xs font-semibold text-zuna-500">Email address</span>
           <input id="fpEmail" type="email" name="username" autocomplete="username" class="w-full bg-transparent px-4 pt-6 pb-2.5 text-sm font-medium focus:outline-none" placeholder="name@company.com">
         </label>
-        <button id="fpSend" type="submit" class="btn-sheen w-full h-12 rounded-xl bg-zuna-900 text-white font-semibold text-sm shadow-lg shadow-zuna-900/25 hover:bg-zuna-800 active:scale-[.98] transition-all disabled:cursor-wait disabled:opacity-80">Send code</button>
+        <button id="fpSend" type="submit" class="pop3d w-full h-12 rounded-xl bg-zuna-900 text-white font-semibold text-sm hover:bg-zuna-800 disabled:cursor-wait disabled:opacity-80">Send code</button>
       </div>
 
       <div id="fpStep2" class="hidden mt-6 space-y-4">
@@ -126,7 +126,7 @@
           <li data-rule="mix" class="flex items-center gap-1.5"><i class="w-1.5 h-1.5 rounded-full bg-zuna-200"></i>Letters and numbers</li>
           <li data-rule="same" class="flex items-center gap-1.5"><i class="w-1.5 h-1.5 rounded-full bg-zuna-200"></i>Passwords match</li>
         </ul>
-        <button id="fpSet" type="submit" class="btn-sheen w-full h-12 rounded-xl bg-zuna-900 text-white font-semibold text-sm shadow-lg shadow-zuna-900/25 hover:bg-zuna-800 active:scale-[.98] transition-all disabled:cursor-wait disabled:opacity-80">Set new password</button>
+        <button id="fpSet" type="submit" class="pop3d w-full h-12 rounded-xl bg-zuna-900 text-white font-semibold text-sm hover:bg-zuna-800 disabled:cursor-wait disabled:opacity-80">Set new password</button>
         <p class="text-center text-xs text-zuna-500">Didn't get it? Check spam, or <button type="button" id="fpResend" class="font-semibold text-mint-600 hover:text-mint-700 disabled:text-zuna-400 disabled:cursor-default">send a new code</button></p>
       </div>
 

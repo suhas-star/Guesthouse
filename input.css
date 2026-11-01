@@ -12,7 +12,7 @@
   .card-t { @apply text-sm font-bold; }
   .card-s { @apply text-xs text-zuna-500; }
   .btn { @apply inline-flex items-center gap-1.5 rounded-xl bg-white px-3 py-2 text-xs font-semibold text-zuna-800 ring-1 ring-zuna-100 shadow-sm hover:ring-mint-500 hover:text-mint-700 active:scale-95 transition-all; }
-  .btn-primary { @apply inline-flex items-center gap-1.5 rounded-xl bg-zuna-900 px-3 py-2 text-xs font-semibold text-white shadow-sm hover:bg-zuna-700 active:scale-95 transition-all; }
+  .btn-primary { @apply inline-flex items-center gap-1.5 rounded-xl bg-zuna-900 px-3 py-2 text-xs font-semibold text-white hover:bg-zuna-800; }
   .iconbtn { @apply grid place-items-center w-9 h-9 rounded-xl bg-white ring-1 ring-zuna-100 hover:ring-mint-500 disabled:opacity-40 disabled:pointer-events-none transition-all; }
   .th { @apply px-3 py-3 first:pl-5 last:pr-5 font-bold cursor-pointer select-none whitespace-nowrap hover:text-zuna-900; }
   .th::after { content: attr(data-sort); @apply ml-1 text-mint-700; }
@@ -83,3 +83,72 @@ input, textarea, [contenteditable] { caret-color: #02C988; }
 button:disabled, input:disabled, select:disabled, textarea:disabled, [aria-disabled="true"], .zd-btn:disabled { cursor: not-allowed; }
 .btn:disabled, .btn-primary:disabled { opacity: .6; }
 html.z-busy, html.z-busy * { cursor: progress !important; }
+
+/* ---------- Pop buttons (main actions): raised indigo block with a green edge that presses down ---------- */
+.btn-primary, .pop3d {
+  box-shadow: 1px 1px 0 #0a8f63, 2px 2px 0 #0a8f63, 3px 3px 0 #02C988, 4px 4px 0 #02C988;
+  transition: transform .09s ease, box-shadow .09s ease, background-color .15s ease;
+}
+.btn-primary:hover, .pop3d:hover { transform: translate(-1px, -1px); box-shadow: 1px 1px 0 #0a8f63, 2px 2px 0 #0a8f63, 3px 3px 0 #02C988, 4px 4px 0 #02C988, 5px 5px 0 #02C988; }
+.btn-primary:active, .pop3d:active { transform: translate(4px, 4px); box-shadow: 0 0 0 #02C988; }
+.btn-primary:disabled, .pop3d:disabled { transform: translate(4px, 4px); box-shadow: 0 0 0 #02C988; opacity: .7; }
+
+/* ---------- Shimmer: Sign in and Live badges only ---------- */
+.shine { position: relative; overflow: hidden; isolation: isolate; }
+.shine::after { content: ""; position: absolute; top: -20%; bottom: -20%; left: -60%; width: 45%; transform: skewX(-20deg); background: linear-gradient(90deg, transparent, rgba(255,255,255,.5), transparent); animation: zSheen 3.6s ease-in-out infinite; pointer-events: none; z-index: 1; }
+@keyframes zSheen { 0%, 60% { left: -60%; } 90%, 100% { left: 130%; } }
+
+/* ---------- Press feedback on cards and rows ---------- */
+.press { transition: transform .12s ease, box-shadow .15s ease; }
+.press:active { transform: translateY(1px) scale(.985) !important; box-shadow: 0 0 0 1px #02C988, 0 2px 6px -4px rgba(18,0,90,.5) !important; }
+tr.z-click:active > td, td.z-click:active { filter: brightness(.94); }
+li.z-click:active { background-color: #e6faf3; }
+
+/* ---------- Premium dark mode (optional; html.dark, chosen in the account menu) ---------- */
+html.dark { color-scheme: dark; }
+html.dark body { background-color: #0b0630 !important; color: #eeeaff; }
+html.dark .bg-white, html.dark .card, html.dark .btn, html.dark .inp, html.dark .chip, html.dark .iconbtn { background-color: #150c45; }
+html.dark .bg-white\/80, html.dark .bg-white\/90 { background-color: rgba(21,12,69,.86); }
+html.dark .bg-white\/50 { background-color: rgba(21,12,69,.5); }
+html.dark .bg-zuna-50, html.dark .bg-zuna-50\/70, html.dark .bg-zuna-50\/60, html.dark .bg-zuna-50\/40, html.dark .bg-zuna-100 { background-color: #1c1252; }
+html.dark .hover\:bg-zuna-50:hover, html.dark .hover\:bg-zuna-50\/70:hover, html.dark .hover\:bg-zuna-50\/60:hover, html.dark .hover\:bg-zuna-50\/50:hover, html.dark .hover\:bg-white:hover { background-color: #241866; }
+html.dark .text-zuna-900, html.dark .text-zuna-800 { color: #eeeaff; }
+html.dark .text-zuna-700 { color: #ddd6ff; }
+html.dark .text-zuna-600 { color: #c9c0f2; }
+html.dark .text-zuna-500, html.dark .card-s, html.dark .lbl { color: #b3aadf; }
+html.dark .text-zuna-400 { color: #a196dc; }
+html.dark .hover\:text-zuna-900:hover { color: #ffffff; }
+html.dark .ring-zuna-100, html.dark .ring-zuna-50, html.dark .card, html.dark .btn, html.dark .iconbtn { --tw-ring-color: #2a2066; }
+html.dark .border-zuna-100, html.dark .border-zuna-50, html.dark .border-zuna-200 { border-color: #2a2066; }
+html.dark .divide-zuna-50 > * + *, html.dark .divide-zuna-100 > * + * { border-color: #2a2066; }
+html.dark .ring-zuna-900 { --tw-ring-color: #eeeaff; }
+html.dark .outline-zuna-900 { outline-color: #eeeaff; }
+html.dark .bg-zuna-900 { background-color: #2d1a9e; }
+html.dark #side, html.dark header.bg-zuna-900 { background-color: #070321; }
+html.dark .btn-primary { background-color: #2d1a9e; }
+html.dark .btn-primary:hover { background-color: #3a24b8; }
+html.dark .bg-mint-500.text-zuna-900, html.dark .bg-mint-500 .text-zuna-900, html.dark .bg-mint-300.text-zuna-900, html.dark .bg-mint-500 { color: #12005A; }
+html.dark .bg-mint-50, html.dark .bg-mint-100 { background-color: rgba(2,201,136,.14); }
+html.dark .text-mint-700, html.dark .text-mint-600 { color: #4fd9aa; }
+html.dark .ring-mint-200 { --tw-ring-color: rgba(2,201,136,.35); }
+html.dark .bg-amber-50, html.dark .bg-amber-50\/60, html.dark .bg-amber-50\/40, html.dark .bg-amber-100 { background-color: rgba(245,158,11,.13); }
+html.dark .text-amber-900, html.dark .text-amber-800, html.dark .text-amber-700 { color: #fcd34d; }
+html.dark .ring-amber-200, html.dark .ring-amber-300 { --tw-ring-color: rgba(245,158,11,.35); }
+html.dark .bg-rose-50, html.dark .bg-rose-50\/70 { background-color: rgba(244,63,94,.14); }
+html.dark .text-rose-800, html.dark .text-rose-700 { color: #fda4af; }
+html.dark .text-rose-600 { color: #fb7185; }
+html.dark .ring-rose-200 { --tw-ring-color: rgba(244,63,94,.35); }
+html.dark .logo-box, html.dark .logo-box.bg-white { background-color: #ffffff !important; }
+html.dark .chip[data-on] { background-color: #02C988; color: #12005A; }
+html.dark .tab[data-on] { background-color: #2d1a9e; color: #fff; }
+html.dark ::placeholder { color: #8f86c4; }
+html.dark .rangebtn[data-active] { background-color: #2d1a9e; color: #fff; }
+html.dark li.z-click:active { background-color: rgba(2,201,136,.14); }
+html.dark ::-webkit-scrollbar-track, html.dark ::-webkit-scrollbar-corner { background: #0b0630; }
+html.dark ::-webkit-scrollbar-thumb { background: #3a2c8a; border-color: #0b0630; }
+html.dark .apexcharts-tooltip { background: #150c45 !important; color: #eeeaff !important; border-color: #2a2066 !important; }
+html.dark .apexcharts-text, html.dark .apexcharts-legend-text { fill: #b3aadf; color: #b3aadf !important; }
+html.dark .apexcharts-gridline, html.dark .apexcharts-xaxis line, html.dark .apexcharts-yaxis line { stroke: #2a2066; }
+html.dark .logo-box, html.dark .logo-box * { color: #12005A; }
+html.dark .divide-zuna-50 > :not([hidden]) ~ :not([hidden]), html.dark .divide-zuna-100 > :not([hidden]) ~ :not([hidden]) { border-color: #2a2066; }
+html.dark .divide-amber-100 > :not([hidden]) ~ :not([hidden]) { border-color: rgba(245,158,11,.25); }

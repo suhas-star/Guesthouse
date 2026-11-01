@@ -574,6 +574,7 @@ const gallery = (p, start) => { let i = start; const ov = h('div', 'fixed inset-
   const box = h('div', 'flex flex-col items-center'); box.append(im, cap); ov.appendChild(box);
   const nav = (d) => { i = (i + d + p.photos.length) % p.photos.length; show(); };
   const close = () => { ov.remove(); document.removeEventListener('keydown', key); }; const key = (e) => { if (e.key === 'Escape') close(); if (e.key === 'ArrowRight') nav(1); if (e.key === 'ArrowLeft') nav(-1); };
+  ov.style.cursor = 'zoom-out'; if (p.photos.length > 1) im.style.cursor = 'e-resize';
   ov.onclick = (e) => { if (e.target === ov) close(); else if (e.target === im && p.photos.length > 1) nav(1); }; document.addEventListener('keydown', key); show(); document.body.appendChild(ov); };
 const renderHouses = () => {
   const box = $('#houses'); box.replaceChildren();
@@ -670,7 +671,7 @@ const renderHouses = () => {
 };
 
 /* ---------- users & access (client admins) ---------- */
-const mApi = async (p, body) => { let r; try { r = await fetch('/api/manage/' + p, {method: 'POST', headers: {'content-type': 'application/json'}, body: JSON.stringify(body || {}), credentials: 'same-origin'}); } catch (e) { throw new Error('Network error. Check your connection and try again.'); }
+const mApi = async (p, body) => { let r; try { r = await ZUI.busy(fetch('/api/manage/' + p, {method: 'POST', headers: {'content-type': 'application/json'}, body: JSON.stringify(body || {}), credentials: 'same-origin'})); } catch (e) { throw new Error('Network error. Check your connection and try again.'); }
   const j = await r.json().catch(() => ({})); if (r.status === 403) { location.reload(); throw new Error('Your session has expired.'); } if (!r.ok) throw new Error(j.error || 'Something went wrong.'); return j; };
 const reloadUsers = async () => { const j = await mApi('state'); DATA.users = (j.clients[0] || {}).users || []; if (state.view === 'users') render(); };
 const ROLE_NAME = {client: 'Viewer', client_admin: 'Client admin'};
@@ -741,7 +742,7 @@ $('#menuBtn').onclick = () => { $('#side').classList.remove('-translate-x-full')
 $('#scrimSide').onclick = closeSide;
 if ($('#updated')) $('#updated').textContent = fLong(REPORT_DATE);
 const USER = __USER__;
-ZUI.auto(document.body);
+ZUI.auto(document.body); ZUI.clickables(document.body);
 (() => {   // client branding + Zuna admin tools
   const cl = DATA.client;
   if (cl) { $$('#side img[alt="LTM"]').forEach((im) => { im.alt = cl.name; if (cl.logo) im.src = cl.logo; else { const t = h('span', 'text-sm font-black text-zuna-900 px-1', cl.name); im.replaceWith(t); } }); }

@@ -16,6 +16,10 @@ html.zr-down #zrRing { width: 26px; height: 26px; margin: -13px 0 0 -13px; }
 (function () {
   if (!window.matchMedia || !matchMedia('(pointer: fine)').matches || matchMedia('(prefers-reduced-motion: reduce)').matches) { var a = document.getElementById('zrDot'), b = document.getElementById('zrRing'); a && a.remove(); b && b.remove(); return; }
   var R = document.documentElement, dot = document.getElementById('zrDot'), ring = document.getElementById('zrRing'), x = -100, y = -100, rx = -100, ry = -100;
+  var until = '__ZR_UNTIL__';   // when set, the pointer only lives while this element is on the page (e.g. the welcome screen)
+  if (until.charAt(0) === '#') { var vis = function () { var e = document.querySelector(until); return e && !e.classList.contains('sp-off') && !e.classList.contains('sp-hide'); };
+    if (!vis()) { dot.remove(); ring.remove(); return; }
+    var iv = setInterval(function () { if (!vis()) { clearInterval(iv); R.classList.remove('zr', 'zr-on', 'zr-hot', 'zr-text', 'zr-down'); dot.remove(); ring.remove(); } }, 150); }
   R.classList.add('zr');
   (function loop() { rx += (x - rx) * 0.2; ry += (y - ry) * 0.2; ring.style.transform = 'translate(' + rx + 'px,' + ry + 'px)'; requestAnimationFrame(loop); })();
   document.addEventListener('mousemove', function (e) {

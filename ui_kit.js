@@ -22,6 +22,8 @@ const ZUI = (() => {
 .zd-hl{font-weight:700;color:#00744f;background:none}
 .zd-ck{width:16px;height:16px;color:#02C988;opacity:0;flex-shrink:0}
 .zd-ph-opt{color:#716b9b}
+.zd-opt.zd-dis{opacity:.5;cursor:not-allowed}
+.zd-opt.zd-dis[data-act]{background:#f4f2fb}
 .zd-group{padding:.55rem .65rem .25rem;font-size:.6875rem;font-weight:700;letter-spacing:.06em;text-transform:uppercase;color:#716b9b}
 .zd-empty{padding:.75rem;font-size:.8125rem;color:#7a74a3;text-align:center}
 .zd-spin{display:inline-block;width:12px;height:12px;margin-right:6px;vertical-align:-2px;border-radius:50%;border:2px solid #cdc5ec;border-top-color:#02C988;animation:zdSpin .7s linear infinite}
@@ -75,11 +77,11 @@ const ZUI = (() => {
     if (!c.items.length) { const m = el('div', 'zd-empty'); if (c.loading) m.appendChild(el('span', 'zd-spin')); m.appendChild(document.createTextNode(c.empty || 'No matches')); c.panel.appendChild(m); return; }
     let g;
     c.items.forEach((it, k) => { if (it.group && it.group !== g) { g = it.group; c.panel.appendChild(el('div', 'zd-group', g)); }
-      const o = el('div', 'zd-opt' + (it.muted ? ' zd-ph-opt' : '')); o.setAttribute('role', 'option'); o.dataset.k = k; o.setAttribute('aria-selected', it.selected ? 'true' : 'false');
+      const o = el('div', 'zd-opt' + (it.muted ? ' zd-ph-opt' : '') + (it.disabled ? ' zd-dis' : '')); if (it.disabled) o.setAttribute('aria-disabled', 'true'); o.setAttribute('role', 'option'); o.dataset.k = k; o.setAttribute('aria-selected', it.selected ? 'true' : 'false');
       const tx = el('div', 'zd-tx'); tx.appendChild(hl(String(it.label), c.q)); if (it.sub) tx.appendChild(el('div', 'zd-sub', it.sub)); o.appendChild(tx); o.appendChild(svgIcon('zd-ck', 'M20 6 9 17l-5-5'));
       o.onmousemove = () => { if (c.act !== k) setAct(c, k); }; o.onclick = () => pick(c, it); c.panel.appendChild(o); });
     if (c.act >= 0) setAct(c, c.act); };
-  const pick = (c, it) => { const f = c.onPick; close(); f(it); };
+  const pick = (c, it) => { if (it.disabled) return; const f = c.onPick; close(); f(it); };
   function show(anchor, items, o = {}) {
     let c = cur && cur.anchor === anchor ? cur : null;
     if (!c) { close(); const panel = el('div', 'zd-panel'); panel.setAttribute('role', 'listbox'); panel.addEventListener('mousedown', (e) => e.preventDefault()); document.body.appendChild(panel); c = cur = {anchor, panel}; anchor.setAttribute('aria-expanded', 'true'); }
@@ -105,7 +107,7 @@ const ZUI = (() => {
     Object.defineProperty(s, 'value', {configurable: true, get() { return VAL.get.call(s); }, set(v) { VAL.set.call(s, v); sync(); }});
     Object.defineProperty(s, 'selectedIndex', {configurable: true, get() { return IDX.get.call(s); }, set(v) { IDX.set.call(s, v); sync(); }});
     s.addEventListener('change', sync); new MutationObserver(sync).observe(s, {childList: true, subtree: true, characterData: true, attributes: true});
-    const items = () => [...s.options].map((o, k) => ({value: o.value, label: o.textContent, selected: k === IDX.get.call(s), muted: o.value === '' && !!o.dataset.placeholder, group: o.parentElement.tagName === 'OPTGROUP' ? o.parentElement.label : ''}));
+    const items = () => [...s.options].map((o, k) => ({value: o.value, label: o.textContent, selected: k === IDX.get.call(s), disabled: o.disabled, muted: o.value === '' && !!o.dataset.placeholder, group: o.parentElement.tagName === 'OPTGROUP' ? o.parentElement.label : ''}));
     const open = () => show(b, items(), {onPick: (it) => { if (VAL.get.call(s) !== it.value) { s.value = it.value; s.dispatchEvent(new Event('change', {bubbles: true})); s.dispatchEvent(new Event('input', {bubbles: true})); } b.focus(); }});
     b.onclick = () => isOpen(b) ? close() : open();
     let typed = '', tt;
@@ -194,5 +196,16 @@ const ZUI = (() => {
     const kd = (e) => { if (e.key === 'Escape') { e.preventDefault(); e.stopPropagation(); done(false); } else if (e.key === 'Tab') { e.preventDefault(); (document.activeElement === yes ? no : yes).focus(); } };
     document.addEventListener('keydown', kd, true); no.onclick = () => done(false); yes.onclick = () => done(true); ov.onmousedown = (e) => { if (e.target === ov) done(false); };
     (tone === 'danger' ? no : yes).focus(); }); }
-  return {show, close, key, isOpen, select, auto, noFill, chevron, art, confirm};
+  // pointer hints: a hand on anything clickable that isn't a real button or link (and make it keyboard-usable)
+  const NATIVE = /^(A|BUTTON|INPUT|SELECT|TEXTAREA|LABEL|SUMMARY|OPTION)$/;
+  const mark = (n) => { if (n.nodeType !== 1 || n._zc || typeof n.onclick !== 'function' || NATIVE.test(n.tagName)) return;
+    if (n.classList.contains('fixed') || n.getAttribute('role') === 'option' || n.closest('.zd-panel, .zc-ov')) return;
+    n._zc = 1; n.classList.add('z-click');
+    if (!n.hasAttribute('tabindex')) { n.tabIndex = 0; if (!/^(TR|TD|LI)$/.test(n.tagName)) n.setAttribute('role', 'button');
+      n.addEventListener('keydown', (e) => { if ((e.key === 'Enter' || e.key === ' ') && e.target === n) { e.preventDefault(); n.click(); } }); } };
+  const scan = (n) => { if (n.nodeType !== 1) return; mark(n); n.querySelectorAll('*').forEach(mark); };
+  function clickables(root) { scan(root); new MutationObserver((ms) => ms.forEach((m) => m.addedNodes.forEach(scan))).observe(root, {childList: true, subtree: true}); }
+  // busy pointer while something is saving / loading
+  let busyN = 0; const busy = async (p) => { busyN++; document.documentElement.classList.add('z-busy'); try { return await p; } finally { if (--busyN <= 0) { busyN = 0; document.documentElement.classList.remove('z-busy'); } } };
+  return {show, close, key, isOpen, select, auto, noFill, chevron, art, confirm, clickables, busy};
 })();

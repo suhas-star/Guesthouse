@@ -98,13 +98,13 @@ const toast = (m, bad) => { const t = $('#toast'); t.textContent = m; t.style.ba
 const sessionExpired = () => { if (sessionExpired.open) return; sessionExpired.open = true;
   ZUI.confirm({title: 'Your session has expired', message: ['For your security you have been signed out.', 'Please sign in again to continue. Unsaved changes on this page will be lost.'], ok: 'Sign in again', cancel: 'Stay on this page', tone: 'warn', icon: 'M5 11h14a2 2 0 0 1 2 2v7a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-7a2 2 0 0 1 2-2zM7 11V7a5 5 0 0 1 10 0v4'})
     .then((ok) => { sessionExpired.open = false; if (ok) location.href = CLIENT_MODE ? '/manage' : '/admin'; }); };
-const api = async (p, body) => { let r; try { r = await fetch(API + p, {method: 'POST', headers: {'content-type': 'application/json'}, body: JSON.stringify(body || {}), credentials: 'same-origin'}); } catch (e) { throw new Error('Network error. Check your connection and try again.'); }
+const api = async (p, body) => { let r; try { r = await ZUI.busy(fetch(API + p, {method: 'POST', headers: {'content-type': 'application/json'}, body: JSON.stringify(body || {}), credentials: 'same-origin'})); } catch (e) { throw new Error('Network error. Check your connection and try again.'); }
   const j = await r.json().catch(() => ({})); if (r.status === 403) { sessionExpired(); throw new Error('Your session has expired.'); } if (!r.ok) throw new Error(j.error || 'Request failed (' + r.status + ')'); return j; };
 // upload with progress (XHR reports upload progress; fetch does not)
-const apiUp = (p, body, onProgress) => new Promise((res, rej) => { const x = new XMLHttpRequest(); x.open('POST', API + p); x.setRequestHeader('content-type', 'application/json'); x.withCredentials = true;
+const apiUp = (p, body, onProgress) => ZUI.busy(new Promise((res, rej) => { const x = new XMLHttpRequest(); x.open('POST', API + p); x.setRequestHeader('content-type', 'application/json'); x.withCredentials = true;
   x.upload.onprogress = (e) => { if (e.lengthComputable && onProgress) onProgress(e.loaded / e.total); };
   x.onload = () => { let j = {}; try { j = JSON.parse(x.responseText); } catch (e) {} if (x.status >= 200 && x.status < 300) res(j); else { if (x.status === 403) sessionExpired(); rej(new Error(j.error || 'Upload failed (' + x.status + ')')); } };
-  x.onerror = () => rej(new Error('Network error. Check your connection and try again.')); x.send(JSON.stringify(body)); });
+  x.onerror = () => rej(new Error('Network error. Check your connection and try again.')); x.send(JSON.stringify(body)); }));
 // drop zone: highlight while dragging files over it, hand the files to onFiles
 const dropZone = (el, onFiles) => { let n = 0; const on = (v) => el.classList.toggle('dz-over', v);
   el.addEventListener('dragenter', (e) => { if (![...(e.dataTransfer.types || [])].includes('Files')) return; e.preventDefault(); n++; on(true); });
@@ -126,7 +126,7 @@ const modal = (title, body) => { if ($('#modal').classList.contains('hidden')) m
 const closeModal = () => { if ($('#modal').classList.contains('hidden')) return; $('#modal').classList.add('hidden'); document.body.style.overflow = ''; if (modal.from && modal.from.isConnected) modal.from.focus(); };
 // keep Tab inside the open dialog
 document.addEventListener('keydown', (e) => { if (e.key !== 'Tab' || $('#modal').classList.contains('hidden') || document.querySelector('.zc-ov')) return; const f = [...$('#modal').querySelectorAll('button, [href], input:not([type=hidden]), select, textarea, [tabindex]:not([tabindex="-1"])')].filter((x) => !x.disabled && x.offsetParent !== null && !x.classList.contains('zd-hide')); if (!f.length) return; const a = f[0], z = f[f.length - 1]; if (e.shiftKey && document.activeElement === a) { e.preventDefault(); z.focus(); } else if (!e.shiftKey && document.activeElement === z) { e.preventDefault(); a.focus(); } });
-ZUI.auto(document.body); $('#mClose').onclick = closeModal; document.addEventListener('keydown', (e) => { if (e.key === 'Escape') closeModal(); });
+ZUI.auto(document.body); ZUI.clickables(document.body); $('#mClose').onclick = closeModal; document.addEventListener('keydown', (e) => { if (e.key === 'Escape') closeModal(); });
 const toDataUrl = (file, max, png) => new Promise((res, rej) => { const fr = new FileReader(); fr.onerror = rej; fr.onload = () => { const img = new Image(); img.onerror = () => rej(new Error('Not an image')); img.onload = () => {
   const sc = Math.min(1, max / Math.max(img.width, img.height)), c = document.createElement('canvas'); c.width = Math.round(img.width * sc); c.height = Math.round(img.height * sc);
   const x = c.getContext('2d'); if (!png) { x.fillStyle = '#fff'; x.fillRect(0, 0, c.width, c.height); } x.drawImage(img, 0, 0, c.width, c.height); res(c.toDataURL(png ? 'image/png' : 'image/jpeg', .82)); }; img.src = fr.result; }; fr.readAsDataURL(file); });
@@ -292,7 +292,7 @@ const editGH = (c, x) => {
   // photos
   const s6 = sec('Photos', x.id ? 'JPG, PNG or WEBP. Resized automatically.' : 'Save the guest house first, then add photos.');
   if (x.id) { const grid = h('div', 'grid grid-cols-3 sm:grid-cols-4 gap-2');
-    (x.photos || []).forEach((p) => { const t = h('div', 'relative group rounded-xl overflow-hidden ring-1 ring-zuna-100 aspect-[4/3]'); const i = h('img', 'w-full h-full object-cover'); i.src = p.url; t.appendChild(i);
+    (x.photos || []).forEach((p) => { const t = h('div', 'relative group rounded-xl overflow-hidden ring-1 ring-zuna-100 aspect-[4/3]'); const i = h('img', 'w-full h-full object-cover cursor-zoom-in transition-transform duration-300 group-hover:scale-105'); i.src = p.url; i.alt = 'Guest house photo'; i.title = 'Open full size'; i.onclick = () => window.open(p.url, '_blank', 'noopener'); t.appendChild(i);
       const del = h('button', 'absolute top-1.5 right-1.5 rounded-lg bg-white/90 px-2 py-0.5 text-xs font-bold text-rose-600 opacity-0 group-hover:opacity-100', 'Delete'); del.type = 'button';
       del.onclick = async () => { if (!(await ZUI.confirm({title: 'Delete this photo?', message: 'It is removed from the guest house and the client dashboard.', ok: 'Delete photo', tone: 'danger'}))) return; try { await api('photo/delete', {id: p.id}); toast('Photo deleted'); await load(true); editGH(C(), C().guesthouses.find((g) => g.id === x.id)); } catch (er) { toast(er.message, true); } }; t.appendChild(del); grid.appendChild(t); });
     const up = h('label', 'dz rounded-xl border-2 border-dashed border-zuna-200 aspect-[4/3] flex flex-col items-center justify-center gap-1 p-2 text-center cursor-pointer transition-colors hover:border-mint-500 hover:bg-mint-50/50 focus-within:border-mint-500');

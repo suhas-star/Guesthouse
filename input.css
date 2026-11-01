@@ -77,3 +77,9 @@ tbody tr { transition: background-color .15s ease; }
 input, textarea, [contenteditable] { caret-color: #02C988; }
 ::selection { background: #c0f2df; color: #12005A; }
 .bg-zuna-900 ::selection, .bg-zuna-900::selection { background: #02C988; color: #12005A; }
+
+/* pointer hints */
+.z-click { cursor: pointer; }
+button:disabled, input:disabled, select:disabled, textarea:disabled, [aria-disabled="true"], .zd-btn:disabled { cursor: not-allowed; }
+.btn:disabled, .btn-primary:disabled { opacity: .6; }
+html.z-busy, html.z-busy * { cursor: progress !important; }

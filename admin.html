@@ -565,7 +565,7 @@ if ($('#newClient')) $('#newClient').onclick = () => { const f = h('div', 'space
 
 const INIT = __STATE__;
 if (INIT && INIT.clients) { S = INIT; cur = (S.clients[0] || {}).id || null; render(); } else load().catch((e) => { $('#detail').replaceChildren(h('div', 'card p-10 text-center text-sm text-rose-700', e.message)); });
-ZUI.magnetic(); ZUI.pullRefresh(() => load(true));
+ZUI.pullRefresh(() => load(true));
 })();
 </script>
 </body>

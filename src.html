@@ -971,7 +971,6 @@ const openWeekly = (onGo) => {
   openDrawer(ghReportName(), 'Daily, weekly, monthly or any dates', w); pick(mode); syncGo();
 };
 $$('[data-ghname]').forEach((e) => { e.textContent = ghReportName(); });
-ZUI.magnetic();
 ZUI.pullRefresh(() => new Promise(() => { location.reload(); }));
 window.__ltm = {openWeekly, props, ghReportName, P, myB, nightsAll, period, stateOf, fDay, fShort, fLong, toast, today, rangeBounds, inRange: (b) => { const [a, z] = rangeBounds(); return state.range === 'all' || (b.check_in <= z && b.check_out > a); }, rangeText: () => rangeLabel(), rackGrid, cleanName, client: DATA.client || null, addDays, monday};
 })();

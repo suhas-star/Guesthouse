@@ -300,8 +300,6 @@ html.dark .zchip-live { --b: #02C988; --f: #12005A; --e: #000; }
 html.dark .zchip-warn { --b: #3a2c0c; --f: #ffd88a; }
 html.dark .zchip-bad { --b: #3d1518; --f: #ffb3b5; }
 html.dark .zchip-muted { --b: #221a49; --f: #c9c2ec; --e: #4a4370; }
-/* ---------- magnetic buttons ---------- */
-.z-mag { transition: translate .25s cubic-bezier(.2,.8,.2,1), transform .15s, box-shadow .15s, background-color .15s; }
 /* ---------- phone carousel ---------- */
 .z-dots { display: none; }
 @media (max-width: 767px) {

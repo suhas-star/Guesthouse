@@ -387,12 +387,6 @@ html.dark .zc-list{background:rgba(245,158,11,.13);color:#fcd34d;box-shadow:inse
   // card shapes with a moving sheen while the next view is prepared
   function shimmer(root, ms = 320) { return new Promise((res) => { if (!root || calm()) return res(); root.classList.add('z-loading'); root.setAttribute('aria-busy', 'true');
     setTimeout(() => { root.classList.remove('z-loading'); root.removeAttribute('aria-busy'); res(); }, ms); }); }
-  // primary buttons lean towards a nearby pointer (mouse only)
-  function magnetic(sel = '.btn-primary:not(:disabled), .pop3d:not(:disabled), [data-mag]') { if (!matchMedia('(hover: hover) and (pointer: fine)').matches || calm()) return; let raf = 0, live = [];
-    document.addEventListener('pointermove', (e) => { cancelAnimationFrame(raf); raf = requestAnimationFrame(() => { const R = 90, now = [];
-      document.querySelectorAll(sel).forEach((b) => { const r = b.getBoundingClientRect(); if (!r.width) return; const dx = e.clientX - (r.left + r.width / 2), dy = e.clientY - (r.top + r.height / 2), d = Math.hypot(dx, dy) - Math.max(r.width, r.height) / 2;
-        if (d < R) { const k = (1 - Math.max(0, d) / R) * .22; b.style.translate = (dx * k).toFixed(1) + 'px ' + (dy * k * 1.3).toFixed(1) + 'px'; b.classList.add('z-mag'); now.push(b); } });
-      live.forEach((b) => { if (!now.includes(b)) b.style.translate = ''; }); live = now; }); }, {passive: true}); }
   // phones: a grid becomes a swipe row that snaps, with dots underneath
   function carousel(grid) { grid.classList.add('z-car'); const dots = el('div', 'z-dots'); dots.setAttribute('aria-hidden', 'true'); const n = grid.children.length; if (n < 2) return null;
     for (let i = 0; i < n; i++) dots.appendChild(el('i', i ? '' : 'on'));
@@ -406,5 +400,5 @@ html.dark .zc-list{background:rgba(245,158,11,.13);color:#fcd34d;box-shadow:inse
     addEventListener('touchstart', (e) => { if (busyR || scrollY > 0 || e.touches.length > 1 || e.target.closest('[role=dialog],.z-car,#drawer,#side,.zcal,input,textarea,select')) { y0 = null; return; } y0 = e.touches[0].clientY; x0 = e.touches[0].clientX; dy = 0; }, {passive: true});
     addEventListener('touchmove', (e) => { if (y0 == null) return; const t = e.touches[0]; dy = (t.clientY - y0) * .5; if (dy <= 0 || Math.abs(t.clientX - x0) > Math.abs(t.clientY - y0)) { if (dy <= 0) set(0); return; } if (scrollY > 0) { y0 = null; set(0, true); return; } e.preventDefault(); set(Math.min(dy, 110)); }, {passive: false});
     addEventListener('touchend', async () => { if (y0 == null) return; y0 = null; if (dy > 64) { busyR = true; set(64, true); ind.classList.add('zp-spin'); try { await fn(); } finally { ind.classList.remove('zp-spin'); set(0, true); busyR = false; } } else set(0, true); dy = 0; }); }
-  return {show, close, key, isOpen, select, auto, noFill, chevron, art, confirm, clickables, busy, theme, celebrate, tilt, toast, gauge, stagger, shimmer, magnetic, carousel, pullRefresh};
+  return {show, close, key, isOpen, select, auto, noFill, chevron, art, confirm, clickables, busy, theme, celebrate, tilt, toast, gauge, stagger, shimmer, carousel, pullRefresh};
 })();

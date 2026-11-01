@@ -7,7 +7,8 @@ document.documentElement.classList.add('sb-boot');setTimeout(function(){document
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width,initial-scale=1">
 <meta name="robots" content="noindex,nofollow">
-<title>Guest House Dashboard · Zuna</title>
+<title>Zuna Stays · Guest house management</title>
+<!--__FAVICON__-->
 <style>/*__CSS__*/</style>
 </head>
 <body class="bg-zuna-50/60 text-zuna-900 antialiased font-sans">
@@ -793,7 +794,7 @@ const TITLES = {overview: 'Overview', rack: 'Room rack', calendar: 'Night-wise a
 const render = () => {
   $$('#nav button').forEach((b) => b.toggleAttribute('data-active', b.dataset.view === state.view));
   $$('.view').forEach((v) => v.classList.toggle('hidden', v.dataset.view !== state.view));
-  $('#viewTitle').textContent = TITLES[state.view];
+  $('#viewTitle').textContent = TITLES[state.view]; document.title = TITLES[state.view] + ' · Zuna Stays';
   const p = P();
   $('#viewSub').textContent = state.view === 'users' ? (DATA.client ? DATA.client.name + ' · ' : '') + (DATA.users || []).length + ' users' : state.view === 'houses' ? props.length + ' guest houses · ' + props.filter((x) => x.status === 'Live').length + ' live' : p.property + ', ' + p.city + ' · ' + (state.view === 'calendar' ? fShort(period.from) + ' – ' + fLong(period.to) : rangeLabel());
   $('#rangeBox').classList.toggle('invisible', !(state.view === 'overview' || state.view === 'rack' || state.view === 'bookings'));

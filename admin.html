@@ -5,7 +5,8 @@
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width,initial-scale=1">
 <meta name="robots" content="noindex,nofollow">
-<title>Admin · Zuna Guest House Management</title>
+<title>Admin · Zuna Stays</title>
+<!--__FAVICON__-->
 <style>/*__CSS__*/</style>
 <style>
 .tab[data-on]{background:#12005A;color:#fff}
@@ -91,7 +92,7 @@ const ib = (tag, cls, text, ic, icls) => { const e = h(tag, cls); e.classList.ad
 let S = {clients: []}, cur = null, tab = 'gh';
 // client admins get the same page with only their own users (/manage)
 const CLIENT_MODE = ME.mode === 'client', API = CLIENT_MODE ? '/api/manage/' : '/api/admin/';
-if (CLIENT_MODE) { tab = 'users'; document.title = 'Users & access · Guest House Management'; $('#aside').remove(); $('#layout').classList.remove('lg:grid-cols-[260px_minmax(0,1fr)]'); $('#layout').classList.replace('max-w-7xl', 'max-w-5xl');
+if (CLIENT_MODE) { tab = 'users'; document.title = 'Users & access · Zuna Stays'; $('#aside').remove(); $('#layout').classList.remove('lg:grid-cols-[260px_minmax(0,1fr)]'); $('#layout').classList.replace('max-w-7xl', 'max-w-5xl');
   $('#hdTitle').textContent = 'Users & access'; $('#meRole').textContent = 'Client admin'; }
 { const nm = (ME.name || ME.email.split('@')[0]).trim(); $('#me').textContent = $('#me2').textContent = ME.email; $('#meName').textContent = $('#meName2').textContent = nm;
   $('#meAv').textContent = nm.split(/\s+/).map((w) => w[0]).join('').slice(0, 2).toUpperCase();

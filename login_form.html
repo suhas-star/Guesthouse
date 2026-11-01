@@ -21,7 +21,7 @@
 @keyframes wipe{from{clip-path:circle(0% at var(--x,50%) var(--y,50%))}to{clip-path:circle(150% at var(--x,50%) var(--y,50%))}}
 @keyframes shimmer{from{transform:translateX(-100%)}to{transform:translateX(100%)}}
 @keyframes ping2{75%,100%{transform:scale(2.2);opacity:0}}
-.a-in{opacity:0;animation:fadeUp .7s cubic-bezier(.2,.8,.2,1) forwards;animation-delay:var(--d,0ms)}
+.a-in{opacity:0;animation:fadeUp .45s cubic-bezier(.2,.8,.2,1) forwards;animation-delay:calc(var(--d,0ms) * .45)}
 .a-rise{opacity:0;animation:rise 1s cubic-bezier(.2,.8,.2,1) .35s forwards}
 .bar>i{display:block;position:absolute;inset:auto 0 0 0;border-radius:4px;background:#02C988;transform-origin:bottom;transform:scaleY(0);animation:grow .8s cubic-bezier(.2,.8,.2,1) forwards}
 .bob{animation:bob 4.5s ease-in-out infinite}

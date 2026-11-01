@@ -230,3 +230,15 @@ html.dark .rack-bar.rack-past { background: #1e8f6c; color: #eeeaff; }
 .glass-zone .card.from-zuna-900 { background-image: linear-gradient(180deg, rgba(255,255,255,.14) 0%, rgba(255,255,255,0) 40%), linear-gradient(135deg, #12005A, #2f1878); border-color: rgba(255,255,255,.14); }
 html.dark .glass-zone .card { background: linear-gradient(180deg, rgba(255,255,255,.09) 0%, rgba(255,255,255,.04) 45%, rgba(255,255,255,.03) 100%), rgba(21,12,69,.7);
   border-color: rgba(255,255,255,.09); box-shadow: inset 0 1px 0 rgba(255,255,255,.10), 0 14px 32px -18px rgba(0,0,0,.7); }
+
+/* sidebar open / close: the main column slides (see setCol); no grid animation, no sideways scrollbar while sliding */
+html.sb-anim #app { transition: none !important; }
+#app { overflow-x: clip; }
+#mainWrap { will-change: auto; }
+html.sb-anim .glass-zone .card, html.sb-anim header, html.sb-anim .backdrop-blur-md { -webkit-backdrop-filter: none !important; backdrop-filter: none !important; }
+
+/* smooth cross-fade between pages (log out, logo, admin <-> dashboard); browsers without support just navigate */
+@media (prefers-reduced-motion: no-preference) {
+  @view-transition { navigation: auto; }
+  ::view-transition-old(root), ::view-transition-new(root) { animation-duration: .3s; animation-timing-function: cubic-bezier(.2,.8,.2,1); }
+}

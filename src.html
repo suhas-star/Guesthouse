@@ -54,7 +54,7 @@ if(document.readyState!=='loading')setTimeout(hide,150);else document.addEventLi
   <div id="scrimSide" class="fixed inset-0 z-40 bg-zuna-900/40 backdrop-blur-sm hidden lg:hidden"></div>
 
   <!-- Main -->
-  <div class="min-w-0 flex flex-col">
+  <div id="mainWrap" class="min-w-0 flex flex-col">
     <header class="sticky top-0 z-30 bg-white/80 backdrop-blur-md border-b border-zuna-100">
       <div class="px-4 lg:px-8 py-3 flex flex-wrap xl:flex-nowrap items-center gap-3">
         <button id="menuBtn" class="lg:hidden grid place-items-center w-9 h-9 rounded-lg ring-1 ring-zuna-100 bg-white" aria-label="Menu"><i data-i="menu" class="w-4 h-4"></i></button>
@@ -842,7 +842,16 @@ ZUI.auto(document.body); ZUI.clickables(document.body);
   $('#userName').textContent = nm; $('#userMail').textContent = USER.email && USER.email.includes('@') ? USER.email : 'Signed in';
   $('#userAv').textContent = nm.split(/\s+/).map((w) => w[0]).slice(0, 2).join('').toUpperCase();
   try { localStorage.removeItem('ltmgh.sb'); } catch (e) {}   // old 'remember open' setting
-  const setCol = (v) => { document.documentElement.classList.toggle('sb-c', v); try { sessionStorage.setItem('ltmgh.sb', v ? 'closed' : 'open'); } catch (e) {} setTimeout(() => window.dispatchEvent(new Event('resize')), 320); };
+  // smooth open / close: the main area is laid out once at its new size and slides into place (no re-layout on every frame);
+  // charts then resize quietly, without replaying their grow-in animation
+  const fitCharts = () => Object.values(charts).forEach((c) => { try { c && c.updateOptions && c.updateOptions({chart: {animations: {enabled: false}}}, false, false); } catch (e) {} });
+  const setCol = (v) => { const R = document.documentElement, mw = $('#mainWrap');
+    try { sessionStorage.setItem('ltmgh.sb', v ? 'closed' : 'open'); } catch (e) {}
+    if (!matchMedia('(min-width: 1024px)').matches || matchMedia('(prefers-reduced-motion: reduce)').matches) { R.classList.toggle('sb-c', v); setTimeout(fitCharts, 50); return; }
+    const x0 = mw.getBoundingClientRect().left; R.classList.add('sb-anim'); R.classList.toggle('sb-c', v);
+    const dx = x0 - mw.getBoundingClientRect().left; mw.style.transition = 'none'; mw.style.transform = 'translate3d(' + dx + 'px,0,0)'; mw.getBoundingClientRect();
+    mw.style.transition = 'transform .32s cubic-bezier(.2,.8,.2,1)'; mw.style.transform = 'translate3d(0,0,0)';
+    clearTimeout(setCol.t); setCol.t = setTimeout(() => { mw.style.transition = ''; mw.style.transform = ''; R.classList.remove('sb-anim'); fitCharts(); }, 340); };
   $('#sbClose').onclick = () => setCol(true); $('#sbOpen').onclick = () => setCol(false);
   $('#sbCloseM').onclick = () => closeSide();
 })();

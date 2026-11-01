@@ -614,8 +614,20 @@ async function cancelBooking(env, client, b) {
   const names = new Set((await clientGuestHouses(env, client, true)).map((g) => g.property)), key = guestKey(b);
   const bk = await readSet(env, "bookings"), mn = await readSet(env, "manual"), old = bk.rows.find((x) => guestKey(x) === key && names.has(x.property));
   if (!old) return json({error: "Booking not found."}, 404);
+  const prevMan = mn.rows.find((x) => guestKey(x) === key) || null;
   const man = mn.rows.filter((x) => guestKey(x) !== key); man.push(Object.assign({}, old, {status: "Cancelled", note: "Cancelled from the admin panel"}));
   await env.DB.batch([writeSet(env, "bookings", bk.rows.filter((x) => x !== old), istToday()), writeSet(env, "manual", man, istToday())]);
+  return json({ok: true, undo: {row: old, manual: prevMan}});
+}
+// Undo a cancellation: put the exact booking back, and the manual entry as it was before
+async function restoreBooking(env, client, b) {
+  const names = new Set((await clientGuestHouses(env, client, true)).map((g) => g.property)), pick = (r) => Object.assign({}, ...BK_COLS.map((k) => ({[k]: String((r && r[k]) || "").slice(0, 300)})));
+  const row = pick(b.row); if (!names.has(row.property) || !row.guest || !row.check_in) return json({error: "This booking can't be restored."}, 400);
+  const key = guestKey(row), bk = await readSet(env, "bookings"), mn = await readSet(env, "manual");
+  const rows = bk.rows.filter((x) => guestKey(x) !== key); rows.push(row);
+  rows.sort((x, y) => (x.property || "").localeCompare(y.property || "") || (x.check_in || "").localeCompare(y.check_in || ""));
+  const man = mn.rows.filter((x) => guestKey(x) !== key); if (b.manual && b.manual.guest) man.push(pick(b.manual));
+  await env.DB.batch([writeSet(env, "bookings", rows, istToday()), writeSet(env, "manual", man, istToday())]);
   return json({ok: true});
 }
 
@@ -712,9 +724,10 @@ async function adminApi(req, env, user, path) {
       }
       case "/api/admin/reminders": return json(await docReminders(env));
       case "/api/admin/booking":
-      case "/api/admin/booking/delete": {
+      case "/api/admin/booking/delete":
+      case "/api/admin/booking/restore": {
         const c = await env.DB.prepare("SELECT id, name, grades FROM clients WHERE id = ?").bind(+b.client_id).first(); if (!c) return json({error: "No such client."}, 404);
-        return path.endsWith("/delete") ? cancelBooking(env, c, b) : saveBooking(env, c, b);
+        return path.endsWith("/delete") ? cancelBooking(env, c, b) : path.endsWith("/restore") ? restoreBooking(env, c, b) : saveBooking(env, c, b);
       }
       case "/api/admin/user/reset": {
         const u = await env.DB.prepare("SELECT client_id, role FROM users WHERE email = ?").bind(clean(b.email, 200).toLowerCase()).first();

@@ -205,7 +205,6 @@ if(document.readyState!=='loading')setTimeout(hide,150);else document.addEventLi
   <div id="dHead" class="flex items-start gap-3 p-5 border-b border-zuna-100"><div class="min-w-0"><h3 id="dTitle" class="text-lg font-bold">—</h3><p id="dSub" class="text-xs text-zuna-500"></p></div><button id="dClose" class="iconbtn ml-auto" aria-label="Close"><i data-i="x" class="w-4 h-4"></i></button></div>
   <div id="dBody" class="p-5 overflow-y-auto space-y-5"></div>
 </aside>
-<div id="toast" role="status" aria-live="polite" class="fixed bottom-6 left-1/2 -translate-x-1/2 translate-y-4 opacity-0 transition-all z-[70] bg-zuna-900 text-white text-sm font-semibold px-4 py-2.5 rounded-xl shadow-xl flex items-center gap-2"><span class="w-2 h-2 rounded-full bg-mint-500"></span><span id="toastText"></span></div>
 
 <!-- Tailwind component classes (kept here so the build sees them) -->
 <template id="tw-safelist"><div class="navbtn rangebtn card card-h card-t card-s btn btn-primary iconbtn th badge"></div></template>
@@ -283,7 +282,7 @@ const nightsInRange = () => { const [a, b] = rangeBounds(); return nightsAll().f
 const rangeLabel = () => { const [a, b] = rangeBounds(); return fShort(a) + ' – ' + fLong(b); };
 
 /* ---------- toast / drawer ---------- */
-let tt; const toast = (m) => { const t = $('#toast'); $('#toastText').textContent = m; t.classList.remove('opacity-0', 'translate-y-4'); clearTimeout(tt); tt = setTimeout(() => t.classList.add('opacity-0', 'translate-y-4'), 2200); };
+const toast = (m, o) => ZUI.toast(m, o);
 const openDrawer = (title, sub, body) => {
   closeDrawer.from = document.activeElement; $('#drawer').inert = false;
   $('#dTitle').textContent = title; $('#dSub').textContent = sub || ''; $('#dBody').replaceChildren(body);
@@ -294,8 +293,8 @@ const closeDrawer = () => { $('#drawer').classList.add('translate-x-full'); $('#
 $('#dClose').onclick = closeDrawer; $('#scrim').onclick = closeDrawer;
 document.addEventListener('keydown', (e) => { if (e.key === 'Escape') closeDrawer(); });
 
-const BADGE = {Upcoming: 'bg-mint-50 text-mint-700 ring-mint-200', 'In house': 'bg-mint-500 text-zuna-900 ring-mint-500', Completed: 'bg-zuna-50 text-zuna-500 ring-zuna-100', 'Not accommodated': 'bg-rose-50 text-rose-700 ring-rose-200'};
-const badge = (s) => h('span', 'badge ' + (BADGE[s] || BADGE.Completed), s);
+const BADGE = {Upcoming: '', 'In house': 'zchip-live', Completed: 'zchip-muted', 'Not accommodated': 'zchip-bad'};
+const badge = (s) => h('span', 'zchip ' + (s in BADGE ? BADGE[s] : 'zchip-muted'), s);
 const genderTag = (g) => h('span', 'inline-flex items-center rounded-md px-2 py-0.5 text-xs font-semibold ring-1 ' + (g === 'Male' ? 'bg-zuna-50 text-zuna-700 ring-zuna-100' : g === 'Female' ? 'bg-mint-50 text-mint-700 ring-mint-200' : 'bg-white text-zuna-400 ring-zuna-100'), g);
 const occTag = (o) => { const t = h('span', 'inline-flex items-center gap-1 rounded-md px-2 py-0.5 text-xs font-semibold ring-1 ' + (o === 'Double' ? 'bg-zuna-900 text-white ring-zuna-900' : 'bg-white text-zuna-700 ring-zuna-100')); t.appendChild(icon(o === 'Double' ? 'users' : 'user-round', 'w-3.5 h-3.5')); t.appendChild(document.createTextNode(o)); return t; };
 const warnIcon = (title, cls = 'w-4 h-4') => { const s = h('span', 'inline-grid place-items-center text-rose-600 shrink-0'); s.appendChild(icon('triangle-alert', cls)); s.title = title; s.setAttribute('role', 'img'); s.setAttribute('aria-label', title); return s; };
@@ -678,8 +677,10 @@ const renderHouses = () => {
         const ns = nightsFor(p.property), av = ns.reduce((t, x) => t + x.total, 0), so = ns.reduce((t, x) => t + x.booked, 0);
         const tn = ns.find((x) => x.night === today), up = bookings.filter((b) => b.property === p.property && b.status === 'Confirmed' && b.check_in > today).length;
         const g = h('div', 'mx-5 grid grid-cols-3 rounded-xl bg-zuna-50 ring-1 ring-zuna-100 divide-x divide-zuna-100');
-        [[av ? Math.round(so / av * 100) + '%' : '—', 'Occupancy'], [tn ? tn.vacant + ' of ' + tn.total : (p.rooms || '—'), 'Free tonight'], [up, 'Upcoming stays']].forEach(([v, l]) => {
-          const cell = h('div', 'px-3 py-2.5 text-center'); cell.appendChild(h('p', 'text-lg font-bold tabular-nums leading-tight', String(v))); cell.appendChild(h('p', 'text-[11px] font-medium text-zuna-500', l)); g.appendChild(cell); });
+        [[av ? Math.round(so / av * 100) + '%' : '—', 'Occupancy'], [tn ? tn.vacant + ' of ' + tn.total : (p.rooms || '—'), 'Free tonight'], [up, 'Upcoming stays']].forEach(([v, l], k) => {
+          const cell = h('div', 'px-3 py-2.5 text-center flex flex-col items-center justify-center');
+          if (k === 0 && av) { const gg = ZUI.gauge(so / av * 100, 46, p.property + ' occupancy'); gg.classList.add('mb-0.5'); cell.appendChild(gg); } else cell.appendChild(h('p', 'text-lg font-bold tabular-nums leading-tight', String(v)));
+          cell.appendChild(h('p', 'text-[11px] font-medium text-zuna-500', l)); g.appendChild(cell); });
         c.appendChild(g);
       } else {
         const g = h('div', 'mx-5 flex items-center gap-2 rounded-xl bg-zuna-50/70 ring-1 ring-dashed ring-zuna-100 px-3 py-2.5 text-xs text-zuna-500');
@@ -739,7 +740,7 @@ const renderHouses = () => {
       if (hasCt || live) c.appendChild(ft); else c.appendChild(h('div', 'mt-auto'));
       grid.appendChild(c); ZUI.tilt(c, 3);
     });
-    sec.appendChild(grid); box.appendChild(sec);
+    sec.appendChild(grid); const dots = ZUI.carousel(grid); if (dots) sec.appendChild(dots); box.appendChild(sec);
   });
 };
 
@@ -803,11 +804,15 @@ const render = () => {
   $$('#rangeWrap button').forEach((b) => b.toggleAttribute('data-active', b.dataset.range === state.range));
   $('#navCount').textContent = myB().length;
   ({overview: renderOverview, rack: renderRack, calendar: renderCal, bookings: renderBookings, houses: renderHouses, users: () => renderUsersView()})[state.view]();
+  const k = [state.view, state.prop, state.range, state.cfrom, state.cto].join('|');   // cards rise in only when what is shown changes, not on every repaint
+  if (k !== render.k) { render.k = k; ZUI.stagger(document.querySelector('.view[data-view="' + state.view + '"]')); }
 };
+// switching range or guest house: card shapes shimmer for a moment, then the new numbers rise in
+const reRender = () => ZUI.shimmer(document.querySelector('.view[data-view="' + state.view + '"]'), 300).then(render);
 const closeSide = () => { $('#side').classList.add('-translate-x-full'); $('#scrimSide').classList.add('hidden'); };
 const go = (v) => { state.view = v; try { history.replaceState(null, '', '#' + v); } catch (e) {} closeSide(); render(); window.scrollTo({top: 0, behavior: 'smooth'}); };
 $$('#nav button').forEach((b) => b.onclick = () => go(b.dataset.view));
-$$('#rangeWrap button').forEach((b) => { if (b.dataset.range !== 'custom') b.onclick = () => { state.range = b.dataset.range; save(); closeRange(); render(); }; });
+$$('#rangeWrap button').forEach((b) => { if (b.dataset.range !== 'custom') b.onclick = () => { if (state.range === b.dataset.range) return; state.range = b.dataset.range; save(); closeRange(); $$('#rangeWrap button').forEach((x) => x.toggleAttribute('data-active', x === b)); reRender(); }; });
 // custom date range: From–To, with quick picks for whole weeks (Mon–Sun, as in the weekly GH report)
 const monday = (d) => { const x = D(d), w = (x.getUTCDay() + 6) % 7; return addDays(d, -w); };
 function closeRange() { $('#rangePop').classList.add('hidden'); $('#rangeCustom').setAttribute('aria-expanded', 'false'); }
@@ -820,12 +825,12 @@ $('#rangeCustom').onclick = (e) => { e.stopPropagation(); $('#rangePop').classLi
 $('#rCancel').onclick = closeRange;
 $('#rApply').onclick = () => { const f = $('#rFrom').value, t = $('#rTo').value, er = $('#rErr');
   if (!f || !t || t < f) { er.textContent = !f || !t ? 'Choose both dates.' : 'The end date must be on or after the start date.'; er.classList.remove('hidden'); return; }
-  state.range = 'custom'; state.cfrom = f; state.cto = t; state.calMonth = null; save(); closeRange(); render(); toast('Showing ' + fShort(f) + ' – ' + fShort(t)); };
+  state.range = 'custom'; state.cfrom = f; state.cto = t; state.calMonth = null; save(); closeRange(); reRender(); toast('Showing ' + fShort(f) + ' – ' + fShort(t)); };
 document.addEventListener('mousedown', (e) => { if (!$('#rangePop').classList.contains('hidden') && !e.target.closest('#rangeBox, .zcal')) closeRange(); });
 document.addEventListener('keydown', (e) => { if (e.key === 'Escape' && !$('#rangePop').classList.contains('hidden')) closeRange(); });
 const sel = $('#propSel');
 props.forEach((p) => { const o = new Option(p.property + (p.status === 'Live' ? '' : ' (soon)'), p.property); o.disabled = p.status !== 'Live'; sel.appendChild(o); });
-sel.value = state.prop; sel.onchange = () => { state.prop = sel.value; state.calMonth = null; render(); toast('Showing ' + sel.value); };
+sel.value = state.prop; sel.onchange = () => { state.prop = sel.value; state.calMonth = null; reRender(); toast('Showing ' + sel.value); };
 $('#menuBtn').onclick = () => { $('#side').classList.remove('-translate-x-full'); $('#scrimSide').classList.remove('hidden'); };
 $('#scrimSide').onclick = closeSide;
 if ($('#updated')) $('#updated').textContent = fLong(REPORT_DATE);
@@ -966,6 +971,8 @@ const openWeekly = (onGo) => {
   openDrawer(ghReportName(), 'Daily, weekly, monthly or any dates', w); pick(mode); syncGo();
 };
 $$('[data-ghname]').forEach((e) => { e.textContent = ghReportName(); });
+ZUI.magnetic();
+ZUI.pullRefresh(() => new Promise(() => { location.reload(); }));
 window.__ltm = {openWeekly, props, ghReportName, P, myB, nightsAll, period, stateOf, fDay, fShort, fLong, toast, today, rangeBounds, inRange: (b) => { const [a, z] = rangeBounds(); return state.range === 'all' || (b.check_in <= z && b.check_out > a); }, rangeText: () => rangeLabel(), rackGrid, cleanName, client: DATA.client || null, addDays, monday};
 })();
 </script>

@@ -76,7 +76,6 @@ html.dark .sw{background:#3a2c8a}html.dark #acctMenu{background:#150c45;color:#e
     </div>
   </div>
 </div>
-<div id="toast" role="status" aria-live="polite" class="fixed bottom-5 left-1/2 -translate-x-1/2 z-[60] rounded-xl bg-zuna-900 text-white text-sm font-semibold px-4 py-2.5 shadow-xl opacity-0 translate-y-3 transition-all pointer-events-none"></div>
 
 <script>
 /*__UIKIT__*/
@@ -101,7 +100,7 @@ if (CLIENT_MODE) { tab = 'users'; document.title = 'Users & access · Zuna Stays
   document.addEventListener('click', (e) => { if (!menu.contains(e.target)) set(false); });
   const ti = $('#themeItem'), tsync = () => ti.setAttribute('aria-checked', ZUI.theme.get() === 'dark' ? 'true' : 'false');
   ti.onclick = (e) => { e.stopPropagation(); ZUI.theme.set(ZUI.theme.get() === 'dark' ? 'light' : 'dark'); tsync(); }; tsync(); document.addEventListener('keydown', (e) => { if (e.key === 'Escape') set(false); }); }
-const toast = (m, bad) => { const t = $('#toast'); t.textContent = m; t.style.background = bad ? '#be123c' : '#12005A'; t.classList.remove('opacity-0', 'translate-y-3'); clearTimeout(toast.t); toast.t = setTimeout(() => t.classList.add('opacity-0', 'translate-y-3'), 2600); };
+const toast = (m, bad) => ZUI.toast(m, typeof bad === 'object' ? bad : {tone: bad ? 'error' : ''});
 // signed out elsewhere or session timed out: say so and offer to sign in again
 const sessionExpired = () => { if (sessionExpired.open) return; sessionExpired.open = true;
   ZUI.confirm({title: 'Your session has expired', message: ['For your security you have been signed out.', 'Please sign in again to continue. Unsaved changes on this page will be lost.'], ok: 'Sign in again', cancel: 'Stay on this page', tone: 'warn', icon: 'M5 11h14a2 2 0 0 1 2 2v7a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-7a2 2 0 0 1 2-2zM7 11V7a5 5 0 0 1 10 0v4'})
@@ -396,7 +395,8 @@ const renderBookings = (D, c) => {
   bar.append(q, gsel, wsel, add); D.appendChild(bar);
   const info = h('p', 'text-sm text-zuna-500 mb-2'); D.appendChild(info);
   const cancel = async (b) => { if (!(await ZUI.confirm({title: 'Cancel this stay?', message: [b.guest + ' · ' + b.property, fD(b.check_in) + ' → ' + fD(b.check_out) + '. It is removed from the client dashboard.'], ok: 'Cancel stay', cancel: 'Keep booking', tone: 'danger', hold: true, icon: 'M8 2v4M16 2v4M3 10h18M5 4h14a2 2 0 0 1 2 2v14a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2V6a2 2 0 0 1 2-2zM10 14l4 4M14 14l-4 4'}))) return;
-    try { await api('booking/delete', {client_id: c.id, guest: b.guest, check_in: b.check_in}); toast('Booking cancelled'); load(true); } catch (er) { toast(er.message, true); } };
+    try { const r = await api('booking/delete', {client_id: c.id, guest: b.guest, check_in: b.check_in}); load(true);
+      toast('Stay cancelled · ' + b.guest, {undo: r.undo ? async () => { try { await api('booking/restore', Object.assign({client_id: c.id}, r.undo)); toast('Booking restored · ' + b.guest); load(true); } catch (er) { toast(er.message, true); } } : null}); } catch (er) { toast(er.message, true); } };
   const nameKey = (b) => b.guest.replace(/^(mr|ms|mrs|dr)\.?\s+/i, '').toLowerCase();
   const cols = [
     {k: 'guest', label: 'Guest', sort: nameKey, render: (b) => { const sub = h('p', 'text-xs text-zuna-500 mt-0.5 flex items-center gap-1.5 whitespace-nowrap'); sub.appendChild(document.createTextNode(['Grade ' + (b.grade || '—'), b.base, b.concur_tr].filter((x) => x && x !== 'Not stated').join(' · ')));
@@ -404,7 +404,7 @@ const renderBookings = (D, c) => {
     {k: 'gh', label: 'Guest house · Room', sort: (b) => b.property + ' ' + b.room, render: (b) => [h('p', 'font-medium whitespace-nowrap', b.property), h('p', 'text-xs ' + (b.room === 'Not assigned' ? 'text-amber-700' : 'text-zuna-500'), b.status === 'Confirmed' ? 'Room ' + b.room : '—')]},
     {k: 'stay', label: 'Stay', td: 'whitespace-nowrap', sort: (b) => b.check_in + b.check_out, render: (b) => [h('p', 'font-medium', fD(b.check_in) + ' → ' + fD(b.check_out)), h('p', 'text-xs text-zuna-500', b.nights + (b.nights === '1' ? ' night' : ' nights') + (b.check_in <= TODAY && b.check_out > TODAY ? ' · in house' : ''))]},
     {k: 'occ', label: 'Occupancy', sort: (b) => b.occupancy, render: (b) => [h('p', null, b.occupancy || '—'), h('p', 'text-xs text-zuna-500', b.gender && b.gender !== 'Not stated' ? b.gender : '')]},
-    {k: 'status', label: 'Status', sort: (b) => b.status, render: (b) => b.status === 'Confirmed' ? badge('Confirmed', 'bg-mint-50 text-mint-700 ring-1 ring-mint-200') : badge(b.status, 'bg-amber-50 text-amber-800 ring-1 ring-amber-200')},
+    {k: 'status', label: 'Status', sort: (b) => b.status, render: (b) => h('span', 'zchip ' + (b.status === 'Confirmed' ? '' : /cancel/i.test(b.status) ? 'zchip-bad' : 'zchip-warn'), b.status)},
     {k: 'act', label: '', actions: true, render: (b) => { const g = h('div', 'flex gap-1.5 whitespace-nowrap');
       const ibn = (ic, label, cls, fn) => { const x = h('button', 'iconbtn !w-8 !h-8 ' + (cls || '')); x.type = 'button'; x.title = label; x.setAttribute('aria-label', label + ': ' + b.guest); x.appendChild(icon(ic, 'w-4 h-4')); x.onclick = fn; return x; };
       g.append(ibn('pencil', 'Edit booking', 'text-zuna-700', () => editBooking(c, b)), ibn('circle-x', 'Cancel stay', 'text-rose-600 hover:!ring-rose-300', () => cancel(b))); return g; }}];
@@ -471,10 +471,11 @@ const editBooking = (c, b) => {
 // ---------- guest house documents ----------
 const DOC_TYPES = ['Lease agreement', 'Service agreement', 'Trade licence', 'Fire NOC', 'Police verification', 'FSSAI licence', 'GST registration', 'Insurance', 'Property tax receipt', 'Other'];
 const docChip = (d) => { const n = d.days_left;
-  if (d.state === 'none') return badge('No expiry', 'bg-zuna-50 text-zuna-500 ring-1 ring-zuna-100');
-  if (d.state === 'expired') return badge('Expired ' + fD(d.expires), 'bg-rose-50 text-rose-700 ring-1 ring-rose-200');
-  if (d.state === 'expiring') return badge(n === 0 ? 'Expires today' : 'Expires in ' + n + (n === 1 ? ' day' : ' days'), 'bg-amber-50 text-amber-800 ring-1 ring-amber-200');
-  return badge('Valid till ' + fD(d.expires), 'bg-mint-50 text-mint-700 ring-1 ring-mint-200'); };
+  const chip = (t, k) => h('span', 'zchip ' + k, t);
+  if (d.state === 'none') return chip('No expiry', 'zchip-muted');
+  if (d.state === 'expired') return chip('Expired ' + fD(d.expires), 'zchip-bad');
+  if (d.state === 'expiring') return chip(n === 0 ? 'Expires today' : 'Expires in ' + n + (n === 1 ? ' day' : ' days'), 'zchip-warn');
+  return chip('Valid till ' + fD(d.expires), ''); };
 const readFile = (file) => new Promise((res, rej) => { if (file.type === 'application/pdf') { const fr = new FileReader(); fr.onerror = rej; fr.onload = () => res(fr.result); fr.readAsDataURL(file); } else toDataUrl(file, 2000, false).then(res, rej); });
 const docSection = (sec, c, x) => {
   const list = h('div', 'rounded-xl ring-1 ring-zuna-100 divide-y divide-zuna-50 overflow-hidden'); sec.appendChild(list);
@@ -564,6 +565,7 @@ if ($('#newClient')) $('#newClient').onclick = () => { const f = h('div', 'space
 
 const INIT = __STATE__;
 if (INIT && INIT.clients) { S = INIT; cur = (S.clients[0] || {}).id || null; render(); } else load().catch((e) => { $('#detail').replaceChildren(h('div', 'card p-10 text-center text-sm text-rose-700', e.message)); });
+ZUI.magnetic(); ZUI.pullRefresh(() => load(true));
 })();
 </script>
 </body>

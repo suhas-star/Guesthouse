@@ -169,6 +169,11 @@ check('old host redirects to PRIMARY_HOST', r.status === 301 && r.headers.get('l
   x = await A('booking/delete', {client_id: acme, guest: 'Neha Iyer', check_in: '2026-11-04'});
   brow = JSON.parse(DB.raw.prepare("SELECT json FROM datasets WHERE id = 'bookings'").get().json); mrow = JSON.parse(DB.raw.prepare("SELECT json FROM datasets WHERE id = 'manual'").get().json);
   check('cancel removes the booking and records the cancellation', x.status === 200 && !brow.some((b) => /Neha Iyer/.test(b.guest)) && mrow.filter((m) => /Neha Iyer/.test(m.guest)).every((m) => m.status === 'Cancelled'));
+  { const u = x.j.undo; x = await A('booking/restore', Object.assign({client_id: acme}, u));
+    brow = JSON.parse(DB.raw.prepare("SELECT json FROM datasets WHERE id = 'bookings'").get().json); mrow = JSON.parse(DB.raw.prepare("SELECT json FROM datasets WHERE id = 'manual'").get().json);
+    check('undo puts the cancelled stay back exactly, with its manual entry', x.status === 200 && brow.some((b) => /Neha Iyer/.test(b.guest) && b.check_in === '2026-11-04') && mrow.some((m) => /Neha Iyer/.test(m.guest) && m.check_in === '2026-11-04' && m.status === 'Confirmed'));
+    x = await A('booking/restore', {client_id: acme, row: Object.assign({}, u.row, {property: 'Other House'})}); check("undo can't move a stay to another client's guest house", x.status === 400);
+    await A('booking/delete', {client_id: acme, guest: 'Neha Iyer', check_in: '2026-11-04'}); }
   x = await A('client', {id: acme, name: 'Acme', legal_name: 'Acme Industries Limited', grades: ['E1', 'E2']});
   { const pg = await (await call('/', {cookie: asha})).text(); const dd = JSON.parse(pg.match(/window\.__LTMGH_DATA = (.*?);\nconst REPORT_DATE/s)[1]);
     check('client company name (for the GH Report) reaches the dashboard', dd.client.legal_name === 'Acme Industries Limited'); }

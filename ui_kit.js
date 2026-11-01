@@ -353,5 +353,58 @@ html.dark .zc-list{background:rgba(245,158,11,.13);color:#fcd34d;box-shadow:inse
     card.addEventListener('mousemove', (e) => { const r = card.getBoundingClientRect(), x = (e.clientX - r.left) / r.width, y = (e.clientY - r.top) / r.height; cancelAnimationFrame(raf);
       raf = requestAnimationFrame(() => { card.style.transition = 'transform .08s ease-out, box-shadow .2s'; card.style.transform = 'perspective(900px) rotateX(' + ((.5 - y) * max).toFixed(2) + 'deg) rotateY(' + ((x - .5) * max).toFixed(2) + 'deg) translateY(-2px)'; card.style.setProperty('--mx', (x * 100).toFixed(1) + '%'); card.style.setProperty('--my', (y * 100).toFixed(1) + '%'); }); });
     card.addEventListener('mouseleave', () => { cancelAnimationFrame(raf); card.style.transition = 'transform .35s ease, box-shadow .2s'; card.style.transform = ''; }); }
-  return {show, close, key, isOpen, select, auto, noFill, chevron, art, confirm, clickables, busy, theme, celebrate, tilt};
+
+  const calm = () => matchMedia('(prefers-reduced-motion: reduce)').matches;
+  // toasts: slide in from the top with a draining timer bar; optional Undo
+  let tBox; function toast(msg, o = {}) { if (typeof o === 'boolean') o = {tone: o ? 'error' : ''};
+    if (!tBox) { tBox = el('div', 'zt-box'); tBox.setAttribute('aria-live', 'polite'); tBox.setAttribute('role', 'status'); document.body.appendChild(tBox); }
+    const ms = o.ms || (o.undo ? 6000 : o.tone === 'error' ? 4500 : 2800), t = el('div', 'zt ' + (o.tone === 'error' ? 'zt-bad' : ''));
+    const ic = el('span', 'zt-ic', o.tone === 'error' ? '!' : '✓'); ic.setAttribute('aria-hidden', 'true'); t.appendChild(ic); t.appendChild(el('span', 'zt-msg', msg));
+    let timer; const close = () => { if (t._out) return; t._out = 1; clearTimeout(timer); t.classList.add('zt-out'); setTimeout(() => t.remove(), 260); };
+    if (o.undo) { const u = el('button', 'zt-undo', 'Undo'); u.type = 'button'; u.onclick = () => { close(); o.undo(); }; t.appendChild(u); }
+    const bar = el('span', 'zt-bar'); bar.style.animationDuration = ms + 'ms'; t.appendChild(bar);
+    t.addEventListener('mouseenter', () => { clearTimeout(timer); bar.style.animationPlayState = 'paused'; });
+    t.addEventListener('mouseleave', () => { bar.style.animationPlayState = ''; timer = setTimeout(close, 1200); });
+    while (tBox.children.length > 2) tBox.lastChild.remove();
+    tBox.prepend(t); timer = setTimeout(close, ms); return close; }
+  // occupancy ring that fills up and counts to its value
+  function gauge(p, size = 48, label) { p = Math.max(0, Math.min(100, Math.round(p || 0))); const w = el('span', 'zg' + (p > 90 ? ' zg-warn' : '')); w.style.width = w.style.height = size + 'px';
+    const r = 15.5, C = 2 * Math.PI * r, s = document.createElementNS(NS, 'svg'); s.setAttribute('viewBox', '0 0 36 36'); s.setAttribute('aria-hidden', 'true');
+    s.innerHTML = '<circle class="zg-t" cx="18" cy="18" r="' + r + '" fill="none" stroke-width="4"/><circle class="zg-v" cx="18" cy="18" r="' + r + '" fill="none" stroke-width="4" stroke-linecap="round" stroke-dasharray="' + C + '" stroke-dashoffset="' + C + '"/>';
+    const n = el('span', 'zg-n', calm() ? p + '%' : '0%'); w.append(s, n); w.setAttribute('role', 'img'); w.setAttribute('aria-label', (label || 'Occupancy') + ' ' + p + '%');
+    const v = s.lastChild, off = C * (1 - p / 100);
+    if (calm()) v.style.strokeDashoffset = off;
+    else { const io = new IntersectionObserver((es) => { if (!es.some((e) => e.isIntersecting)) return; io.disconnect(); const run = () => { v.style.strokeDashoffset = off; const t0 = performance.now();
+        const step = (now) => { const k = Math.min(1, (now - t0) / 1100), e = 1 - Math.pow(1 - k, 3); n.textContent = Math.round(p * e) + '%'; if (k < 1) requestAnimationFrame(step); }; requestAnimationFrame(step); };
+        afterSplash(() => requestAnimationFrame(run)); });
+      io.observe(w); }
+    return w; }
+  const afterSplash = (fn) => { const sp = document.getElementById('splash'); if (!sp || sp.classList.contains('sp-hide')) return fn(); const iv = setInterval(() => { const e = document.getElementById('splash'); if (!e || e.classList.contains('sp-hide')) { clearInterval(iv); fn(); } }, 40); };
+  // cards rise in one after another, 40 ms apart (held until the welcome screen fades so it is seen)
+  function stagger(root, sel = '.card') { if (!root || calm()) return; if (document.getElementById('splash') && !document.getElementById('splash').classList.contains('sp-hide')) { root.style.opacity = '0'; return afterSplash(() => { root.style.opacity = ''; stagger(root, sel); }); } let i = 0;
+    root.querySelectorAll(sel).forEach((c) => { if (c.closest('.z-rise') || !c.offsetParent) return; c.style.setProperty('--zi', Math.min(i++, 14)); c.classList.remove('z-rise'); void c.offsetWidth; c.classList.add('z-rise');
+      c.addEventListener('animationend', () => c.classList.remove('z-rise'), {once: true}); }); }
+  // card shapes with a moving sheen while the next view is prepared
+  function shimmer(root, ms = 320) { return new Promise((res) => { if (!root || calm()) return res(); root.classList.add('z-loading'); root.setAttribute('aria-busy', 'true');
+    setTimeout(() => { root.classList.remove('z-loading'); root.removeAttribute('aria-busy'); res(); }, ms); }); }
+  // primary buttons lean towards a nearby pointer (mouse only)
+  function magnetic(sel = '.btn-primary:not(:disabled), .pop3d:not(:disabled), [data-mag]') { if (!matchMedia('(hover: hover) and (pointer: fine)').matches || calm()) return; let raf = 0, live = [];
+    document.addEventListener('pointermove', (e) => { cancelAnimationFrame(raf); raf = requestAnimationFrame(() => { const R = 90, now = [];
+      document.querySelectorAll(sel).forEach((b) => { const r = b.getBoundingClientRect(); if (!r.width) return; const dx = e.clientX - (r.left + r.width / 2), dy = e.clientY - (r.top + r.height / 2), d = Math.hypot(dx, dy) - Math.max(r.width, r.height) / 2;
+        if (d < R) { const k = (1 - Math.max(0, d) / R) * .22; b.style.translate = (dx * k).toFixed(1) + 'px ' + (dy * k * 1.3).toFixed(1) + 'px'; b.classList.add('z-mag'); now.push(b); } });
+      live.forEach((b) => { if (!now.includes(b)) b.style.translate = ''; }); live = now; }); }, {passive: true}); }
+  // phones: a grid becomes a swipe row that snaps, with dots underneath
+  function carousel(grid) { grid.classList.add('z-car'); const dots = el('div', 'z-dots'); dots.setAttribute('aria-hidden', 'true'); const n = grid.children.length; if (n < 2) return null;
+    for (let i = 0; i < n; i++) dots.appendChild(el('i', i ? '' : 'on'));
+    const sync = () => { const kids = [...grid.children], mid = grid.scrollLeft + grid.clientWidth / 2; let best = 0, bd = 1e9; kids.forEach((k, i) => { const d = Math.abs(k.offsetLeft + k.offsetWidth / 2 - mid); if (d < bd) { bd = d; best = i; } });
+      [...dots.children].forEach((d, i) => d.classList.toggle('on', i === best)); };
+    let raf = 0; grid.addEventListener('scroll', () => { cancelAnimationFrame(raf); raf = requestAnimationFrame(sync); }, {passive: true}); return dots; }
+  // phones: pull the page down from the top to reload
+  function pullRefresh(fn) { if (!matchMedia('(pointer: coarse)').matches) return; const ind = el('div', 'zp-ind'); ind.innerHTML = '<svg viewBox="0 0 24 24" fill="none" stroke-width="2.6" stroke-linecap="round" aria-hidden="true"><path d="M12 3a9 9 0 1 1-8.5 6" stroke="#12005A"/><path d="M12 3a9 9 0 0 1 9 9" stroke="#02C988"/></svg>';
+    ind.setAttribute('role', 'status'); ind.setAttribute('aria-label', 'Refreshing'); document.body.appendChild(ind); let y0 = null, x0 = 0, dy = 0, busyR = false;
+    const set = (d, anim) => { ind.style.transition = anim ? 'transform .3s cubic-bezier(.2,.8,.2,1), opacity .3s' : 'none'; ind.style.transform = 'translate(-50%,' + (Math.min(d, 80) - 56) + 'px) rotate(' + d * 3 + 'deg)'; ind.style.opacity = Math.min(1, d / 50); };
+    addEventListener('touchstart', (e) => { if (busyR || scrollY > 0 || e.touches.length > 1 || e.target.closest('[role=dialog],.z-car,#drawer,#side,.zcal,input,textarea,select')) { y0 = null; return; } y0 = e.touches[0].clientY; x0 = e.touches[0].clientX; dy = 0; }, {passive: true});
+    addEventListener('touchmove', (e) => { if (y0 == null) return; const t = e.touches[0]; dy = (t.clientY - y0) * .5; if (dy <= 0 || Math.abs(t.clientX - x0) > Math.abs(t.clientY - y0)) { if (dy <= 0) set(0); return; } if (scrollY > 0) { y0 = null; set(0, true); return; } e.preventDefault(); set(Math.min(dy, 110)); }, {passive: false});
+    addEventListener('touchend', async () => { if (y0 == null) return; y0 = null; if (dy > 64) { busyR = true; set(64, true); ind.classList.add('zp-spin'); try { await fn(); } finally { ind.classList.remove('zp-spin'); set(0, true); busyR = false; } } else set(0, true); dy = 0; }); }
+  return {show, close, key, isOpen, select, auto, noFill, chevron, art, confirm, clickables, busy, theme, celebrate, tilt, toast, gauge, stagger, shimmer, magnetic, carousel, pullRefresh};
 })();

@@ -28,7 +28,28 @@ const ZUI = (() => {
 @keyframes zdSpin{to{transform:rotate(360deg)}}
 .zd-cwrap{position:relative}.zd-cwrap>input{padding-right:2.25rem}
 .zd-cwrap>.zd-chev{position:absolute;right:.75rem;top:50%;margin-top:-8px;cursor:pointer}
-@media (prefers-reduced-motion:reduce){.zd-panel{animation:none}}`;
+@media (prefers-reduced-motion:reduce){.zd-panel{animation:none}}
+.zc-ov{position:fixed;inset:0;z-index:2000;display:grid;place-items:center;padding:16px;background:rgba(18,0,90,.42);backdrop-filter:blur(3px);animation:zcFade .15s ease-out}
+.zc-card{width:100%;max-width:440px;background:#fff;border-radius:20px;box-shadow:0 30px 70px -20px rgba(18,0,90,.5),0 0 0 1px rgba(18,0,90,.06);overflow:hidden;animation:zcPop .18s cubic-bezier(.2,.8,.2,1);font-family:inherit;color:#12005A}
+.zc-body{display:flex;gap:16px;padding:24px 24px 20px}
+.zc-ic{flex-shrink:0;width:44px;height:44px;border-radius:14px;display:grid;place-items:center}
+.zc-ic svg{width:22px;height:22px}
+.zc-ic.primary{background:#e6faf3;color:#019b69}.zc-ic.danger{background:#fff1f2;color:#e11d48}.zc-ic.warn{background:#fffbeb;color:#d97706}
+.zc-t{margin:2px 0 6px;font-size:17px;font-weight:700;line-height:1.3}
+.zc-m{margin:0;font-size:14px;line-height:1.55;color:#5d5887}
+.zc-m+.zc-m{margin-top:6px}
+.zc-list{margin:10px 0 0;padding:10px 12px;border-radius:12px;background:#fffbeb;box-shadow:inset 0 0 0 1px #fde68a;font-size:13px;line-height:1.5;color:#92400e;list-style:none}
+.zc-list li+li{margin-top:6px}
+.zc-foot{display:flex;justify-content:flex-end;gap:8px;padding:14px 20px;background:#f8f7fd;border-top:1px solid #eeeaf9}
+.zc-b{height:38px;padding:0 16px;border-radius:11px;font-size:14px;font-weight:600;cursor:pointer;border:0;transition:background .15s,box-shadow .15s,transform .05s}
+.zc-b:active{transform:translateY(1px)}
+.zc-b:focus-visible{outline:none;box-shadow:0 0 0 3px rgba(2,201,136,.45)}
+.zc-cancel{background:#fff;color:#12005A;box-shadow:inset 0 0 0 1px #e1dcf4}.zc-cancel:hover{background:#f4f2fc}
+.zc-ok.primary{background:#12005A;color:#fff}.zc-ok.primary:hover{background:#24127a}
+.zc-ok.danger{background:#e11d48;color:#fff}.zc-ok.danger:hover{background:#be123c}
+.zc-ok.warn{background:#12005A;color:#fff}.zc-ok.warn:hover{background:#24127a}
+@keyframes zcFade{from{opacity:0}to{opacity:1}}@keyframes zcPop{from{opacity:0;transform:translateY(8px) scale(.97)}to{opacity:1;transform:none}}
+@media (prefers-reduced-motion:reduce){.zc-ov,.zc-card{animation:none}}`;
   document.head.appendChild(st);
   const NS = 'http://www.w3.org/2000/svg';
   const svgIcon = (cls, d) => { const s = document.createElementNS(NS, 'svg'); s.setAttribute('viewBox', '0 0 24 24'); s.setAttribute('fill', 'none'); s.setAttribute('stroke', 'currentColor'); s.setAttribute('stroke-width', '2.5'); s.setAttribute('stroke-linecap', 'round'); s.setAttribute('stroke-linejoin', 'round'); s.setAttribute('class', cls); s.setAttribute('aria-hidden', 'true'); const p = document.createElementNS(NS, 'path'); p.setAttribute('d', d); s.appendChild(p); return s; };
@@ -157,5 +178,21 @@ const ZUI = (() => {
 <rect x="430" y="150" width="14" height="82" rx="7" fill="#cdc5ec"/><circle cx="437" cy="140" r="22" fill="#02C988" opacity=".8"/><circle cx="426" cy="124" r="14" fill="#25d79c"/></svg>`);
   // image with fallback art; `kind` = 'gh' | 'room'
   const art = {gh: ghArt, room: roomArt};
-  return {show, close, key, isOpen, select, auto, noFill, chevron, art};
+  // branded confirmation dialog: await ZUI.confirm({title, message, items, ok, tone: 'primary' | 'danger' | 'warn'})
+  const ICON = {primary: 'M9 12l2 2 4-4M12 22a10 10 0 1 0 0-20 10 10 0 0 0 0 20z', danger: 'M3 6h18M8 6V4a2 2 0 0 1 2-2h4a2 2 0 0 1 2 2v2m3 0v14a2 2 0 0 1-2 2H7a2 2 0 0 1-2-2V6', warn: 'M12 9v4m0 4h.01M10.3 3.9 1.8 18a2 2 0 0 0 1.7 3h17a2 2 0 0 0 1.7-3L13.7 3.9a2 2 0 0 0-3.4 0z'};
+  function confirm(o) { return new Promise((res) => {
+    const tone = o.tone || 'primary', prev = document.activeElement;
+    const ov = el('div', 'zc-ov'); ov.setAttribute('role', 'alertdialog'); ov.setAttribute('aria-modal', 'true');
+    const card = el('div', 'zc-card'), body = el('div', 'zc-body'), ic = el('div', 'zc-ic ' + tone); ic.appendChild(svgIcon('', o.icon || ICON[tone])); ic.firstChild.setAttribute('stroke-width', '2');
+    const tx = el('div'); const t = el('p', 'zc-t', o.title || 'Are you sure?'); t.id = 'zc-t' + Date.now(); ov.setAttribute('aria-labelledby', t.id); tx.appendChild(t);
+    [].concat(o.message || []).forEach((m) => tx.appendChild(el('p', 'zc-m', m)));
+    if (o.items && o.items.length) { const ul = el('ul', 'zc-list'); o.items.forEach((m) => ul.appendChild(el('li', null, '⚠ ' + m))); tx.appendChild(ul); }
+    body.append(ic, tx); const foot = el('div', 'zc-foot');
+    const no = el('button', 'zc-b zc-cancel', o.cancel || 'Cancel'), yes = el('button', 'zc-b zc-ok ' + tone, o.ok || 'Confirm'); no.type = yes.type = 'button'; foot.append(no, yes);
+    card.append(body, foot); ov.appendChild(card); document.body.appendChild(ov);
+    const done = (v) => { document.removeEventListener('keydown', kd, true); ov.remove(); if (prev && prev.focus) prev.focus(); res(v); };
+    const kd = (e) => { if (e.key === 'Escape') { e.preventDefault(); e.stopPropagation(); done(false); } else if (e.key === 'Tab') { e.preventDefault(); (document.activeElement === yes ? no : yes).focus(); } };
+    document.addEventListener('keydown', kd, true); no.onclick = () => done(false); yes.onclick = () => done(true); ov.onmousedown = (e) => { if (e.target === ov) done(false); };
+    (tone === 'danger' ? no : yes).focus(); }); }
+  return {show, close, key, isOpen, select, auto, noFill, chevron, art, confirm};
 })();

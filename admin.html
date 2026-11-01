@@ -119,7 +119,7 @@ const gradePicker = (all, on, peers) => { const w = h('div', 'flex flex-wrap ite
   const ng = h('input', 'w-28 rounded-lg px-2 py-1 text-xs ring-1 ring-zuna-100 outline-none focus:ring-2 focus:ring-mint-500'); ng.placeholder = '+ Add grade'; ZUI.noFill(ng);
   const addG = () => { ng.value.split(',').map((g) => g.trim()).filter(Boolean).forEach((g) => { if (!all.includes(g)) all.push(g); set.add(g); }); ng.value = ''; peers.forEach((p) => p !== w && p.draw()); draw(); ng.focus(); };
   ng.onkeydown = (e) => { if (e.key === 'Enter' || e.key === ',') { e.preventDefault(); addG(); } }; ng.onblur = () => { if (ng.value.trim()) addG(); };
-  const removeG = (g) => { if (!confirm('Remove grade ' + g + ' from this client\'s grade list? It is taken off every room type in this form.')) return; all.splice(all.indexOf(g), 1); peers.forEach((p) => p.drop(g)); };
+  const removeG = async (g) => { if (!(await ZUI.confirm({title: 'Remove grade ' + g + '?', message: 'It is taken off every room type in this form and removed from the client\'s grade list when you save.', ok: 'Remove grade', tone: 'danger'}))) return; all.splice(all.indexOf(g), 1); peers.forEach((p) => p.drop(g)); };
   const draw = () => { w.replaceChildren(quick); all.forEach((g) => { const c = h('span', 'chip group !pr-1'); if (set.has(g)) c.dataset.on = ''; c.appendChild(h('span', null, g)); c.title = 'Click to ' + (set.has(g) ? 'untick' : 'tick');
       c.onclick = () => { set.has(g) ? set.delete(g) : set.add(g); draw(); };
       const x = h('button', 'ml-0.5 w-4 h-4 grid place-items-center rounded text-[13px] leading-none opacity-50 hover:opacity-100 hover:bg-rose-500 hover:text-white', '×'); x.type = 'button'; x.title = 'Remove grade ' + g; x.setAttribute('aria-label', 'Remove grade ' + g);
@@ -257,7 +257,7 @@ const editGH = (c, x) => {
   if (x.id) { const grid = h('div', 'grid grid-cols-3 sm:grid-cols-4 gap-2');
     (x.photos || []).forEach((p) => { const t = h('div', 'relative group rounded-xl overflow-hidden ring-1 ring-zuna-100 aspect-[4/3]'); const i = h('img', 'w-full h-full object-cover'); i.src = p.url; t.appendChild(i);
       const del = h('button', 'absolute top-1.5 right-1.5 rounded-lg bg-white/90 px-2 py-0.5 text-xs font-bold text-rose-600 opacity-0 group-hover:opacity-100', 'Delete'); del.type = 'button';
-      del.onclick = async () => { if (!confirm('Delete this photo?')) return; try { await api('photo/delete', {id: p.id}); toast('Photo deleted'); await load(true); editGH(C(), C().guesthouses.find((g) => g.id === x.id)); } catch (er) { toast(er.message, true); } }; t.appendChild(del); grid.appendChild(t); });
+      del.onclick = async () => { if (!(await ZUI.confirm({title: 'Delete this photo?', message: 'It is removed from the guest house and the client dashboard.', ok: 'Delete photo', tone: 'danger'}))) return; try { await api('photo/delete', {id: p.id}); toast('Photo deleted'); await load(true); editGH(C(), C().guesthouses.find((g) => g.id === x.id)); } catch (er) { toast(er.message, true); } }; t.appendChild(del); grid.appendChild(t); });
     const up = h('label', 'rounded-xl ring-1 ring-dashed ring-zuna-200 aspect-[4/3] grid place-items-center text-xs font-semibold text-mint-700 cursor-pointer hover:bg-mint-50', '+ Add photos'); const fi = h('input', 'hidden'); fi.type = 'file'; fi.accept = 'image/*'; fi.multiple = true; up.appendChild(fi);
     fi.onchange = async () => { const files = [...fi.files]; for (const [n, file] of files.entries()) { try { toast('Uploading ' + (n + 1) + ' of ' + files.length + '…'); await api('photo', {gh_id: x.id, data_url: await toDataUrl(file, 1600, false)}); } catch (er) { toast(er.message, true); } }
       toast('Photos added'); await load(true); editGH(C(), C().guesthouses.find((g) => g.id === x.id)); };
@@ -270,7 +270,7 @@ const editGH = (c, x) => {
   [['amenities', 'Amenities'], ['inclusions', 'Inclusions'], ['cancellation', 'Cancellation policy'], ['photos', 'Photos'], ['contacts', 'Contacts (POC)']].forEach(([k, l]) => { const e = switchEl(l, (x.show || {})[k] !== false); shows[k] = e.input; sw.appendChild(e); }); s7.appendChild(sw);
   // actions
   const actions = h('div', 'flex items-center gap-2 pt-2 border-t border-zuna-100');
-  if (x.id) { const del = h('button', 'btn text-rose-600', 'Delete guest house'); del.onclick = async () => { if (!confirm('Delete ' + x.property + '? Its photos and contacts are deleted too. Bookings are kept.')) return; try { await api('gh/delete', {id: x.id}); closeModal(); toast('Deleted'); load(true); } catch (er) { toast(er.message, true); } }; actions.appendChild(del); }
+  if (x.id) { const del = h('button', 'btn text-rose-600', 'Delete guest house'); del.onclick = async () => { if (!(await ZUI.confirm({title: 'Delete ' + x.property + '?', message: ['Its room types, photos, contacts and documents are deleted too.', 'Bookings are kept.'], ok: 'Delete guest house', tone: 'danger'}))) return; try { await api('gh/delete', {id: x.id}); closeModal(); toast('Deleted'); load(true); } catch (er) { toast(er.message, true); } }; actions.appendChild(del); }
   const save = h('button', 'ml-auto btn-primary', x.id ? 'Save changes' : 'Create guest house');
   save.onclick = async () => { save.disabled = true; try {
     const show = {}; Object.entries(shows).forEach(([k, v]) => show[k] = v.checked);
@@ -314,7 +314,7 @@ const renderBookings = (D, c) => {
       const ss = h('td', 'px-4 py-3'); ss.appendChild(b.status === 'Confirmed' ? badge('Confirmed', 'bg-mint-50 text-mint-700 ring-1 ring-mint-200') : badge(b.status, 'bg-amber-50 text-amber-800 ring-1 ring-amber-200')); tr.appendChild(ss);
       const ac = h('td', 'px-4 py-3 text-right whitespace-nowrap space-x-2');
       const ed = h('button', 'btn !py-1 !px-2.5 text-xs', 'Edit'); ed.onclick = () => editBooking(c, b);
-      const cx = h('button', 'btn !py-1 !px-2.5 text-xs text-rose-600', 'Cancel'); cx.onclick = async () => { if (!confirm('Cancel the stay of ' + b.guest + ' (' + fD(b.check_in) + ')? It is removed from the client dashboard.')) return;
+      const cx = h('button', 'btn !py-1 !px-2.5 text-xs text-rose-600', 'Cancel'); cx.onclick = async () => { if (!(await ZUI.confirm({title: 'Cancel this stay?', message: [b.guest + ' · ' + b.property, fD(b.check_in) + ' → ' + fD(b.check_out) + '. It is removed from the client dashboard.'], ok: 'Cancel stay', cancel: 'Keep booking', tone: 'danger', icon: 'M8 2v4M16 2v4M3 10h18M5 4h14a2 2 0 0 1 2 2v14a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2V6a2 2 0 0 1 2-2zM10 14l4 4M14 14l-4 4'}))) return;
         try { await api('booking/delete', {client_id: c.id, guest: b.guest, check_in: b.check_in}); toast('Booking cancelled'); load(true); } catch (er) { toast(er.message, true); } };
       ac.append(ed, cx); tr.appendChild(ac); body.appendChild(tr); });
     if (!list.length) { const tr = h('tr'); const td = h('td', 'px-4 py-10 text-center text-zuna-500', c.bookings.length ? 'No bookings match these filters.' : 'No bookings yet.'); td.colSpan = 6; tr.appendChild(td); body.appendChild(tr); }
@@ -365,7 +365,7 @@ const editBooking = (c, b) => {
   const actions = h('div', 'flex items-center gap-2 pt-3 border-t border-zuna-100');
   actions.appendChild(h('p', 'text-xs text-zuna-500', 'Saved bookings show on the client dashboard right away and are kept when bookings are next updated from e-mails and vouchers.'));
   const save = h('button', 'ml-auto btn-primary shrink-0', b ? 'Save changes' : 'Add booking'); actions.appendChild(save); f.appendChild(actions);
-  save.onclick = async () => { const w = check(); if (w.length && !confirm(w.join('\n') + '\n\nSave anyway?')) return; save.disabled = true;
+  save.onclick = async () => { const w = check(); if (w.length && !(await ZUI.confirm({title: 'Save with these warnings?', message: 'Please check before saving:', items: w, ok: 'Save anyway', cancel: 'Go back', tone: 'warn'}))) return; save.disabled = true;
     try { await api('booking', {client_id: c.id, original: b ? {guest: b.guest, check_in: b.check_in} : null, row: {property: gh.value, title: title.value, name: name.value, gender: sexOf(), grade: grade.get(), base: base.get(), check_in: ci.value, check_out: co.value, room: room.value, occupancy: occ.value, status: status.value, concur_tr: tr.value, note: note.value}});
       closeModal(); toast(b ? 'Booking updated' : 'Booking added'); BF.when = co.value > TODAY ? BF.when : 'all'; load(true); } catch (er) { toast(er.message, true); } finally { save.disabled = false; } };
   modal(b ? 'Edit booking · ' + b.guest : 'New booking · ' + c.name, f);
@@ -388,7 +388,7 @@ const docSection = (sec, c, x) => {
     r.appendChild(docChip(d));
     const v = h('a', 'btn !py-1 !px-2.5 text-xs', 'View'); v.href = d.url; v.target = '_blank'; v.rel = 'noopener';
     const e = h('button', 'btn !py-1 !px-2.5 text-xs', 'Edit'); e.type = 'button'; e.onclick = () => form(d);
-    const del = h('button', 'btn !py-1 !px-2.5 text-xs text-rose-600', 'Delete'); del.type = 'button'; del.onclick = async () => { if (!confirm('Delete ' + d.title + '?')) return; try { await api('doc/delete', {id: d.id}); toast('Document deleted'); reopen(); } catch (er) { toast(er.message, true); } };
+    const del = h('button', 'btn !py-1 !px-2.5 text-xs text-rose-600', 'Delete'); del.type = 'button'; del.onclick = async () => { if (!(await ZUI.confirm({title: 'Delete ' + d.title + '?', message: 'The file is removed and the client can no longer open it.', ok: 'Delete document', tone: 'danger'}))) return; try { await api('doc/delete', {id: d.id}); toast('Document deleted'); reopen(); } catch (er) { toast(er.message, true); } };
     r.append(v, e, del); list.appendChild(r); });
   if (!(x.documents || []).length) list.appendChild(h('p', 'px-3 py-4 text-sm text-zuna-500 text-center bg-white', 'No documents yet.'));
   const box = h('div'); sec.appendChild(box);
@@ -430,13 +430,13 @@ const renderUsers = (D, c) => {
     tr.appendChild(h('td', 'px-4 py-3 text-zuna-500 whitespace-nowrap', u.last_login ? new Date(u.last_login).toLocaleString('en-IN', {dateStyle: 'medium', timeStyle: 'short'}) : 'Never'));
     const st = h('td', 'px-4 py-3'); st.appendChild(h('span', 'rounded-full px-2 py-0.5 text-[11px] font-bold ' + (u.active ? 'bg-mint-50 text-mint-700 ring-1 ring-mint-200' : 'bg-zuna-50 text-zuna-500 ring-1 ring-zuna-100'), u.active ? 'Active' : 'Disabled')); tr.appendChild(st);
     const ac = h('td', 'px-4 py-3 text-right whitespace-nowrap space-x-1.5');
-    const rs = h('button', 'btn !py-1 !px-2.5 text-xs', 'Reset password'); rs.onclick = async () => { if (!confirm('Create a new password for ' + u.email + '? The old one stops working.')) return; try { const r = await api('user/reset', {email: u.email}); modal('New password', pwBox(u.email, r.password)); } catch (er) { toast(er.message, true); } };
+    const rs = h('button', 'btn !py-1 !px-2.5 text-xs', 'Reset password'); rs.onclick = async () => { if (!(await ZUI.confirm({title: 'Reset password?', message: ['A new password is created for ' + u.name + ' (' + u.email + ').', 'The old password stops working and they are signed out.'], ok: 'Reset password', tone: 'warn'}))) return; try { const r = await api('user/reset', {email: u.email}); modal('New password', pwBox(u.email, r.password)); } catch (er) { toast(er.message, true); } };
     ac.appendChild(rs);
     if (!me) {
       const to = u.role === 'client_admin' ? 'client' : 'client_admin';
-      const rb = h('button', 'btn !py-1 !px-2.5 text-xs', to === 'client_admin' ? 'Make client admin' : 'Make viewer'); rb.onclick = async () => { if (!confirm((to === 'client_admin' ? 'Let ' + u.name + ' manage ' + c.name + ' users?' : 'Change ' + u.name + ' to view-only?'))) return;
+      const rb = h('button', 'btn !py-1 !px-2.5 text-xs', to === 'client_admin' ? 'Make client admin' : 'Make viewer'); rb.onclick = async () => { if (!(await ZUI.confirm(to === 'client_admin' ? {title: 'Make ' + u.name + ' a client admin?', message: 'They can add users, reset passwords and disable users for ' + c.name + '.', ok: 'Make client admin'} : {title: 'Change ' + u.name + ' to Viewer?', message: 'They keep access to the dashboard but can no longer manage users.', ok: 'Make viewer'}))) return;
         try { await api('user', {email: u.email, name: u.name, active: !!u.active, role: to}); toast('Role updated'); load(true); } catch (er) { toast(er.message, true); } };
-      const tg = h('button', 'btn !py-1 !px-2.5 text-xs ' + (u.active ? 'text-rose-600' : 'text-mint-700'), u.active ? 'Disable' : 'Enable'); tg.onclick = async () => { try { await api('user', {email: u.email, name: u.name, active: !u.active}); toast(u.active ? 'User disabled' : 'User enabled'); load(true); } catch (er) { toast(er.message, true); } };
+      const tg = h('button', 'btn !py-1 !px-2.5 text-xs ' + (u.active ? 'text-rose-600' : 'text-mint-700'), u.active ? 'Disable' : 'Enable'); tg.onclick = async () => { if (u.active && !(await ZUI.confirm({title: 'Disable ' + u.name + '?', message: 'They are signed out and can no longer log in. You can enable them again at any time.', ok: 'Disable user', tone: 'danger', icon: 'M4.9 4.9l14.2 14.2M12 22a10 10 0 1 0 0-20 10 10 0 0 0 0 20z'}))) return; try { await api('user', {email: u.email, name: u.name, active: !u.active}); toast(u.active ? 'User disabled' : 'User enabled'); load(true); } catch (er) { toast(er.message, true); } };
       ac.append(rb, tg); }
     tr.appendChild(ac); body.appendChild(tr); });
   if (!c.users.length) { const tr = h('tr'); const td = h('td', 'px-4 py-8 text-center text-zuna-500', 'No users yet.'); td.colSpan = 5; tr.appendChild(td); body.appendChild(tr); }

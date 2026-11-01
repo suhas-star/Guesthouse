@@ -11,8 +11,8 @@
 __SPLASH__
 <script>(function(){var s=document.getElementById('splash'),h=document.getElementById('spHi'),n=null,t0=Date.now(),done=false;
 var q=null;try{n=sessionStorage.getItem('zp.hi');sessionStorage.removeItem('zp.hi');q=sessionStorage.getItem('zp.quiet');sessionStorage.removeItem('zp.quiet')}catch(e){}
-if(q){s.remove();return}
-if(n){s.classList.add('sp-cont');h.textContent='Welcome, '+n}else{h.textContent='Welcome back'}
+if(q||!n){s.remove();return}
+s.classList.add('sp-cont');h.textContent=n==='-'?'Welcome':'Welcome, '+n;
 function hide(){if(done)return;done=true;setTimeout(function(){s.classList.add('sp-hide');setTimeout(function(){s.remove()},600)},Math.max(0,(n?700:250)-(Date.now()-t0)))}
 window.addEventListener('load',function(){setTimeout(hide,150)});setTimeout(hide,10000)})();</script>
 <script src="https://cdn.jsdelivr.net/npm/apexcharts@3.54.1/dist/apexcharts.min.js"></script>

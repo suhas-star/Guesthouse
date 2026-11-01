@@ -515,13 +515,15 @@ async function adminApi(req, env, user, path) {
           await env.DB.prepare("UPDATE guesthouses SET name = ?, city = ?, state = ?, country = ?, address = ?, map_url = ?, operator = ?, status = ?, cancellation = ?, inclusions = ?, amenities = ?, show_json = ?, updated = ? WHERE id = ?").bind(...vals, id).run(); }
         else { const r = await env.DB.prepare("INSERT INTO guesthouses (name, city, state, country, address, map_url, operator, status, cancellation, inclusions, amenities, show_json, updated, client_id) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)").bind(...vals, c.id).run(); id = r.meta ? r.meta.last_row_id : r.lastInsertRowid; }
         const stmts = [env.DB.prepare("DELETE FROM room_types WHERE gh_id = ?").bind(id), env.DB.prepare("DELETE FROM contacts WHERE gh_id = ?").bind(id)];
-        const gradeList = (r) => [...new Set((Array.isArray(r.grades) ? r.grades : []).map((g) => clean(g, 20)).filter(Boolean))];
+        const gradeList = (r) => [...new Set((Array.isArray(r.grades) ? r.grades : []).map((g) => clean(g, 20).replace(/,/g, " ")).filter(Boolean))];
         (Array.isArray(b.room_types) ? b.room_types : []).slice(0, 20).forEach((r, i) => stmts.push(env.DB.prepare("INSERT INTO room_types (gh_id, name, rooms, room_nos, occupancy, bed_type, grades, sort) VALUES (?, ?, ?, ?, ?, ?, ?, ?)")
           .bind(id, clean(r.name, 60), Math.max(0, Math.min(500, parseInt(r.rooms, 10) || 0)), clean(r.room_nos, 200), ["Single", "Double", "Single / Double"].includes(r.occupancy) ? r.occupancy : "Single", ["King", "Queen", "Twin", "Double"].includes(r.bed_type) ? r.bed_type : "", JSON.stringify(gradeList(r)), i)));
         // grades typed in for a room type are added to the client's grade list
         const cg = await env.DB.prepare("SELECT grades FROM clients WHERE id = ?").bind(c.id).first();
-        const have = (cg && cg.grades || DEFAULT_GRADES).split(",").filter(Boolean), extra = [...new Set((Array.isArray(b.room_types) ? b.room_types : []).flatMap(gradeList))].filter((g) => !have.includes(g));
-        if (extra.length) stmts.push(env.DB.prepare("UPDATE clients SET grades = ? WHERE id = ?").bind(have.concat(extra).join(","), c.id));
+        const before = (cg && cg.grades || DEFAULT_GRADES).split(",").filter(Boolean);
+        const have = Array.isArray(b.client_grades) ? gradeList({grades: b.client_grades}) : before;   // the form can add or remove grades
+        const next = have.concat([...new Set((Array.isArray(b.room_types) ? b.room_types : []).flatMap(gradeList))].filter((g) => !have.includes(g))).slice(0, 80);
+        if (next.join(",") !== before.join(",")) stmts.push(env.DB.prepare("UPDATE clients SET grades = ? WHERE id = ?").bind(next.join(",") || DEFAULT_GRADES, c.id));
         (Array.isArray(b.contacts) ? b.contacts : []).slice(0, 20).forEach((x, i) => { if (clean(x.name) || clean(x.phone) || clean(x.email))
           stmts.push(env.DB.prepare("INSERT INTO contacts (gh_id, name, designation, email, phone, sort) VALUES (?, ?, ?, ?, ?, ?)").bind(id, clean(x.name, 120), clean(x.designation, 80), clean(x.email, 160), clean(x.phone, 60), i)); });
         await env.DB.batch(stmts);

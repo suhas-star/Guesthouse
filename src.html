@@ -65,8 +65,7 @@ window.addEventListener('load',function(){setTimeout(hide,150)});setTimeout(hide
         </div>
         <div id="propWrap" class="relative">
           <i data-i="hotel" class="w-4 h-4 absolute left-3 top-1/2 -translate-y-1/2 text-zuna-400 pointer-events-none"></i>
-          <select id="propSel" aria-label="Guest house" class="w-[210px] max-w-full truncate appearance-none pl-9 pr-9 py-2 rounded-xl bg-white ring-1 ring-zuna-100 shadow-sm text-sm font-semibold focus:outline-none focus:ring-2 focus:ring-mint-500 cursor-pointer"></select>
-          <svg class="w-4 h-4 absolute right-3 top-1/2 -translate-y-1/2 text-zuna-400 pointer-events-none" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5"><path d="m6 9 6 6 6-6"/></svg>
+          <select id="propSel" aria-label="Guest house" class="w-[230px] max-w-full truncate appearance-none pl-9 pr-3 py-2 rounded-xl bg-white ring-1 ring-zuna-100 shadow-sm text-sm font-semibold focus:outline-none focus:ring-2 focus:ring-mint-500 cursor-pointer"></select>
         </div>
       </div>
     </header>
@@ -185,6 +184,7 @@ const REPORT_DATE = '2026-10-31';
 const ICONS = __ICONS__;
 </script>
 <script>
+/*__UIKIT__*/
 (function () {
 const DATA = window.__LTMGH_DATA || {};
 const $ = (s, r = document) => r.querySelector(s), $$ = (s, r = document) => [...r.querySelectorAll(s)];
@@ -612,10 +612,12 @@ const renderHouses = () => {
       const chips = h('span', 'flex flex-wrap gap-1.5'); String(p.eligible || '—').split(/;\s*/).forEach((e) => chips.appendChild(h('span', 'inline-flex rounded-md px-2 py-0.5 text-xs font-semibold bg-zuna-50 text-zuna-700 ring-1 ring-zuna-100', e))); row('Eligible', chips);
       c.appendChild(dl);
       if (p.map_url) { const mp = h('a', 'mx-5 -mt-2 mb-3 inline-flex items-center gap-1 text-xs font-semibold text-mint-700 hover:underline', 'Open in Google Maps'); mp.href = p.map_url; mp.target = '_blank'; mp.rel = 'noopener'; c.appendChild(mp); }
+      if (!(p.photos && p.photos.length)) { const cv = h('div', 'mx-5 mb-4 relative h-40 rounded-xl overflow-hidden ring-1 ring-zuna-100'); const im = h('img', 'w-full h-full object-cover'); im.src = ZUI.art.gh; im.alt = ''; cv.appendChild(im);
+        cv.appendChild(h('span', 'absolute left-2.5 bottom-2.5 rounded-md bg-white/90 px-2 py-0.5 text-[11px] font-semibold text-zuna-700 shadow-sm', 'Photos coming soon')); c.insertBefore(cv, c.children[1]); }
       if (p.photos && p.photos.length) { const gl = h('div', 'px-5 pb-4 flex gap-2 overflow-x-auto'); p.photos.forEach((ph, i) => { const im = h('img', 'h-20 w-28 shrink-0 rounded-lg object-cover ring-1 ring-zuna-100 cursor-zoom-in'); im.src = ph.url; im.alt = ph.caption || p.property; im.loading = 'lazy'; im.onclick = () => gallery(p, i); gl.appendChild(im); }); c.insertBefore(gl, c.children[1]); }
       const extra = h('div', 'px-5 pb-4 space-y-3');
       if ((p.room_types || []).length) { const rt = h('div'); rt.appendChild(h('p', 'text-xs font-semibold text-zuna-500 mb-1.5', 'Room types')); const tb = h('div', 'rounded-xl ring-1 ring-zuna-100 divide-y divide-zuna-50 text-sm');
-        p.room_types.forEach((r) => { const row = h('div', 'px-3 py-2 flex flex-wrap items-center gap-x-3 gap-y-1'); row.appendChild(h('span', 'font-semibold', r.name || 'Rooms')); row.appendChild(h('span', 'text-xs text-zuna-500', r.rooms + ' rooms' + (r.room_nos ? ' · ' + r.room_nos : '')));
+        p.room_types.forEach((r) => { const row = h('div', 'px-3 py-2 flex flex-wrap items-center gap-x-3 gap-y-1'); const ti = h('img', 'w-11 h-8 rounded-md object-cover ring-1 ring-zuna-100 shrink-0'); ti.src = ZUI.art.room; ti.alt = ''; row.appendChild(ti); row.appendChild(h('span', 'font-semibold', r.name || 'Rooms')); row.appendChild(h('span', 'text-xs text-zuna-500', r.rooms + ' rooms' + (r.room_nos ? ' · ' + r.room_nos : '')));
           row.appendChild(h('span', 'ml-auto inline-flex rounded-md px-2 py-0.5 text-xs font-semibold bg-zuna-50 ring-1 ring-zuna-100', r.occupancy + (r.bed_type ? ' · ' + r.bed_type + ' bed' : ''))); row.appendChild(h('span', 'inline-flex rounded-md px-2 py-0.5 text-xs font-semibold bg-mint-50 text-mint-700 ring-1 ring-mint-200', r.eligible)); tb.appendChild(row); });
         rt.appendChild(tb); extra.appendChild(rt); }
       const tags = (label, arr, cls) => { if (!arr || !arr.length) return; const w = h('div'); w.appendChild(h('p', 'text-xs font-semibold text-zuna-500 mb-1.5', label)); const t = h('div', 'flex flex-wrap gap-1.5'); arr.forEach((v) => t.appendChild(h('span', 'inline-flex rounded-md px-2 py-0.5 text-xs font-semibold ' + cls, v))); w.appendChild(t); extra.appendChild(w); };
@@ -670,6 +672,7 @@ $('#menuBtn').onclick = () => { $('#side').classList.remove('-translate-x-full')
 $('#scrimSide').onclick = closeSide;
 if ($('#updated')) $('#updated').textContent = fLong(REPORT_DATE);
 const USER = __USER__;
+ZUI.auto(document.body);
 (() => {   // client branding + Zuna admin tools
   const cl = DATA.client;
   if (cl) { $$('#side img[alt="LTM"]').forEach((im) => { im.alt = cl.name; if (cl.logo) im.src = cl.logo; else { const t = h('span', 'text-sm font-black text-zuna-900 px-1', cl.name); im.replaceWith(t); } }); }

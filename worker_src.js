@@ -394,7 +394,7 @@ let schemaReady = false;
 async function ensureSchema(env) {
   if (schemaReady) return;
   for (const q of SCHEMA) await env.DB.prepare(q).run();
-  for (const c of ["users ADD COLUMN role TEXT", "users ADD COLUMN client_id INTEGER", "guesthouses ADD COLUMN state TEXT", "guesthouses ADD COLUMN country TEXT", "room_types ADD COLUMN bed_type TEXT"]) { try { await env.DB.prepare("ALTER TABLE " + c).run(); } catch (e) { /* exists */ } }
+  for (const c of ["users ADD COLUMN role TEXT", "users ADD COLUMN client_id INTEGER", "guesthouses ADD COLUMN state TEXT", "guesthouses ADD COLUMN country TEXT", "room_types ADD COLUMN bed_type TEXT", "clients ADD COLUMN legal_name TEXT"]) { try { await env.DB.prepare("ALTER TABLE " + c).run(); } catch (e) { /* exists */ } }
   schemaReady = true;
 }
 const DEFAULT_GRADES = "M1,M2,M3,M4,M5,M6,M7,M8,P1,P2,P3,E1,E2,E3,E4,E5,E6,E7";
@@ -424,12 +424,12 @@ function expandRooms(t) {
 async function multiClient(env) { await ensureSchema(env); return !!(await env.DB.prepare("SELECT id FROM clients LIMIT 1").first()); }
 async function adminState(env, user) {
   await ensureSchema(env);
-  const {results: clients} = await env.DB.prepare("SELECT id, name, logo_file, grades, active FROM clients ORDER BY id").all();
+  const {results: clients} = await env.DB.prepare("SELECT id, name, logo_file, grades, active, legal_name FROM clients ORDER BY id").all();
   const [bk, mn] = await Promise.all([readSet(env, "bookings"), readSet(env, "manual")]), manualKeys = new Set(mn.rows.filter((x) => x.status !== "Cancelled").map(guestKey));
   const out = await Promise.all(clients.map(async (c) => {
     const [users, guesthouses] = await Promise.all([clientUsers(env, c.id), clientGuestHouses(env, c, true)]);
     const names = new Set(guesthouses.map((g) => g.property));
-    return {id: c.id, name: c.name, active: !!c.active, logo: c.logo_file ? "/files/" + c.logo_file : "", grades: (c.grades || DEFAULT_GRADES).split(",").filter(Boolean), users, guesthouses,
+    return {id: c.id, name: c.name, legal_name: c.legal_name || "", active: !!c.active, logo: c.logo_file ? "/files/" + c.logo_file : "", grades: (c.grades || DEFAULT_GRADES).split(",").filter(Boolean), users, guesthouses,
       bookings: bk.rows.filter((x) => names.has(x.property) && x.status !== "Cancelled").map((x) => Object.assign({}, x, {manual: manualKeys.has(guestKey(x))}))}; }));
   return {clients: out, me: user.email};
 }
@@ -628,7 +628,7 @@ async function adminApi(req, env, user, path) {
       case "/api/admin/client": {
         const name = clean(b.name, 120); if (!name) return json({error: "Enter the client name."}, 400);
         const grades = (Array.isArray(b.grades) ? b.grades : String(b.grades || DEFAULT_GRADES).split(",")).map((g) => clean(g, 20)).filter(Boolean).join(",") || DEFAULT_GRADES;
-        if (b.id) await env.DB.prepare("UPDATE clients SET name = ?, grades = ?, active = ? WHERE id = ?").bind(name, grades, b.active === false ? 0 : 1, +b.id).run();
+        if (b.id) await env.DB.prepare("UPDATE clients SET name = ?, grades = ?, active = ?, legal_name = ? WHERE id = ?").bind(name, grades, b.active === false ? 0 : 1, clean(b.legal_name, 160), +b.id).run();
         else { const r = await env.DB.prepare("INSERT INTO clients (name, grades, active, created) VALUES (?, ?, 1, ?)").bind(name, grades, now).run(); return json({ok: true, id: r.meta ? r.meta.last_row_id : r.lastInsertRowid}); }
         return json({ok: true, id: +b.id});
       }
@@ -732,14 +732,14 @@ async function dashboard(env, user, url) {
   for (const r of results) { data[r.id] = JSON.parse(r.json); if (r.id === "bookings") updated = r.updated_at; }
   data.bookings = (data.bookings || []).filter((b) => b.status !== "Cancelled");
   if (await multiClient(env)) {
-    const {results: clients} = await env.DB.prepare("SELECT id, name, logo_file, grades FROM clients WHERE active = 1 ORDER BY id").all();
+    const {results: clients} = await env.DB.prepare("SELECT id, name, logo_file, grades, legal_name FROM clients WHERE active = 1 ORDER BY id").all();
     const want = user.admin ? (+url.searchParams.get("client") || (clients[0] || {}).id) : user.client_id;
     const client = clients.find((c) => c.id === want);
     if (!client) return html(LOGIN.replace("</body>", "<script>document.getElementById('err').textContent='Your account is not linked to a client yet. Please contact the Zuna Hotel Desk.';document.getElementById('err').classList.remove('hidden');</script></body>"));
     data.properties = await clientGuestHouses(env, client, false);
     const names = new Set(data.properties.map((p) => p.property));
     data.bookings = (data.bookings || []).filter((b) => names.has(b.property));
-    data.client = {id: client.id, name: client.name, logo: client.logo_file ? "/files/" + client.logo_file : ""};
+    data.client = {id: client.id, name: client.name, legal_name: client.legal_name || "", logo: client.logo_file ? "/files/" + client.logo_file : ""};
     if (user.admin) data.clients = clients.map((c) => ({id: c.id, name: c.name}));
     if (user.manager && !user.admin) data.users = await clientUsers(env, client.id);   // Users & access view, shown without a page load
   }

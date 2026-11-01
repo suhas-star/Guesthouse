@@ -62,11 +62,24 @@ if(document.readyState!=='loading')setTimeout(hide,150);else document.addEventLi
           <h1 id="viewTitle" class="text-lg font-bold tracking-tight">Overview</h1>
           <p id="viewSub" class="text-xs text-zuna-500 truncate">—</p>
         </div>
+        <div id="rangeBox" class="relative max-w-full">
         <div id="rangeWrap" class="flex items-center gap-1 rounded-xl bg-zuna-50 p-1 ring-1 ring-zuna-100 overflow-x-auto max-w-full">
           <button data-range="7" class="rangebtn">7 days</button>
           <button data-range="30" class="rangebtn">30 days</button>
           <button data-range="month" class="rangebtn">This month</button>
           <button data-range="all" class="rangebtn">Full period</button>
+          <button data-range="custom" id="rangeCustom" class="rangebtn inline-flex items-center gap-1.5" aria-haspopup="dialog" aria-expanded="false"><i data-i="calendar-days" class="w-3.5 h-3.5"></i><span id="rangeCustomTxt">Custom</span></button>
+        </div>
+        <div id="rangePop" class="hidden absolute right-0 top-full z-40 mt-2 w-[300px] max-w-[calc(100vw-2rem)] card p-4 shadow-xl space-y-3" role="dialog" aria-label="Choose a date range">
+          <p class="text-sm font-bold">Choose dates</p>
+          <div class="grid grid-cols-2 gap-2">
+            <label class="block"><span class="block text-xs font-semibold text-zuna-500 mb-1">From</span><input id="rFrom" type="date" class="w-full rounded-lg bg-white ring-1 ring-zuna-100 px-2 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-mint-500"></label>
+            <label class="block"><span class="block text-xs font-semibold text-zuna-500 mb-1">To</span><input id="rTo" type="date" class="w-full rounded-lg bg-white ring-1 ring-zuna-100 px-2 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-mint-500"></label>
+          </div>
+          <div class="flex flex-wrap gap-1.5" id="rQuick"></div>
+          <p id="rErr" class="hidden text-xs font-semibold text-rose-600"></p>
+          <div class="flex justify-end gap-2 pt-1"><button type="button" id="rCancel" class="btn">Cancel</button><button type="button" id="rApply" class="btn-primary">Apply</button></div>
+        </div>
         </div>
         <div id="propWrap" class="relative">
           <i data-i="hotel" class="w-4 h-4 absolute left-3 top-1/2 -translate-y-1/2 text-zuna-400 pointer-events-none"></i>
@@ -120,6 +133,7 @@ if(document.readyState!=='loading')setTimeout(hide,150);else document.addEventLi
             <div><h2 class="card-t">Room rack</h2><p class="card-s">Each row is a room, each column a night. Click any cell for details.</p></div>
             <div class="ml-auto flex flex-wrap items-center gap-3 text-xs text-zuna-500"><span class="flex items-center gap-1.5"><i class="w-2.5 h-2.5 rounded-sm bg-mint-500"></i>Occupied</span><span class="flex items-center gap-1.5"><i class="w-2.5 h-2.5 rounded-sm bg-zuna-50 ring-1 ring-zuna-100"></i>Vacant</span><span class="flex items-center gap-1.5"><i class="w-2.5 h-2.5 rounded-sm bg-amber-500"></i>Request declined</span><span class="flex items-center gap-1.5"><i class="w-2.5 h-2.5 rounded-sm bg-mint-500 text-[8px] leading-[10px] text-center font-bold text-zuna-900">2</i>Shared (double)</span><span class="flex items-center gap-1.5"><i class="w-2.5 h-2.5 rounded-sm bg-rose-500"></i>Mixed gender – not allowed</span></div>
           </div>
+          <div class="px-5 -mt-1 flex justify-end"><button type="button" class="btn" data-weekly><i data-i="download" class="w-4 h-4"></i>Weekly GH report</button></div>
           <div id="rack" class="p-5 overflow-x-auto"></div>
         </div>
       </section>
@@ -148,7 +162,7 @@ if(document.readyState!=='loading')setTimeout(hide,150);else document.addEventLi
         <div class="card">
           <div class="card-h">
             <div><h2 class="card-t">Booking register</h2><p class="card-s">Click a booking for full details</p></div>
-            <div class="ml-auto flex gap-2"><button class="btn-primary" data-dl="register-pdf"><i data-i="download" class="w-4 h-4"></i>PDF</button><button class="btn" data-dl="register-xlsx"><i data-i="download" class="w-4 h-4"></i>Excel</button></div>
+            <div class="ml-auto flex flex-wrap gap-2"><button type="button" class="btn" data-weekly><i data-i="download" class="w-4 h-4"></i>Weekly GH report</button><button class="btn-primary" data-dl="register-pdf"><i data-i="download" class="w-4 h-4"></i>PDF</button><button class="btn" data-dl="register-xlsx"><i data-i="download" class="w-4 h-4"></i>Excel</button></div>
           </div>
           <div class="px-5 py-3 flex flex-wrap items-center gap-3 border-b border-zuna-50">
             <div id="bfilters" class="flex flex-wrap gap-1 rounded-xl bg-zuna-50 p-1 ring-1 ring-zuna-100"></div>
@@ -234,8 +248,9 @@ const clashNights = (b, o) => { const a = b.check_in > o.check_in ? b.check_in :
 const clashText = (b) => b._clash.map((o) => { const [a, z] = clashNights(b, o); return cleanName(b.guest) + ' (' + b._g.toLowerCase() + ') and ' + cleanName(o.guest) + ' (' + o._g.toLowerCase() + ') share room ' + b.room + ', ' + fShort(a) + ' – ' + fShort(z); }).join('; ');
 const RULE = 'Double occupancy is allowed only for two male or two female guests.';
 const state = {view: 'overview', prop: (props.find((p) => p.status === 'Live') || props[0] || {}).property, range: 'all', bfilter: 'all', bsearch: '', bsort: {k: 'check_in', dir: 1}, calMonth: null};
-try { const s = JSON.parse(localStorage.getItem('ltmgh') || '{}'); if (s.range) state.range = s.range; } catch (e) {}
-const save = () => { try { localStorage.setItem('ltmgh', JSON.stringify({range: state.range})); } catch (e) {} };
+try { const s = JSON.parse(localStorage.getItem('ltmgh') || '{}'); if (s.range) state.range = s.range; if (s.cfrom && s.cto) { state.cfrom = s.cfrom; state.cto = s.cto; } } catch (e) {}
+if (state.range === 'custom' && !(state.cfrom && state.cto)) state.range = 'all';
+const save = () => { try { localStorage.setItem('ltmgh', JSON.stringify({range: state.range, cfrom: state.cfrom, cto: state.cto})); } catch (e) {} };
 
 const P = () => props.find((p) => p.property === state.prop) || {};
 const myB = () => bookings.filter((b) => b.property === state.prop);
@@ -255,6 +270,7 @@ const nightsFor = (prop) => {
 const nightsAll = () => nightsFor(state.prop);
 const rangeBounds = () => {
   if (state.range === 'all') return [period.from, period.to];
+  if (state.range === 'custom') return [state.cfrom, state.cto];
   if (state.range === 'month') { const d = D(today); return [iso(new Date(Date.UTC(d.getUTCFullYear(), d.getUTCMonth(), 1))), iso(new Date(Date.UTC(d.getUTCFullYear(), d.getUTCMonth() + 1, 0)))]; }
   return [today, addDays(today, +state.range - 1)];
 };
@@ -475,18 +491,23 @@ const drawDonut = (sold, vac) => {
 };
 
 /* ---------- RACK ---------- */
+// rooms and who sleeps where each night (used by the rack and the weekly GH report); unassigned stays go to the first free room
+const rackGrid = (p = P()) => {
+  const rooms = +p.rooms || 0;
+  const roomNames = (Array.isArray(p.rooms_list) && p.rooms_list.length === rooms) ? p.rooms_list : (() => { const m = (p.room_nos || '').match(/^(\S+?)(\d+)\s+to\s+\S*?(\d+)$/); if (m) { const o = []; for (let i = +m[2]; i <= +m[3]; i++) o.push(m[1] + i); if (o.length === rooms) return o; } return Array.from({length: rooms}, (_, i) => 'Room ' + (i + 1)); })();
+  const grid = roomNames.map(() => ({})), placed = new Set();
+  const conf = bookings.filter((b) => b.property === p.property && b.status === 'Confirmed').sort((a, b) => (hasRoom(b) - hasRoom(a)) || a.check_in.localeCompare(b.check_in));
+  conf.forEach((b) => {
+    const free = (i) => { for (let n = b.check_in; n < b.check_out; n = addDays(n, 1)) if (grid[i][n]) return false; return true; };
+    let r = roomNames.indexOf(b.room); if (r < 0) { r = grid.findIndex((_, i) => free(i)); if (r >= 0) placed.add(b); } if (r < 0) return;
+    for (let n = b.check_in; n < b.check_out; n = addDays(n, 1)) (grid[r][n] = grid[r][n] || []).push(b);
+  });
+  return {roomNames, grid, placed};
+};
 const renderRack = () => {
   const p = P(), rooms = +p.rooms || 0, rn = nightsInRange(), box = $('#rack'); box.replaceChildren();
   if (!rooms || !rn.length) { box.appendChild(h('p', 'p-8 text-center text-sm text-zuna-400', 'No rooms to show.')); return; }
-  const roomNames = (Array.isArray(p.rooms_list) && p.rooms_list.length === rooms) ? p.rooms_list : (() => { const m = (p.room_nos || '').match(/^(\S+?)(\d+)\s+to\s+\S*?(\d+)$/); if (m) { const o = []; for (let i = +m[2]; i <= +m[3]; i++) o.push(m[1] + i); if (o.length === rooms) return o; } return Array.from({length: rooms}, (_, i) => 'Room ' + (i + 1)); })();
-  const grid = roomNames.map(() => ({}));
-  const conf = myB().filter((b) => b.status === 'Confirmed').sort((a, b) => (hasRoom(b) - hasRoom(a)) || a.check_in.localeCompare(b.check_in));
-  conf.forEach((b) => {
-    const free = (i) => { for (let n = b.check_in; n < b.check_out; n = addDays(n, 1)) if (grid[i][n]) return false; return true; };
-    let r = roomNames.indexOf(b.room);
-    if (r < 0) r = grid.findIndex((_, i) => free(i)); if (r < 0) return;
-    for (let n = b.check_in; n < b.check_out; n = addDays(n, 1)) (grid[r][n] = grid[r][n] || []).push(b);
-  });
+  const {roomNames, grid} = rackGrid(p);
   const dec = new Set(); myB().filter((b) => b.status !== 'Confirmed').forEach((b) => { for (let n = b.check_in; n < b.check_out; n = addDays(n, 1)) dec.add(n); });
   // Gantt-style rack: one bar per stay running across its nights, guest name inside; empty nights are soft slots
   const bid = (b) => b.guest + '|' + b.check_in;
@@ -577,7 +598,8 @@ $('#calNext').onclick = () => { const ms = months(), i = ms.indexOf(state.calMon
 
 /* ---------- BOOKINGS ---------- */
 const renderBookings = () => {
-  const bs = myB().map((b) => Object.assign({}, b, {state: stateOf(b)}));
+  const [ra, rz] = rangeBounds();   // stays that overlap the chosen dates
+  const bs = myB().filter((b) => state.range === 'all' || (b.check_in <= rz && b.check_out > ra)).map((b) => Object.assign({}, b, {state: stateOf(b)}));
   const F = $('#bfilters'); F.replaceChildren();
   const isConf = (b) => b._clash && b._clash.length > 0;
   ['all', 'Upcoming', 'In house', 'Completed', 'Not accommodated', 'conflict'].forEach((k) => {
@@ -769,8 +791,9 @@ const render = () => {
   $$('.view').forEach((v) => v.classList.toggle('hidden', v.dataset.view !== state.view));
   $('#viewTitle').textContent = TITLES[state.view];
   const p = P();
-  $('#viewSub').textContent = state.view === 'users' ? (DATA.client ? DATA.client.name + ' · ' : '') + (DATA.users || []).length + ' users' : state.view === 'houses' ? props.length + ' guest houses · ' + props.filter((x) => x.status === 'Live').length + ' live' : p.property + ', ' + p.city + ' · ' + (state.view === 'calendar' || state.view === 'bookings' ? fShort(period.from) + ' – ' + fLong(period.to) : rangeLabel());
-  $('#rangeWrap').classList.toggle('invisible', !(state.view === 'overview' || state.view === 'rack'));
+  $('#viewSub').textContent = state.view === 'users' ? (DATA.client ? DATA.client.name + ' · ' : '') + (DATA.users || []).length + ' users' : state.view === 'houses' ? props.length + ' guest houses · ' + props.filter((x) => x.status === 'Live').length + ' live' : p.property + ', ' + p.city + ' · ' + (state.view === 'calendar' ? fShort(period.from) + ' – ' + fLong(period.to) : rangeLabel());
+  $('#rangeBox').classList.toggle('invisible', !(state.view === 'overview' || state.view === 'rack' || state.view === 'bookings'));
+  $('#rangeCustomTxt').textContent = state.range === 'custom' ? fShort(state.cfrom) + ' – ' + fShort(state.cto) : 'Custom';
   $('#propWrap').classList.toggle('invisible', state.view === 'houses' || state.view === 'users');
   $$('#rangeWrap button').forEach((b) => b.toggleAttribute('data-active', b.dataset.range === state.range));
   $('#navCount').textContent = myB().length;
@@ -779,7 +802,22 @@ const render = () => {
 const closeSide = () => { $('#side').classList.add('-translate-x-full'); $('#scrimSide').classList.add('hidden'); };
 const go = (v) => { state.view = v; try { history.replaceState(null, '', '#' + v); } catch (e) {} closeSide(); render(); window.scrollTo({top: 0, behavior: 'smooth'}); };
 $$('#nav button').forEach((b) => b.onclick = () => go(b.dataset.view));
-$$('#rangeWrap button').forEach((b) => b.onclick = () => { state.range = b.dataset.range; save(); render(); });
+$$('#rangeWrap button').forEach((b) => { if (b.dataset.range !== 'custom') b.onclick = () => { state.range = b.dataset.range; save(); closeRange(); render(); }; });
+// custom date range: From–To, with quick picks for whole weeks (Mon–Sun, as in the weekly GH report)
+const monday = (d) => { const x = D(d), w = (x.getUTCDay() + 6) % 7; return addDays(d, -w); };
+function closeRange() { $('#rangePop').classList.add('hidden'); $('#rangeCustom').setAttribute('aria-expanded', 'false'); }
+const openRange = () => { const [a, b] = rangeBounds(); $('#rFrom').value = state.cfrom || a; $('#rTo').value = state.cto || b; $('#rErr').classList.add('hidden');
+  const Q = $('#rQuick'); Q.replaceChildren(); const lw = addDays(monday(today), -7);
+  [['Last week', lw, addDays(lw, 6)], ['This week', monday(today), addDays(monday(today), 6)], ['Next week', addDays(monday(today), 7), addDays(monday(today), 13)], ['Last 30 days', addDays(today, -29), today]].forEach(([l, f, t]) => {
+    const c = h('button', 'rounded-lg px-2.5 py-1 text-xs font-semibold bg-zuna-50 text-zuna-700 ring-1 ring-zuna-100 hover:ring-mint-500', l); c.type = 'button'; c.onclick = () => { $('#rFrom').value = f; $('#rTo').value = t; }; Q.appendChild(c); });
+  $('#rangePop').classList.remove('hidden'); $('#rangeCustom').setAttribute('aria-expanded', 'true'); setTimeout(() => $('#rFrom').focus(), 30); };
+$('#rangeCustom').onclick = (e) => { e.stopPropagation(); $('#rangePop').classList.contains('hidden') ? openRange() : closeRange(); };
+$('#rCancel').onclick = closeRange;
+$('#rApply').onclick = () => { const f = $('#rFrom').value, t = $('#rTo').value, er = $('#rErr');
+  if (!f || !t || t < f) { er.textContent = !f || !t ? 'Choose both dates.' : 'The end date must be on or after the start date.'; er.classList.remove('hidden'); return; }
+  state.range = 'custom'; state.cfrom = f; state.cto = t; state.calMonth = null; save(); closeRange(); render(); toast('Showing ' + fShort(f) + ' – ' + fShort(t)); };
+document.addEventListener('mousedown', (e) => { if (!$('#rangePop').classList.contains('hidden') && !e.target.closest('#rangeBox')) closeRange(); });
+document.addEventListener('keydown', (e) => { if (e.key === 'Escape' && !$('#rangePop').classList.contains('hidden')) closeRange(); });
 const sel = $('#propSel');
 props.forEach((p) => { const o = new Option(p.property + (p.status === 'Live' ? '' : ' (soon)'), p.property); o.disabled = p.status !== 'Live'; sel.appendChild(o); });
 sel.value = state.prop; sel.onchange = () => { state.prop = sel.value; state.calMonth = null; render(); toast('Showing ' + sel.value); };
@@ -833,7 +871,27 @@ render();
 window.addEventListener('apexready', () => { if (state.view === 'overview') render(); });   // charts arrive after the page is shown
 window.addEventListener('load', () => { if (state.view === 'overview' && !charts.main) render(); });
 
-window.__ltm = {P, myB, nightsAll, period, stateOf, fDay, fShort, fLong, toast, today};
+// Weekly GH report: pick the nights (default: last full week, Monday–Sunday), then download LTM's Excel format
+const openWeekly = (onGo) => {
+  const lw = addDays(monday(today), -7), cur = state.range === 'custom' ? [state.cfrom, state.cto] : null;
+  const f = h('div', 'space-y-4'); const p = P();
+  f.appendChild(h('p', 'text-sm text-zuna-600', 'Night-by-night occupancy for ' + p.property + ', with bed and room occupancy and the guest list, in LTM’s weekly format.'));
+  const g = h('div', 'grid grid-cols-2 gap-3'); const mk = (l, v) => { const w = h('label', 'block'); w.appendChild(h('span', 'block text-xs font-semibold text-zuna-500 mb-1', l)); const i = h('input', 'w-full rounded-xl bg-white ring-1 ring-zuna-100 px-3 py-2.5 text-sm focus:outline-none focus:ring-2 focus:ring-mint-500'); i.type = 'date'; i.value = v; w.appendChild(i); g.appendChild(w); return i; };
+  const fi = mk('First night', cur ? cur[0] : lw), ti = mk('Last night', cur ? cur[1] : addDays(lw, 6)); f.appendChild(g);
+  const q = h('div', 'flex flex-wrap gap-1.5');
+  [['Last week', lw, addDays(lw, 6)], ['This week', monday(today), addDays(monday(today), 6)], ['Week before last', addDays(lw, -7), addDays(lw, -1)]].concat(cur ? [['Dates on screen', cur[0], cur[1]]] : []).forEach(([l, a, b]) => {
+    const c = h('button', 'rounded-lg px-2.5 py-1 text-xs font-semibold bg-zuna-50 text-zuna-700 ring-1 ring-zuna-100 hover:ring-mint-500', l); c.type = 'button'; c.onclick = () => { fi.value = a; ti.value = b; }; q.appendChild(c); });
+  f.appendChild(q);
+  const err = h('p', 'hidden text-xs font-semibold text-rose-600'); f.appendChild(err);
+  const go = h('button', 'btn-primary w-full justify-center !py-2.5 !text-sm'); go.appendChild(icon('download', 'w-4 h-4')); go.appendChild(document.createTextNode('Download Excel'));
+  go.onclick = () => { const a = fi.value, b = ti.value;
+    if (!a || !b || b < a) { err.textContent = !a || !b ? 'Choose both dates.' : 'The last night must be on or after the first night.'; err.classList.remove('hidden'); return; }
+    if ((Date.parse(b) - Date.parse(a)) / 864e5 > 61) { err.textContent = 'Choose up to 62 nights.'; err.classList.remove('hidden'); return; }
+    err.classList.add('hidden'); onGo(a, b); };
+  f.appendChild(go); const w = h('div', 'p-5'); w.appendChild(f);
+  openDrawer('Weekly GH report', p.property + (p.city ? ', ' + p.city : ''), w);
+};
+window.__ltm = {openWeekly, P, myB, nightsAll, period, stateOf, fDay, fShort, fLong, toast, today, rangeBounds, inRange: (b) => { const [a, z] = rangeBounds(); return state.range === 'all' || (b.check_in <= z && b.check_out > a); }, rangeText: () => rangeLabel(), rackGrid, cleanName, client: DATA.client || null, addDays, monday};
 })();
 </script>
 <script>

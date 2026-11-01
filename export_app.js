@@ -208,7 +208,7 @@
   const registerReport = () => {
     const p = L.P();
     const order = {'In house': 0, Upcoming: 1, Completed: 2, 'Not accommodated': 3};
-    const list = L.myB().slice().sort((a, b) => order[L.stateOf(a)] - order[L.stateOf(b)] || a.check_in.localeCompare(b.check_in));
+    const list = L.myB().filter(L.inRange).sort((a, b) => order[L.stateOf(a)] - order[L.stateOf(b)] || a.check_in.localeCompare(b.check_in));
     const rows = list.map((d) => {
       const l = L.stateOf(d);
       const warn = d._clash && d._clash.length ? 'MIXED GENDER sharing with ' + d._clash.map((o) => o.guest).join(', ') + ' - not allowed' : '';
@@ -217,7 +217,7 @@
         fill: l === 'Upcoming' || l === 'In house' ? [0.890, 0.957, 0.902] : l === 'Completed' ? [0.937, 0.937, 0.937] : [0.992, 0.886, 0.882], bold: [0, 9]};
     });
     return {p, rows, title: 'Booking Register - ' + p.property,
-      subtitle: p.property + ', ' + p.city + '  |  ' + periodText() + '  |  Updated ' + L.fLong(stamp()),
+      subtitle: p.property + ', ' + p.city + '  |  ' + L.rangeText() + '  |  Updated ' + L.fLong(stamp()),
       cols: [{label: 'Guest', width: 125, x: 30}, {label: 'Grade', width: 38, x: 8}, {label: 'Gender', width: 48, x: 9}, {label: 'Occupancy', width: 80, x: 30}, {label: 'Base location', width: 62, x: 14}, {label: 'Check-in', width: 52, x: 12}, {label: 'Check-out', width: 54, x: 12}, {label: 'Nights', width: 38, num: 1, x: 8}, {label: 'Room', width: 58, x: 14}, {label: 'Status', width: 82, x: 18}, {label: 'Concur TR', width: 50, x: 11}, {label: 'Remarks', width: 91, x: 50}],
       legendPdf: [['Upcoming / in house', [0.890, 0.957, 0.902]], ['Completed', [0.937, 0.937, 0.937]], ['Not accommodated', [0.992, 0.886, 0.882]]],
       legendX: [['Upcoming / in house', 6], ['Completed', 7], ['Not accommodated', 8]]};
@@ -239,4 +239,94 @@
       L.toast('Downloading ' + f.filename);
     } catch (e) { console.error(e); L.toast('Could not create the file'); }
   }));
+
+  // ---------- Weekly GH report (LTM format) ----------
+  // Layout follows LTM's sheet: title, one column per room bed, one row per night, bed and room occupancy blocks, totals, master guest details.
+  const DMY = (d) => d.slice(8, 10) + '/' + d.slice(5, 7) + '/' + d.slice(0, 4);
+  const WD = ['Sunday', 'Monday', 'Tuesday', 'Wednesday', 'Thursday', 'Friday', 'Saturday'];
+  const WEEK_STYLES = '<?xml version="1.0" encoding="UTF-8" standalone="yes"?><styleSheet xmlns="http://schemas.openxmlformats.org/spreadsheetml/2006/main">'
+    + '<numFmts count="1"><numFmt numFmtId="164" formatCode="0.00"/></numFmts>'
+    + '<fonts count="4"><font><sz val="11"/><name val="Calibri"/></font><font><b/><sz val="18"/><name val="Calibri"/></font><font><b/><sz val="14"/><name val="Calibri"/></font><font><b/><sz val="12"/><name val="Calibri"/></font></fonts>'
+    + '<fills count="2"><fill><patternFill patternType="none"/></fill><fill><patternFill patternType="gray125"/></fill></fills><borders count="1"><border/></borders>'
+    + '<cellStyleXfs count="1"><xf/></cellStyleXfs><cellXfs count="7">'
+    + '<xf/>'                                                                                              // 0 normal
+    + '<xf fontId="1" applyFont="1" applyAlignment="1"><alignment horizontal="center"/></xf>'                 // 1 title
+    + '<xf fontId="2" applyFont="1" applyAlignment="1"><alignment horizontal="center"/></xf>'                 // 2 group header
+    + '<xf fontId="3" applyFont="1" applyAlignment="1"><alignment horizontal="center" wrapText="1"/></xf>'    // 3 column header / total label
+    + '<xf numFmtId="164" applyNumberFormat="1"/>'                                                         // 4 0.00
+    + '<xf applyAlignment="1"><alignment horizontal="left"/></xf>'                                          // 5 left
+    + '<xf numFmtId="1" applyNumberFormat="1"/>'                                                            // 6 whole number
+    + '</cellXfs><cellStyles count="1"><cellStyle name="Normal" xfId="0" builtinId="0"/></cellStyles></styleSheet>';
+  const sheetZip = (sheet, cells, merges, widths) => {
+    const byRow = new Map(); cells.forEach((c) => { if (!byRow.has(c.r)) byRow.set(c.r, []); byRow.get(c.r).push(c); });
+    const rowsXml = [...byRow.keys()].sort((a, b) => a - b).map((r) => '<row r="' + r + '">' + byRow.get(r).sort((a, b) => a.c - b.c).map((c) => {
+      const ref = colName(c.c) + r, st = c.s ? ' s="' + c.s + '"' : '';
+      return typeof c.v === 'number' ? '<c r="' + ref + '"' + st + '><v>' + c.v + '</v></c>' : '<c r="' + ref + '"' + st + ' t="inlineStr"><is><t xml:space="preserve">' + xmlEsc(c.v) + '</t></is></c>';
+    }).join('') + '</row>').join('');
+    const xml = '<?xml version="1.0" encoding="UTF-8" standalone="yes"?><worksheet xmlns="http://schemas.openxmlformats.org/spreadsheetml/2006/main">'
+      + '<sheetViews><sheetView workbookViewId="0"><pane xSplit="2" ySplit="3" topLeftCell="C4" activePane="bottomRight" state="frozen"/></sheetView></sheetViews>'
+      + '<cols>' + widths.map((w, i) => '<col min="' + (i + 1) + '" max="' + (i + 1) + '" width="' + w + '" customWidth="1"/>').join('') + '</cols>'
+      + '<sheetData>' + rowsXml + '</sheetData>'
+      + (merges.length ? '<mergeCells count="' + merges.length + '">' + merges.map((m) => '<mergeCell ref="' + m + '"/>').join('') + '</mergeCells>' : '')
+      + '<pageSetup orientation="landscape" fitToWidth="1" fitToHeight="0"/></worksheet>';
+    const sname = xmlEsc(sheet.slice(0, 31));
+    return zip([
+      {name: '[Content_Types].xml', data: '<?xml version="1.0" encoding="UTF-8" standalone="yes"?><Types xmlns="http://schemas.openxmlformats.org/package/2006/content-types"><Default Extension="rels" ContentType="application/vnd.openxmlformats-package.relationships+xml"/><Default Extension="xml" ContentType="application/xml"/><Override PartName="/xl/workbook.xml" ContentType="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet.main+xml"/><Override PartName="/xl/worksheets/sheet1.xml" ContentType="application/vnd.openxmlformats-officedocument.spreadsheetml.worksheet+xml"/><Override PartName="/xl/styles.xml" ContentType="application/vnd.openxmlformats-officedocument.spreadsheetml.styles+xml"/></Types>'},
+      {name: '_rels/.rels', data: '<?xml version="1.0" encoding="UTF-8" standalone="yes"?><Relationships xmlns="http://schemas.openxmlformats.org/package/2006/relationships"><Relationship Id="rId1" Type="http://schemas.openxmlformats.org/officeDocument/2006/relationships/officeDocument" Target="xl/workbook.xml"/></Relationships>'},
+      {name: 'xl/workbook.xml', data: '<?xml version="1.0" encoding="UTF-8" standalone="yes"?><workbook xmlns="http://schemas.openxmlformats.org/spreadsheetml/2006/main" xmlns:r="http://schemas.openxmlformats.org/officeDocument/2006/relationships"><sheets><sheet name="' + sname + '" sheetId="1" r:id="rId1"/></sheets></workbook>'},
+      {name: 'xl/_rels/workbook.xml.rels', data: '<?xml version="1.0" encoding="UTF-8" standalone="yes"?><Relationships xmlns="http://schemas.openxmlformats.org/package/2006/relationships"><Relationship Id="rId1" Type="http://schemas.openxmlformats.org/officeDocument/2006/relationships/worksheet" Target="worksheets/sheet1.xml"/><Relationship Id="rId2" Type="http://schemas.openxmlformats.org/officeDocument/2006/relationships/styles" Target="styles.xml"/></Relationships>'},
+      {name: 'xl/styles.xml', data: WEEK_STYLES},
+      {name: 'xl/worksheets/sheet1.xml', data: xml}]);
+  };
+  const weeklyReport = (from, to) => {
+    const p = L.P(), {roomNames, grid, placed} = L.rackGrid(p);
+    const nights = []; for (let n = from; n <= to; n = L.addDays(n, 1)) nights.push(n);
+    const who = (ri, n) => (grid[ri] && grid[ri][n]) || [];
+    // beds per room: one, or as many guests as ever shared that room in these nights
+    const beds = roomNames.map((_, ri) => Math.max(1, ...nights.map((n) => who(ri, n).length)));
+    const totalBeds = beds.reduce((a, b) => a + b, 0), D = nights.length;
+    const client = L.client || {}, circle = client.legal_name || client.name || 'LTM Limited';
+    const title = (client.name ? client.name + ' ' : '') + p.property + (p.city ? '-' + p.city : '') + ' - ' + DMY(from) + ' to ' + DMY(to);
+    const short = (r) => { const m = /-(\w+)$/.exec(r); return m ? m[1] : r; };
+    const name = (b) => L.cleanName(b.guest) + (placed.has(b) ? ' *' : '');
+    const cells = [], merges = [], put = (r, c, v, s) => cells.push({r, c, v, s});
+    const C0 = 2, totalCol = C0 + totalBeds, bedOcc = totalCol + 3, roomOcc = bedOcc + 3, master = roomOcc + 5;
+    put(1, C0, title, 1); merges.push(colName(C0) + '1:' + colName(totalCol + 1) + '1');
+    put(3, 0, 'Stay for the night of', 3); put(3, 1, 'Day of the week', 3);
+    let c = C0; roomNames.forEach((rn, ri) => { put(2, c, 'Room - ' + short(rn), 2); if (beds[ri] > 1) merges.push(colName(c) + '2:' + colName(c + beds[ri] - 1) + '2'); for (let k = 0; k < beds[ri]; k++) put(3, c + k, 'Bed-' + (k + 1), 3); c += beds[ri]; });
+    put(3, totalCol, 'Total Occupancy', 3);
+    put(2, bedOcc, 'Total Bed Occupancy', 2); merges.push(colName(bedOcc) + '2:' + colName(bedOcc + 2) + '2');
+    put(2, roomOcc, 'Total Room Occupancy', 2); merges.push(colName(roomOcc) + '2:' + colName(roomOcc + 2) + '2');
+    put(2, master, 'Master Guest Details', 2); merges.push(colName(master) + '2:' + colName(master + 3) + '2');
+    ['Beds Occupied', 'Beds Vacant', 'Occupancy %'].forEach((t, k) => put(3, bedOcc + k, t, 3));
+    ['Rooms Occupied', 'Rooms Vacant', 'Occupancy %'].forEach((t, k) => put(3, roomOcc + k, t, 3));
+    ['Guest Name', 'Guest Circle Name', 'Band', 'Consolidated Room Nights'].forEach((t, k) => put(3, master + k, t, 3));
+    const bedNights = new Array(totalBeds).fill(0); let sumBeds = 0, sumRooms = 0; const guests = new Map();
+    nights.forEach((n, i) => { const r = 4 + i, d = new Date(n + 'T00:00:00Z');
+      put(r, 0, DMY(n)); put(r, 1, WD[d.getUTCDay()]);
+      let col = C0, bOcc = 0, rOcc = 0;
+      roomNames.forEach((_, ri) => { const g = who(ri, n); if (g.length) rOcc++;
+        for (let k = 0; k < beds[ri]; k++) { const b = g[k]; put(r, col + k, b ? name(b) : ''); if (b) { bOcc++; bedNights[col + k - C0]++;
+          const key = L.cleanName(b.guest).toLowerCase(); const e = guests.get(key) || {name: L.cleanName(b.guest), band: b.grade && b.grade !== 'Not stated' ? b.grade : '', nights: 0}; e.nights++; guests.set(key, e); } }
+        col += beds[ri]; });
+      sumBeds += bOcc; sumRooms += rOcc;
+      put(r, bedOcc, bOcc); put(r, bedOcc + 1, totalBeds - bOcc); put(r, bedOcc + 2, totalBeds ? Math.round(bOcc / totalBeds * 10000) / 100 : 0, 4);
+      put(r, roomOcc, rOcc); put(r, roomOcc + 1, roomNames.length - rOcc); put(r, roomOcc + 2, roomNames.length ? Math.round(rOcc / roomNames.length * 10000) / 100 : 0, 4);
+    });
+    const tr = 4 + D;
+    put(tr, 1, 'Actual occupancy', 3); put(tr + 1, 1, 'No. of days', 3); put(tr + 2, 1, '% occupancy', 3);
+    bedNights.forEach((v, k) => { put(tr, C0 + k, v, 6); put(tr + 1, C0 + k, D, 6); put(tr + 2, C0 + k, D ? Math.round(v / D * 10000) / 100 : 0, 4); });
+    const occAll = bedNights.reduce((a, b) => a + b, 0);
+    put(tr, totalCol, occAll, 4); put(tr + 1, totalCol, totalBeds * D, 4); put(tr + 2, totalCol, totalBeds * D ? Math.round(occAll / (totalBeds * D) * 10000) / 100 : 0, 4);
+    put(tr, bedOcc, sumBeds); put(tr, bedOcc + 1, totalBeds * D - sumBeds); put(tr, bedOcc + 2, totalBeds * D ? Math.round(sumBeds / (totalBeds * D) * 10000) / 100 : 0, 4);
+    put(tr, roomOcc, sumRooms); put(tr, roomOcc + 1, roomNames.length * D - sumRooms); put(tr, roomOcc + 2, roomNames.length * D ? Math.round(sumRooms / (roomNames.length * D) * 10000) / 100 : 0, 4);
+    [...guests.values()].sort((a, b) => a.name.localeCompare(b.name)).forEach((g, k) => { put(4 + k, master, g.name); put(4 + k, master + 1, circle); put(4 + k, master + 2, g.band); put(4 + k, master + 3, g.nights, 5); });
+    if (placed.size && [...placed].some((b) => b.check_in <= to && b.check_out > from)) put(tr + 4, 0, '* Room not yet confirmed by the guest house; shown in the first free room.');
+    const widths = []; for (let k = 0; k <= master + 3; k++) widths.push(k === 0 ? 21 : k === 1 ? 18 : (k >= C0 && k < totalCol) ? 20 : k === totalCol ? 16 : k === bedOcc || k === roomOcc ? 20 : k === master ? 20 : k === master + 1 ? 20 : k === master + 3 ? 25 : 13);
+    const fileTitle = title.replace(/\//g, '_').replace(/[^A-Za-z0-9_-]+/g, '_').replace(/_+/g, '_');
+    return {filename: fileTitle + '.xlsx', data: sheetZip('Sheet', cells, merges, widths)};
+  };
+  const dl = (f) => { const url = URL.createObjectURL(f.data), a = document.createElement('a'); a.href = url; a.download = f.filename; document.body.appendChild(a); a.click(); a.remove(); setTimeout(() => URL.revokeObjectURL(url), 4000); L.toast('Downloading ' + f.filename); };
+  L.weeklyReport = weeklyReport;
+  document.querySelectorAll('[data-weekly]').forEach((btn) => btn.addEventListener('click', () => L.openWeekly((from, to) => { try { dl(weeklyReport(from, to)); } catch (e) { console.error(e); L.toast('Could not create the report'); } })));
 })();

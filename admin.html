@@ -551,9 +551,10 @@ const renderSettings = (D, c) => {
   lg.classList.add('dz', 'rounded-2xl', 'border-2', 'border-dashed', 'border-transparent', 'p-2', '-m-2', 'transition-colors'); dropZone(lg, (fs) => send(fs[0]));
   lg.append(pv, up, h('span', 'text-xs text-zuna-500', 'or drop an image here'), prog); card.appendChild(field('Client logo (shown in the client\'s dashboard)', lg));
   const n = inp(c.name); card.appendChild(field('Client name', n));
+  const ln = inp(c.legal_name || '', 'e.g. LTM Limited'); card.appendChild(field('Company name in reports (Guest Circle Name in the weekly GH report)', ln));
   const gr = h('textarea', 'inp'); gr.rows = 2; gr.value = c.grades.join(', '); card.appendChild(field('Grades used by this client (comma separated, in order)', gr));
   const act = switchEl('Client active (users can log in)', c.active); card.appendChild(act);
-  const save = h('button', 'btn-primary', 'Save settings'); save.onclick = async () => { try { await api('client', {id: c.id, name: n.value, grades: gr.value.split(/\s*[,\n]\s*/).map((g) => g.trim()).filter(Boolean), active: act.input.checked}); toast('Saved'); load(true); } catch (er) { toast(er.message, true); } };
+  const save = h('button', 'btn-primary', 'Save settings'); save.onclick = async () => { try { await api('client', {id: c.id, name: n.value, legal_name: ln.value, grades: gr.value.split(/\s*[,\n]\s*/).map((g) => g.trim()).filter(Boolean), active: act.input.checked}); toast('Saved'); load(true); } catch (er) { toast(er.message, true); } };
   card.appendChild(save); D.appendChild(card);
 };
 

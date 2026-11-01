@@ -188,6 +188,23 @@ status (Live / Coming soon), poc_name, poc_phone, poc_email`.
 Self-hosted: load CSV/JSON files with `npm run admin -- load-data <bookings.csv> <properties.csv> <period.json>`
 (see `data/` for the exact columns), or write the rows directly with any SQLite client.
 
+## Admin panel (multi-client)
+
+`/admin` is available to users with `role = 'admin'` (Zuna staff). It manages:
+
+* **Clients**: name, logo (PNG/JPG/WEBP, resized in the browser), grade list, active flag.
+* **Guest houses** per client: name, city, address, Google Maps link, operator, Live / Coming soon,
+  room types (rooms, room numbers, occupancy Single / Double, eligible grades), inclusions, amenities,
+  cancellation policy, photos, contacts (name, designation, email, phone), and per-section **show to client**
+  switches (amenities, inclusions, cancellation policy, photos, contacts).
+* **Users** per client: create (a password is generated and shown once), reset password, disable / enable.
+
+Client users (`role = 'client'`, `client_id` set) see only their client's guest houses and bookings, with their logo.
+Images are stored in table `files` (base64) and served at `/files/<id>` only to the owning client's users and admins.
+Tables: `clients`, `guesthouses`, `room_types`, `contacts`, `photos`, `files` (created automatically); `users` gains
+`role` and `client_id`. Once at least one client exists, guest-house details come from these tables instead of the
+`properties` dataset, and bookings are matched to guest houses by name.
+
 ## Voucher intake
 
 Operators e-mail a confirmation voucher (PDF) for each booking. A small mail job (Google Apps Script, every 10 minutes)

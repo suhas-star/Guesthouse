@@ -1,5 +1,5 @@
 module.exports = {
-  content: ['./src.html', './export_app.js', './login.html'],
+  content: ['./src.html', './export_app.js', './login.html', './admin.html'],
   theme: {
     extend: {
       fontFamily: { sans: ['"Segoe UI"', '"Segoe UI Variable"', 'system-ui', '-apple-system', 'Roboto', '"Helvetica Neue"', 'Arial', 'sans-serif'] },

@@ -39,9 +39,10 @@ const getCookie = (req, name) => { const m = (req.headers.get("cookie") || "").m
 async function currentUser(req, env) {
   const tok = getCookie(req, COOKIE);
   if (!tok || !/^[a-f0-9]{64}$/.test(tok)) return null;
-  const row = await env.DB.prepare("SELECT s.email, s.expires, u.name, u.active FROM sessions s JOIN users u ON u.email = s.email WHERE s.token_hash = ?").bind(await sha256(tok)).first();
+  await ensureSchema(env);
+  const row = await env.DB.prepare("SELECT s.email, s.expires, u.name, u.active, u.role, u.client_id FROM sessions s JOIN users u ON u.email = s.email WHERE s.token_hash = ?").bind(await sha256(tok)).first();
   if (!row || !row.active || row.expires < new Date().toISOString()) return null;
-  return {email: row.email, name: row.name};
+  return {email: row.email, name: row.name, role: row.role || "client", client_id: row.client_id, admin: row.role === "admin"};
 }
 
 async function login(req, env) {
@@ -316,7 +317,9 @@ async function applyVoucher(env, text, file) {
   if (cands.length !== 1) return cands.length ? "several bookings match " + vName : "no booking found for " + vName + " arriving " + arr;
   const b = cands[0];
   if (/^\d/.test(b.room || "")) return "room already set (" + b.room + ")";
-  const rooms = roomList(props.find((p) => p.property === b.property) || {});
+  let rooms = roomList(props.find((p) => p.property === b.property) || {});
+  if (await multiClient(env)) { const {results: rts} = await env.DB.prepare("SELECT r.room_nos FROM room_types r JOIN guesthouses g ON g.id = r.gh_id WHERE g.name = ? ORDER BY r.sort").bind(b.property).all();
+    if (rts.length) rooms = rts.flatMap((r) => expandRooms(r.room_nos)); }
   const digits = (r) => r.replace(/\D/g, "");
   let hits = rooms.filter((r) => r === vRoom || digits(r).endsWith(vRoom.padStart(2, "0")));
   if (hits.length !== 1) hits = rooms.filter((r) => digits(r).endsWith(String(+vRoom)));
@@ -376,12 +379,210 @@ async function vouchers(req, env) {
   return json({ok: true, chars: text.length, guest, room: vGuess(V_ROOM, text), occupancy: vGuess(V_OCC, text), applied});
 }
 
-async function dashboard(env, user) {
-  const {results} = await env.DB.prepare("SELECT id, json, updated_at FROM datasets").all();
+// ---------- multi-client data model (admin panel) ----------
+const SCHEMA = [
+  "CREATE TABLE IF NOT EXISTS clients (id INTEGER PRIMARY KEY AUTOINCREMENT, name TEXT NOT NULL, logo_file INTEGER, grades TEXT, active INTEGER DEFAULT 1, created TEXT)",
+  "CREATE TABLE IF NOT EXISTS guesthouses (id INTEGER PRIMARY KEY AUTOINCREMENT, client_id INTEGER NOT NULL, name TEXT NOT NULL, city TEXT, address TEXT, map_url TEXT, operator TEXT, status TEXT DEFAULT 'Coming soon', cancellation TEXT, inclusions TEXT, amenities TEXT, show_json TEXT, sort INTEGER DEFAULT 0, updated TEXT)",
+  "CREATE TABLE IF NOT EXISTS room_types (id INTEGER PRIMARY KEY AUTOINCREMENT, gh_id INTEGER NOT NULL, name TEXT, rooms INTEGER, room_nos TEXT, occupancy TEXT, grades TEXT, sort INTEGER DEFAULT 0)",
+  "CREATE TABLE IF NOT EXISTS contacts (id INTEGER PRIMARY KEY AUTOINCREMENT, gh_id INTEGER NOT NULL, name TEXT, designation TEXT, email TEXT, phone TEXT, sort INTEGER DEFAULT 0)",
+  "CREATE TABLE IF NOT EXISTS photos (id INTEGER PRIMARY KEY AUTOINCREMENT, gh_id INTEGER NOT NULL, file_id INTEGER NOT NULL, caption TEXT, sort INTEGER DEFAULT 0)",
+  "CREATE TABLE IF NOT EXISTS files (id INTEGER PRIMARY KEY AUTOINCREMENT, client_id INTEGER, mime TEXT NOT NULL, data TEXT NOT NULL, created TEXT)",
+];
+let schemaReady = false;
+async function ensureSchema(env) {
+  if (schemaReady) return;
+  for (const q of SCHEMA) await env.DB.prepare(q).run();
+  for (const c of ["role TEXT", "client_id INTEGER"]) { try { await env.DB.prepare("ALTER TABLE users ADD COLUMN " + c).run(); } catch (e) { /* exists */ } }
+  schemaReady = true;
+}
+const DEFAULT_GRADES = "M1,M2,M3,M4,M5,M6,M7,M8,P1,P2,P3,E1,E2,E3,E4,E5,E6,E7";
+const SHOW_DEFAULT = {amenities: true, inclusions: true, cancellation: true, photos: true, contacts: true};
+const jparse = (t, d) => { try { const v = JSON.parse(t); return v == null ? d : v; } catch (e) { return d; } };
+const list = (t) => jparse(t, []).filter((x) => typeof x === "string" && x.trim()).map((x) => x.trim().slice(0, 120));
+// "E1,E2,E3,P1,P2,P3" -> "E1–E3, P1–P3"; every grade -> "All grades"
+function gradeText(grades, all) {
+  if (!grades.length) return "—";
+  if (all.length && all.every((g) => grades.includes(g))) return "All grades";
+  const out = [];
+  const series = [...new Set(all.concat(grades).map((g) => g.replace(/\d+$/, "")))];
+  for (const sr of series) {
+    const nums = grades.filter((g) => g.replace(/\d+$/, "") === sr).map((g) => +(g.match(/\d+$/) || [0])[0]).sort((a, b) => a - b);
+    for (let i = 0; i < nums.length;) { let j = i; while (j + 1 < nums.length && nums[j + 1] === nums[j] + 1) j++;
+      out.push(j > i ? sr + nums[i] + "–" + sr + nums[j] : sr + nums[i]); i = j + 1; }
+  }
+  return out.join(", ");
+}
+// "1001-101 to 1001-104" | "504-1 to 504-4" | "2204 R1 to R4" | "401, 402" -> individual room names
+function expandRooms(t) {
+  const s = String(t || "").trim(); if (!s) return [];
+  const m = s.match(/^(.*?)(\d+)\s*(?:to|–|—)\s*(.*?)(\d+)$/i);
+  if (m && +m[4] >= +m[2] && +m[4] - +m[2] < 60) { const out = []; for (let i = +m[2]; i <= +m[4]; i++) out.push(m[1] + i); return out; }
+  return s.split(/\s*,\s*/).filter(Boolean);
+}
+async function multiClient(env) { await ensureSchema(env); return !!(await env.DB.prepare("SELECT id FROM clients LIMIT 1").first()); }
+async function clientGuestHouses(env, client, forAdmin) {
+  const all = (client.grades || DEFAULT_GRADES).split(",").map((g) => g.trim()).filter(Boolean);
+  const {results: ghs} = await env.DB.prepare("SELECT * FROM guesthouses WHERE client_id = ? ORDER BY sort, id").bind(client.id).all();
+  const out = [];
+  for (const g of ghs) {
+    const {results: rts} = await env.DB.prepare("SELECT * FROM room_types WHERE gh_id = ? ORDER BY sort, id").bind(g.id).all();
+    const {results: cts} = await env.DB.prepare("SELECT * FROM contacts WHERE gh_id = ? ORDER BY sort, id").bind(g.id).all();
+    const {results: phs} = await env.DB.prepare("SELECT id, file_id, caption FROM photos WHERE gh_id = ? ORDER BY sort, id").bind(g.id).all();
+    const show = Object.assign({}, SHOW_DEFAULT, jparse(g.show_json, {})), multi = rts.length > 1;
+    const types = rts.map((r) => ({id: r.id, name: r.name || "", rooms: r.rooms || 0, room_nos: r.room_nos || "", occupancy: r.occupancy || "Single", grades: list(r.grades), eligible: gradeText(list(r.grades), all)}));
+    const contacts = cts.map((c) => ({id: c.id, name: c.name || "", designation: c.designation || "", email: c.email || "", phone: c.phone || ""}));
+    const gh = {
+      id: g.id, property: g.name, city: g.city || "", address: g.address || "", map_url: g.map_url || "", operator: g.operator || "", status: g.status || "Coming soon",
+      rooms: String(types.reduce((t, r) => t + (+r.rooms || 0), 0)),
+      room_nos: types.map((r) => (multi && r.name ? r.name + " " : "") + r.room_nos).filter((x) => x.trim()).join(", "),
+      rooms_list: types.flatMap((r) => expandRooms(r.room_nos)),
+      eligible: types.map((r) => (multi && r.name ? r.name + ": " : "") + r.eligible).join("; "),
+      room_types: types,
+    };
+    if (forAdmin || show.contacts) { gh.contacts = contacts;
+      gh.poc_name = contacts.map((c) => c.name + (c.designation ? " (" + c.designation + ")" : "")).join("; ");
+      gh.poc_phone = contacts.map((c) => c.phone).filter(Boolean).join("; "); gh.poc_email = contacts.map((c) => c.email).filter(Boolean).join("; "); }
+    if (forAdmin || show.inclusions) gh.inclusions = list(g.inclusions);
+    if (forAdmin || show.amenities) gh.amenities = list(g.amenities);
+    if (forAdmin || show.cancellation) gh.cancellation = g.cancellation || "";
+    if (forAdmin || show.photos) gh.photos = phs.map((p) => ({id: p.id, url: "/files/" + p.file_id, caption: p.caption || ""}));
+    if (forAdmin) gh.show = show;
+    out.push(gh);
+  }
+  return out;
+}
+const DATA_URL = /^data:(image\/(?:png|jpeg|webp));base64,([A-Za-z0-9+/=]+)$/;
+async function saveFile(env, clientId, dataUrl) {
+  const m = String(dataUrl || "").match(DATA_URL);
+  if (!m) throw new Error("Upload a PNG, JPG or WEBP image.");
+  if (m[2].length > 2900000) throw new Error("Image is too large (max about 2 MB after resizing).");
+  const r = await env.DB.prepare("INSERT INTO files (client_id, mime, data, created) VALUES (?, ?, ?, ?)").bind(clientId, m[1], m[2], new Date().toISOString()).run();
+  return r.meta ? r.meta.last_row_id : r.lastInsertRowid;
+}
+async function serveFile(env, user, id) {
+  const f = await env.DB.prepare("SELECT client_id, mime, data FROM files WHERE id = ?").bind(id).first();
+  if (!f || (!user.admin && f.client_id !== user.client_id)) return new Response("Not found", {status: 404, headers: SEC});
+  const bin = atob(f.data), u8 = new Uint8Array(bin.length); for (let i = 0; i < bin.length; i++) u8[i] = bin.charCodeAt(i);
+  return new Response(u8, {headers: {...SEC, "content-type": f.mime, "cache-control": "private, max-age=86400", "content-security-policy": "default-src 'none'; sandbox"}});
+}
+const PW_DIGITS = "23456789";
+const makePassword = (name) => (String(name || "User").trim().split(/\s+/)[0].replace(/[^A-Za-z]/g, "") || "User").replace(/^./, (c) => c.toUpperCase()) + "@" + Array.from(crypto.getRandomValues(new Uint8Array(4)), (b) => PW_DIGITS[b % 8]).join("");
+async function setPassword(env, email, pw) {
+  const salt = hex(crypto.getRandomValues(new Uint8Array(16)));
+  await env.DB.batch([
+    env.DB.prepare("UPDATE users SET salt = ?, hash = ?, failed = 0, locked_until = NULL WHERE email = ?").bind(salt, await pbkdf2(pw, salt), email),
+    env.DB.prepare("DELETE FROM sessions WHERE email = ?").bind(email)]);
+}
+const clean = (v, n = 300) => String(v == null ? "" : v).trim().slice(0, n);
+async function adminApi(req, env, user, path) {
+  let b; try { b = await req.json(); } catch (e) { return json({error: "Bad request."}, 400); }
+  const now = new Date().toISOString();
+  try {
+    switch (path) {
+      case "/api/admin/state": {
+        const {results: clients} = await env.DB.prepare("SELECT id, name, logo_file, grades, active FROM clients ORDER BY id").all();
+        const out = [];
+        for (const c of clients) {
+          const {results: users} = await env.DB.prepare("SELECT email, name, active, last_login, locked_until FROM users WHERE client_id = ? ORDER BY name").bind(c.id).all();
+          out.push({id: c.id, name: c.name, active: !!c.active, logo: c.logo_file ? "/files/" + c.logo_file : "", grades: (c.grades || DEFAULT_GRADES).split(",").filter(Boolean), users, guesthouses: await clientGuestHouses(env, c, true)});
+        }
+        return json({clients: out, me: user.email});
+      }
+      case "/api/admin/client": {
+        const name = clean(b.name, 120); if (!name) return json({error: "Enter the client name."}, 400);
+        const grades = (Array.isArray(b.grades) ? b.grades : String(b.grades || DEFAULT_GRADES).split(",")).map((g) => clean(g, 10).toUpperCase()).filter(Boolean).join(",") || DEFAULT_GRADES;
+        if (b.id) await env.DB.prepare("UPDATE clients SET name = ?, grades = ?, active = ? WHERE id = ?").bind(name, grades, b.active === false ? 0 : 1, +b.id).run();
+        else { const r = await env.DB.prepare("INSERT INTO clients (name, grades, active, created) VALUES (?, ?, 1, ?)").bind(name, grades, now).run(); return json({ok: true, id: r.meta ? r.meta.last_row_id : r.lastInsertRowid}); }
+        return json({ok: true, id: +b.id});
+      }
+      case "/api/admin/client/logo": {
+        const c = await env.DB.prepare("SELECT id, logo_file FROM clients WHERE id = ?").bind(+b.client_id).first(); if (!c) return json({error: "No such client."}, 404);
+        const fid = await saveFile(env, c.id, b.data_url);
+        await env.DB.prepare("UPDATE clients SET logo_file = ? WHERE id = ?").bind(fid, c.id).run();
+        if (c.logo_file) await env.DB.prepare("DELETE FROM files WHERE id = ?").bind(c.logo_file).run();
+        return json({ok: true, logo: "/files/" + fid});
+      }
+      case "/api/admin/gh": {
+        const name = clean(b.name, 120); if (!name) return json({error: "Enter the guest house name."}, 400);
+        const c = await env.DB.prepare("SELECT id FROM clients WHERE id = ?").bind(+b.client_id).first(); if (!c) return json({error: "No such client."}, 404);
+        const status = b.status === "Live" ? "Live" : "Coming soon";
+        const show = {}; for (const k of Object.keys(SHOW_DEFAULT)) show[k] = !(b.show && b.show[k] === false);
+        const tags = (a) => JSON.stringify((Array.isArray(a) ? a : []).map((x) => clean(x, 80)).filter(Boolean).slice(0, 40));
+        const vals = [name, clean(b.city, 80), clean(b.address, 400), clean(b.map_url, 500), clean(b.operator, 120), status, clean(b.cancellation, 3000), tags(b.inclusions), tags(b.amenities), JSON.stringify(show), now];
+        let id = +b.id || 0;
+        if (id) { const ex = await env.DB.prepare("SELECT id FROM guesthouses WHERE id = ? AND client_id = ?").bind(id, c.id).first(); if (!ex) return json({error: "No such guest house."}, 404);
+          await env.DB.prepare("UPDATE guesthouses SET name = ?, city = ?, address = ?, map_url = ?, operator = ?, status = ?, cancellation = ?, inclusions = ?, amenities = ?, show_json = ?, updated = ? WHERE id = ?").bind(...vals, id).run(); }
+        else { const r = await env.DB.prepare("INSERT INTO guesthouses (name, city, address, map_url, operator, status, cancellation, inclusions, amenities, show_json, updated, client_id) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)").bind(...vals, c.id).run(); id = r.meta ? r.meta.last_row_id : r.lastInsertRowid; }
+        const stmts = [env.DB.prepare("DELETE FROM room_types WHERE gh_id = ?").bind(id), env.DB.prepare("DELETE FROM contacts WHERE gh_id = ?").bind(id)];
+        (Array.isArray(b.room_types) ? b.room_types : []).slice(0, 20).forEach((r, i) => stmts.push(env.DB.prepare("INSERT INTO room_types (gh_id, name, rooms, room_nos, occupancy, grades, sort) VALUES (?, ?, ?, ?, ?, ?, ?)")
+          .bind(id, clean(r.name, 60), Math.max(0, Math.min(500, parseInt(r.rooms, 10) || 0)), clean(r.room_nos, 200), ["Single", "Double", "Single / Double"].includes(r.occupancy) ? r.occupancy : "Single", JSON.stringify((Array.isArray(r.grades) ? r.grades : []).map((g) => clean(g, 10)).filter(Boolean)), i)));
+        (Array.isArray(b.contacts) ? b.contacts : []).slice(0, 20).forEach((x, i) => { if (clean(x.name) || clean(x.phone) || clean(x.email))
+          stmts.push(env.DB.prepare("INSERT INTO contacts (gh_id, name, designation, email, phone, sort) VALUES (?, ?, ?, ?, ?, ?)").bind(id, clean(x.name, 120), clean(x.designation, 80), clean(x.email, 160), clean(x.phone, 60), i)); });
+        await env.DB.batch(stmts);
+        return json({ok: true, id});
+      }
+      case "/api/admin/gh/delete": {
+        const id = +b.id; const {results: ph} = await env.DB.prepare("SELECT file_id FROM photos WHERE gh_id = ?").bind(id).all();
+        await env.DB.batch([...ph.map((p) => env.DB.prepare("DELETE FROM files WHERE id = ?").bind(p.file_id)),
+          ...["photos", "room_types", "contacts"].map((t) => env.DB.prepare("DELETE FROM " + t + " WHERE gh_id = ?").bind(id)), env.DB.prepare("DELETE FROM guesthouses WHERE id = ?").bind(id)]);
+        return json({ok: true});
+      }
+      case "/api/admin/photo": {
+        const g = await env.DB.prepare("SELECT id, client_id FROM guesthouses WHERE id = ?").bind(+b.gh_id).first(); if (!g) return json({error: "Save the guest house first."}, 404);
+        const fid = await saveFile(env, g.client_id, b.data_url);
+        const n = await env.DB.prepare("SELECT count(*) AS n FROM photos WHERE gh_id = ?").bind(g.id).first();
+        await env.DB.prepare("INSERT INTO photos (gh_id, file_id, caption, sort) VALUES (?, ?, ?, ?)").bind(g.id, fid, clean(b.caption, 120), n ? n.n : 0).run();
+        return json({ok: true, url: "/files/" + fid});
+      }
+      case "/api/admin/photo/delete": {
+        const p = await env.DB.prepare("SELECT id, file_id FROM photos WHERE id = ?").bind(+b.id).first(); if (!p) return json({ok: true});
+        await env.DB.batch([env.DB.prepare("DELETE FROM photos WHERE id = ?").bind(p.id), env.DB.prepare("DELETE FROM files WHERE id = ?").bind(p.file_id)]);
+        return json({ok: true});
+      }
+      case "/api/admin/user": {
+        const email = clean(b.email, 200).toLowerCase(), name = clean(b.name, 120);
+        if (!email) return json({error: "Enter an email address or user ID."}, 400);
+        const ex = await env.DB.prepare("SELECT email, role FROM users WHERE email = ?").bind(email).first();
+        if (ex && ex.role === "admin") return json({error: "That account is a Zuna admin."}, 400);
+        if (!ex) {
+          const c = await env.DB.prepare("SELECT id FROM clients WHERE id = ?").bind(+b.client_id).first(); if (!c) return json({error: "No such client."}, 404);
+          const pw = makePassword(name || email);
+          await env.DB.prepare("INSERT INTO users (email, name, salt, hash, active, failed, role, client_id) VALUES (?, ?, '', '', 1, 0, 'client', ?)").bind(email, name || email, c.id).run();
+          await setPassword(env, email, pw);
+          return json({ok: true, created: true, password: pw});
+        }
+        await env.DB.prepare("UPDATE users SET name = ?, active = ? WHERE email = ?").bind(name || email, b.active === false ? 0 : 1, email).run();
+        if (b.active === false) await env.DB.prepare("DELETE FROM sessions WHERE email = ?").bind(email).run();
+        return json({ok: true});
+      }
+      case "/api/admin/user/reset": {
+        const u = await env.DB.prepare("SELECT email, name, role FROM users WHERE email = ?").bind(clean(b.email, 200).toLowerCase()).first();
+        if (!u || u.role === "admin") return json({error: "No such client user."}, 404);
+        const pw = makePassword(u.name); await setPassword(env, u.email, pw);
+        return json({ok: true, password: pw});
+      }
+    }
+  } catch (e) { return json({error: e.message || "Something went wrong."}, 400); }
+  return json({error: "Not found."}, 404);
+}
+
+async function dashboard(env, user, url) {
+  const {results} = await env.DB.prepare("SELECT id, json, updated_at FROM datasets WHERE id IN ('bookings', 'properties', 'period')").all();
   const data = {}; let updated = "";
   for (const r of results) { data[r.id] = JSON.parse(r.json); if (r.id === "bookings") updated = r.updated_at; }
+  if (await multiClient(env)) {
+    const {results: clients} = await env.DB.prepare("SELECT id, name, logo_file, grades FROM clients WHERE active = 1 ORDER BY id").all();
+    const want = user.admin ? (+url.searchParams.get("client") || (clients[0] || {}).id) : user.client_id;
+    const client = clients.find((c) => c.id === want);
+    if (!client) return html(LOGIN.replace("</body>", "<script>document.getElementById('err').textContent='Your account is not linked to a client yet. Please contact the Zuna Hotel Desk.';document.getElementById('err').classList.remove('hidden');</script></body>"));
+    data.properties = await clientGuestHouses(env, client, false);
+    const names = new Set(data.properties.map((p) => p.property));
+    data.bookings = (data.bookings || []).filter((b) => names.has(b.property));
+    data.client = {id: client.id, name: client.name, logo: client.logo_file ? "/files/" + client.logo_file : ""};
+    if (user.admin) data.clients = clients.map((c) => ({id: c.id, name: c.name}));
+  }
   const payload = JSON.stringify(data).replace(/</g, "\\u003c");
-  const userJs = JSON.stringify({name: user.name || "", email: user.email}).replace(/</g, "\\u003c");
+  const userJs = JSON.stringify({name: user.name || "", email: user.email, admin: !!user.admin}).replace(/</g, "\\u003c");
   let page = TEMPLATE.replace("__DATA__", () => payload).replace("__USER__", () => userJs);
   if (updated) page = page.replace(/REPORT_DATE = '\d{4}-\d{2}-\d{2}'/, "REPORT_DATE = '" + updated.slice(0, 10) + "'");
   return html(page);
@@ -406,12 +607,29 @@ export default {
       return redirect("/", {"set-cookie": COOKIE + "=; Path=/; HttpOnly; Secure; SameSite=Lax; Max-Age=0"});
     }
     if (path === LEGACY_PATH || path === "/login") return redirect("/");
+    if (path.startsWith("/api/admin/") && request.method === "POST") {
+      const origin = request.headers.get("origin");
+      if (origin && origin !== url.origin) return json({error: "Bad origin."}, 403);
+      if (!(request.headers.get("content-type") || "").toLowerCase().startsWith("application/json")) return json({error: "Bad request."}, 415);
+      const u = await currentUser(request, env);
+      if (!u || !u.admin) return json({error: "Not allowed."}, 403);
+      return adminApi(request, env, u, path);
+    }
+    const fm = path.match(/^\/files\/(\d+)$/);
+    if (fm) { const u = await currentUser(request, env); return u ? serveFile(env, u, +fm[1]) : new Response("Not found", {status: 404, headers: SEC}); }
+    if (path === "/admin") {
+      const u = await currentUser(request, env);
+      if (!u) return html(LOGIN);
+      if (!u.admin) return redirect("/");
+      return html(ADMIN.replace("__ME__", () => JSON.stringify({name: u.name || "", email: u.email}).replace(/</g, "\\u003c")));
+    }
     if (path !== "/") return redirect("/");
     const user = await currentUser(request, env);
     if (!user) return html(LOGIN);
-    return dashboard(env, user);
+    return dashboard(env, user, url);
   }
 };
 
 const LOGIN = "";
 const TEMPLATE = "";
+const ADMIN = "";

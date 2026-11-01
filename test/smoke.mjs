@@ -111,6 +111,52 @@ check('old host redirects to PRIMARY_HOST', r.status === 301 && r.headers.get('l
   check('voucher intake off without VOUCHER_TOKEN', (await vpost({known: []}, '')).status === 401);
 }
 
+// ---------- admin panel / multi-client ----------
+{
+  env = {DB};
+  const mk = (email, role, client) => { const sl = crypto.randomBytes(16).toString('hex');
+    DB.raw.prepare('INSERT OR REPLACE INTO users (email, name, salt, hash, active, failed) VALUES (?, ?, ?, ?, 1, 0)').run(email, email, sl, crypto.pbkdf2Sync('Pass-word-123', Buffer.from(sl, 'hex'), 10000, 32, 'sha256').toString('hex')); };
+  await call('/');                                   // runs schema setup (role / client_id columns)
+  mk('boss@zuna.example'); DB.raw.prepare("UPDATE users SET role = 'admin' WHERE email = 'boss@zuna.example'").run();
+  const loginAs = async (email) => (await call('/api/login', {method: 'POST', body: {email, password: 'Pass-word-123'}})).headers.get('set-cookie').split(';')[0];
+  const admin = await loginAs('boss@zuna.example');
+  const A = async (p, body) => { const x = await call('/api/admin/' + p, {method: 'POST', body, cookie: admin}); return {status: x.status, j: await x.json()}; };
+  let x = await A('client', {name: 'Acme'}); const acme = x.j.id;
+  x = await A('client', {name: 'Other Co'}); const other = x.j.id;
+  check('admin creates clients', !!acme && !!other);
+  const png = 'data:image/png;base64,iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAYAAAAfFcSJAAAADUlEQVR42mNk+M9QDwADhgGAWjR9awAAAABJRU5ErkJggg==';
+  x = await A('client/logo', {client_id: acme, data_url: png}); check('admin uploads client logo', x.status === 200 && /^\/files\/\d+$/.test(x.j.logo));
+  const logoUrl = x.j.logo;
+  x = await A('gh', {client_id: acme, name: 'Acme House', city: 'Pune', status: 'Live', address: '1 Main Rd', cancellation: 'Free until 24h before',
+    inclusions: ['Breakfast'], amenities: ['Wi-Fi'], show: {photos: false},
+    room_types: [{name: 'Deluxe', rooms: 2, room_nos: 'A1 to A2', occupancy: 'Single', grades: ['E1', 'E2', 'E3', 'E4', 'E5', 'E6', 'E7']}, {name: 'Suite', rooms: 1, room_nos: 'S1', occupancy: 'Double', grades: ['M1', 'M2', 'M3', 'M4', 'M5', 'M6', 'M7', 'M8', 'P1', 'P2', 'P3', 'E1', 'E2', 'E3', 'E4', 'E5', 'E6', 'E7']}],
+    contacts: [{name: 'Ravi', designation: 'Caretaker', phone: '+91 90000 00000', email: 'ravi@acme.example'}]});
+  const gh = x.j.id; check('admin creates guest house with room types and contacts', x.status === 200 && !!gh);
+  x = await A('photo', {gh_id: gh, data_url: png}); check('admin uploads guest house photo', x.status === 200);
+  await A('gh', {client_id: other, name: 'Other House', status: 'Live', room_types: [{name: 'Std', rooms: 1, room_nos: 'X1', grades: []}]});
+  x = await A('user', {client_id: acme, name: 'Asha Rao', email: 'asha@acme.example'});
+  check('admin creates client user with generated password', x.j.created === true && /^Asha@[2-9]{4}$/.test(x.j.password), JSON.stringify(x.j));
+  const ashaPw = x.j.password;
+  x = await A('state', {}); const st = x.j.clients.find((c) => c.id === acme);
+  check('admin state lists guest house, eligibility text and user', st.guesthouses[0].room_types[0].eligible === 'E1–E7' && st.guesthouses[0].room_types[1].eligible === 'All grades' && st.users.length === 1);
+  // client user
+  r = await call('/api/login', {method: 'POST', body: {email: 'asha@acme.example', password: ashaPw}});
+  const asha = (r.headers.get('set-cookie') || '').split(';')[0];
+  check('client user logs in with generated password', r.status === 200);
+  const page = await (await call('/', {cookie: asha})).text();
+  const data = JSON.parse(page.match(/window\.__LTMGH_DATA = (.*?);\nconst REPORT_DATE/s)[1]);
+  check('client sees only its own guest houses', data.properties.length === 1 && data.properties[0].property === 'Acme House' && data.client.name === 'Acme');
+  check('hidden sections are not sent to client (photos off)', !('photos' in data.properties[0]) && data.properties[0].cancellation === 'Free until 24h before' && data.properties[0].rooms_list.join() === 'A1,A2,S1');
+  check('client user cannot use admin API', (await call('/api/admin/state', {method: 'POST', body: {}, cookie: asha})).status === 403);
+  check('client user cannot open /admin', (await call('/admin', {cookie: asha})).status === 302);
+  check('client user can load own logo', (await call(logoUrl, {cookie: asha})).status === 200);
+  const otherLogo = await A('client/logo', {client_id: other, data_url: png});
+  check("client user cannot load another client's files", (await call(otherLogo.j.logo, {cookie: asha})).status === 404);
+  check('admin page served to admin', /Admin/.test(await (await call('/admin', {cookie: admin})).text()));
+  x = await A('user', {email: 'asha@acme.example', name: 'Asha Rao', active: false});
+  check('disabled user is signed out', (await (await call('/', {cookie: asha})).text()).includes('id="f"'));
+}
+
 globalThis.fetch = realFetch;
 console.log(`\n${pass} passed, ${fail} failed`);
 process.exit(fail ? 1 : 0);

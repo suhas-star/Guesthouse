@@ -175,3 +175,11 @@ html.dark .chart-skel { background-image: linear-gradient(100deg, #1c1252 30%, #
   #dBody { padding-bottom: calc(20px + env(safe-area-inset-bottom, 0px)); }
 }
 html.dark .sheet-handle span { background: #3a2c8a; }
+
+/* bold KPI figures */
+.kpi-num { font-size: 34px; line-height: 1.05; font-weight: 800; letter-spacing: -.035em; margin-top: 2px; }
+.kpi-num.kpi-sm { font-size: 26px; line-height: 1.1; margin-top: 0; }
+.kpi-unit { font-size: .5em; font-weight: 700; letter-spacing: 0; margin-left: 2px; vertical-align: .62em; color: #00744f; }
+.kpi-hero .kpi-unit { color: #4fd9aa; }
+html.dark .kpi-unit { color: #4fd9aa; }
+@media (max-width: 640px) { .kpi-num { font-size: 28px; } .kpi-num.kpi-sm { font-size: 22px; } }

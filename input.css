@@ -27,7 +27,8 @@
   html.sb-c #side .sb-label { display: none !important; }
   html.sb-c #side .sb-full { visibility: hidden; }   /* keeps its height, so the menu does not jump up or down */
   html.sb-c #side .sb-mini { display: flex !important; }
-  html.sb-c #side .sb-user { flex-direction: column; gap: .5rem; }
+  html.sb-c #side .sb-actions { grid-template-columns: 1fr; }
+  html.sb-c #side .sb-who { justify-content: center; }
   #app { transition: grid-template-columns .32s cubic-bezier(.2,.8,.2,1); }
   #side { transition: width .32s cubic-bezier(.2,.8,.2,1), transform .3s ease !important; overflow-x: hidden; }
   #side .navbtn { padding-left: 15px; padding-right: 15px; white-space: nowrap; }
@@ -242,3 +243,13 @@ html.sb-anim .glass-zone .card, html.sb-anim header, html.sb-anim .backdrop-blur
   @view-transition { navigation: auto; }
   ::view-transition-old(root), ::view-transition-new(root) { animation-duration: .3s; animation-timing-function: cubic-bezier(.2,.8,.2,1); }
 }
+
+/* sidebar footer actions: icon with its name underneath */
+.sb-act { display: flex; flex-direction: column; align-items: center; justify-content: center; gap: 3px; min-height: 44px; padding: 5px 2px; border-radius: 10px; color: #cdc5ec; font-size: 11px; font-weight: 600; line-height: 1.1; transition: background-color .15s, color .15s; }
+.sb-act:hover { background: rgba(255,255,255,.1); color: #fff; }
+.sb-act .sb-label { white-space: nowrap; }
+html.sb-c #side .sb-act { min-height: 38px; }
+/* tooltip next to the narrow sidebar */
+.sb-tip { position: fixed; z-index: 1200; transform: translate(-4px, -50%); opacity: 0; pointer-events: none; padding: 6px 10px; border-radius: 8px; background: #12005A; color: #fff; font-size: 12px; font-weight: 600; white-space: nowrap; box-shadow: 0 8px 20px -6px rgba(18,0,90,.5), 0 0 0 1px rgba(255,255,255,.08); transition: opacity .12s, transform .12s; }
+.sb-tip.on { opacity: 1; transform: translate(0, -50%); }
+html.dark .sb-tip { background: #2d1a9e; }

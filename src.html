@@ -43,12 +43,16 @@ if(document.readyState!=='loading')setTimeout(hide,150);else document.addEventLi
       <button data-view="bookings" class="navbtn" title="Bookings"><i data-i="list-checks"></i><span class="sb-label">Bookings</span><span id="navCount" class="sb-label ml-auto text-xs font-bold rounded-full px-2 py-0.5 bg-white/15">0</span></button>
       <button data-view="houses" class="navbtn" title="Guest houses"><i data-i="building-2"></i><span class="sb-label">Guest houses</span></button>
     </nav>
-    <div class="mt-auto border-t border-white/10 p-3 flex items-center gap-2 sb-user">
-      <span id="userAv" class="w-9 h-9 shrink-0 rounded-full bg-mint-500 text-zuna-900 grid place-items-center text-xs font-bold">—</span>
-      <div class="min-w-0 flex-1 sb-label"><p id="userName" class="text-sm font-semibold truncate">—</p><p id="userMail" class="text-xs text-zuna-300 truncate">—</p></div>
-      <button type="button" id="themeBtn" title="Dark mode" aria-label="Switch to dark mode" aria-pressed="false" class="grid place-items-center w-8 h-8 shrink-0 rounded-lg text-zuna-200 hover:text-white hover:bg-white/10 transition-colors"><i data-i="moon" class="w-[18px] h-[18px]"></i></button>
-      <button id="sbToggle" type="button" title="Collapse sidebar" aria-label="Collapse sidebar" aria-expanded="true" class="hidden lg:grid place-items-center w-8 h-8 shrink-0 rounded-lg text-zuna-200 hover:text-white hover:bg-white/10 transition-colors"><i data-i="panel-left-close" class="w-[18px] h-[18px]"></i></button>
-      <a href="/logout" id="logoutBtn" title="Log out" aria-label="Log out" class="grid place-items-center w-8 h-8 shrink-0 rounded-lg text-zuna-200 hover:text-white hover:bg-white/10 transition-colors"><i data-i="log-out" class="w-[18px] h-[18px]"></i></a>
+    <div class="mt-auto border-t border-white/10 p-3 sb-user">
+      <div class="flex items-center gap-3 sb-who">
+        <span id="userAv" class="w-9 h-9 shrink-0 rounded-full bg-mint-500 text-zuna-900 grid place-items-center text-xs font-bold">—</span>
+        <div class="min-w-0 flex-1 sb-label"><p id="userName" class="text-sm font-semibold truncate">—</p><p id="userMail" class="text-xs text-zuna-300 truncate">—</p></div>
+      </div>
+      <div class="mt-2.5 grid grid-cols-3 gap-1 sb-actions">
+        <button type="button" id="themeBtn" data-tip="Dark mode" aria-label="Switch to dark mode" aria-pressed="false" class="sb-act"><i data-i="moon" class="w-[18px] h-[18px]"></i><span class="sb-label">Dark mode</span></button>
+        <button id="sbToggle" type="button" data-tip="Collapse sidebar" aria-label="Collapse sidebar" aria-expanded="true" class="sb-act hidden lg:flex"><i data-i="panel-left-close" class="w-[18px] h-[18px]"></i><span class="sb-label">Collapse</span></button>
+        <a href="/logout" id="logoutBtn" data-tip="Log out" aria-label="Log out" class="sb-act"><i data-i="log-out" class="w-[18px] h-[18px]"></i><span class="sb-label">Log out</span></a>
+      </div>
     </div>
   </aside>
   <div id="scrimSide" class="fixed inset-0 z-40 bg-zuna-900/40 backdrop-blur-sm hidden lg:hidden"></div>
@@ -839,7 +843,7 @@ ZUI.auto(document.body); ZUI.clickables(document.body);
 })();
 (() => {
   const nm = USER.name || USER.email || 'User';
-  $('#userName').textContent = nm; $('#userName').parentNode.title = nm + (USER.email ? '\n' + USER.email : ''); $('#userMail').textContent = USER.email && USER.email.includes('@') ? USER.email : 'Signed in';
+  $('#userName').textContent = nm; $('#userName').parentNode.title = nm + (USER.email ? '\n' + USER.email : ''); $('#userAv').dataset.tip = nm; $('#userMail').textContent = USER.email && USER.email.includes('@') ? USER.email : 'Signed in';
   $('#userAv').textContent = nm.split(/\s+/).map((w) => w[0]).slice(0, 2).join('').toUpperCase();
   try { localStorage.removeItem('ltmgh.sb'); } catch (e) {}   // old 'remember open' setting
   // smooth open / close: the main area is laid out once at its new size and slides into place (no re-layout on every frame);
@@ -855,13 +859,20 @@ ZUI.auto(document.body); ZUI.clickables(document.body);
     clearTimeout(setCol.t); setCol.t = setTimeout(() => { mw.style.transition = ''; mw.style.transform = ''; R.classList.remove('sb-anim'); fitCharts(); }, 340); };
   // sidebar toggle: icon button in the bottom row, just before Log out
   const syncToggle = () => { const c = document.documentElement.classList.contains('sb-c'), t = $('#sbToggle');
-    t.replaceChildren(icon(c ? 'panel-left-open' : 'panel-left-close', 'w-[18px] h-[18px]'));
-    t.title = c ? 'Expand sidebar' : 'Collapse sidebar'; t.setAttribute('aria-label', t.title); t.setAttribute('aria-expanded', c ? 'false' : 'true'); };
+    t.replaceChildren(icon(c ? 'panel-left-open' : 'panel-left-close', 'w-[18px] h-[18px]'), h('span', 'sb-label', c ? 'Expand' : 'Collapse'));
+    t.dataset.tip = c ? 'Expand sidebar' : 'Collapse sidebar'; t.setAttribute('aria-label', t.dataset.tip); t.setAttribute('aria-expanded', c ? 'false' : 'true'); };
   $('#sbToggle').onclick = () => { setCol(!document.documentElement.classList.contains('sb-c')); syncToggle(); }; syncToggle();
   $('#sbCloseM').onclick = () => closeSide();
 })();
 
 hydrateIcons();
+// narrow sidebar: hovering an icon shows its name right away (menu items, theme, collapse, log out, your name)
+{ const tip = h('div', 'sb-tip'); tip.setAttribute('role', 'tooltip'); document.body.appendChild(tip); let on = null;
+  const label = (el) => el.dataset.tip || el.title || (el.querySelector('.sb-label') || {}).textContent || '';
+  $('#side').addEventListener('mouseover', (e) => { const el = e.target.closest('#side [data-tip], #side .navbtn'); if (!el || !document.documentElement.classList.contains('sb-c') || innerWidth < 1024) { tip.classList.remove('on'); on = null; return; }
+    if (el === on) return; on = el; const r = el.getBoundingClientRect(); tip.textContent = label(el).trim(); tip.style.top = (r.top + r.height / 2) + 'px'; tip.style.left = (r.right + 10) + 'px'; tip.classList.add('on'); });
+  $('#side').addEventListener('mouseleave', () => { tip.classList.remove('on'); on = null; });
+  document.addEventListener('scroll', () => tip.classList.remove('on'), true); }
 // phones: details open as a bottom sheet; drag the handle or header down to close
 { const dr = $('#drawer'); let y0 = null, dy = 0, t0 = 0;
   const startY = (e) => { if (innerWidth >= 640) return; y0 = e.touches[0].clientY; dy = 0; t0 = Date.now(); dr.style.transition = 'none'; };
@@ -869,7 +880,7 @@ hydrateIcons();
   const endY = () => { if (y0 == null) return; y0 = null; dr.style.transition = ''; const fast = dy > 40 && dy / Math.max(1, Date.now() - t0) > .5;
     if (dy > 110 || fast) { closeDrawer(); setTimeout(() => dr.style.setProperty('--drag', '0px'), 350); } else dr.style.setProperty('--drag', '0px'); };
   ['#dHandle', '#dHead'].forEach((sel) => { const n = $(sel); n.addEventListener('touchstart', startY, {passive: true}); n.addEventListener('touchmove', moveY, {passive: false}); n.addEventListener('touchend', endY); n.addEventListener('touchcancel', endY); }); }
-{ const tb = $('#themeBtn'); const sync = () => { const dk = ZUI.theme.get() === 'dark'; tb.replaceChildren(icon(dk ? 'sun' : 'moon', 'w-[18px] h-[18px]')); tb.title = dk ? 'Light mode' : 'Dark mode'; tb.setAttribute('aria-label', dk ? 'Switch to light mode' : 'Switch to dark mode'); tb.setAttribute('aria-pressed', dk ? 'true' : 'false'); };
+{ const tb = $('#themeBtn'); const sync = () => { const dk = ZUI.theme.get() === 'dark'; tb.replaceChildren(icon(dk ? 'sun' : 'moon', 'w-[18px] h-[18px]'), h('span', 'sb-label', dk ? 'Light mode' : 'Dark mode')); tb.dataset.tip = dk ? 'Light mode' : 'Dark mode'; tb.setAttribute('aria-label', dk ? 'Switch to light mode' : 'Switch to dark mode'); tb.setAttribute('aria-pressed', dk ? 'true' : 'false'); };
   tb.onclick = () => { ZUI.theme.set(ZUI.theme.get() === 'dark' ? 'light' : 'dark'); sync(); render(); toast(ZUI.theme.get() === 'dark' ? 'Dark mode on' : 'Light mode on'); }; sync(); }
 const hs = location.hash.slice(1); if (TITLES[hs] && (hs !== 'users' || (USER.manager && !USER.admin))) state.view = hs;
 /* auto-refresh: reload data every 10 minutes while the tab is open (quietly, keeps the current page) */

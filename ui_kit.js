@@ -31,6 +31,21 @@ const ZUI = (() => {
 .zd-cwrap{position:relative}.zd-cwrap>input{padding-right:2.25rem}
 .zd-cwrap>.zd-chev{position:absolute;right:.75rem;top:50%;margin-top:-8px;cursor:pointer}
 @media (prefers-reduced-motion:reduce){.zd-panel{animation:none}}
+.zcal-btn{gap:.55rem}.zcal-btn .zd-chev{display:none}.zcal-ic{width:16px;height:16px;flex-shrink:0;color:#02C988}
+.zcal{position:fixed;z-index:1100;width:304px;max-width:calc(100vw - 16px);padding:12px;border-radius:18px;background:#fff;color:#12005A;box-shadow:0 0 0 1px #e6e2f6,0 22px 50px -14px rgba(18,0,90,.35);animation:zdIn .14s ease-out;font-family:inherit;user-select:none}
+.zcal-hd{display:flex;align-items:center;gap:6px;margin-bottom:8px}.zcal-t{flex:1;margin:0;text-align:center;font-size:14px;font-weight:700}
+.zcal-nav{width:32px;height:32px;display:grid;place-items:center;border:0;border-radius:10px;background:#f4f2fb;color:#12005A;cursor:pointer}.zcal-nav:hover{background:#e6faf3;color:#00744f}.zcal-nav svg{width:16px;height:16px}
+.zcal-wk,.zcal-grid{display:grid;grid-template-columns:repeat(7,1fr);gap:2px}.zcal-wk span{text-align:center;font-size:11px;font-weight:700;color:#716b9b;padding:4px 0}
+.zcal-d{height:36px;border:0;border-radius:10px;background:transparent;color:#12005A;font-size:13px;font-weight:600;cursor:pointer;font-variant-numeric:tabular-nums;transition:background-color .12s,color .12s}
+.zcal-d:hover{background:#e6faf3;color:#00744f}.zcal-d[data-we]{color:#00744f}.zcal-d[data-today]{box-shadow:inset 0 0 0 1.5px #12005A}
+.zcal-d[data-in]{background:#e6faf3;border-radius:4px;color:#12005A}.zcal-d[data-end]{background:#c0f2df;color:#12005A}
+.zcal-d[data-sel]{background:#12005A;color:#fff;box-shadow:0 6px 14px -6px rgba(18,0,90,.6)}.zcal-d[data-sel][data-today]{box-shadow:0 0 0 2px #02C988}
+.zcal-d:disabled{opacity:.3;cursor:not-allowed;background:transparent;color:#12005A}
+.zcal-ft{display:flex;align-items:center;gap:8px;margin-top:8px;padding-top:8px;border-top:1px solid #eeeaf9}.zcal-link{border:0;background:none;color:#00744f;font-weight:700;font-size:12px;cursor:pointer;padding:4px 6px;border-radius:8px}.zcal-link:hover{background:#e6faf3}.zcal-hint{margin-left:auto;font-size:11px;color:#716b9b}
+.zcal-months{display:grid;grid-template-columns:repeat(3,1fr);gap:6px}.zcal-m{height:42px;border:0;border-radius:12px;background:#f8f7fd;color:#12005A;font-weight:600;font-size:13px;cursor:pointer}.zcal-m:hover{background:#e6faf3;color:#00744f}.zcal-m[data-today]{box-shadow:inset 0 0 0 1.5px #12005A}.zcal-m[data-sel]{background:#12005A;color:#fff}
+html.dark .zcal{background:#150c45;color:#eeeaff;box-shadow:0 0 0 1px #2a2066,0 22px 50px -14px rgba(0,0,0,.7)}html.dark .zcal-nav{background:#1c1252;color:#eeeaff}html.dark .zcal-d,html.dark .zcal-d:disabled{color:#eeeaff}html.dark .zcal-d[data-we]{color:#4fd9aa}
+html.dark .zcal-d:hover,html.dark .zcal-d[data-in]{background:rgba(2,201,136,.16);color:#eeeaff}html.dark .zcal-d[data-end]{background:rgba(2,201,136,.32)}html.dark .zcal-d[data-today]{box-shadow:inset 0 0 0 1.5px #eeeaff}html.dark .zcal-d[data-sel]{background:#02C988;color:#12005A}
+html.dark .zcal-m{background:#1c1252;color:#eeeaff}html.dark .zcal-m[data-sel]{background:#02C988;color:#12005A}html.dark .zcal-ft{border-color:#2a2066}html.dark .zcal-link{color:#4fd9aa}html.dark .zcal-wk span,html.dark .zcal-hint{color:#b3aadf}
 /* hold to confirm */
 .zc-hold{position:relative;overflow:hidden;display:inline-flex;align-items:center;gap:8px;touch-action:none;user-select:none;-webkit-user-select:none}
 .zc-hold .zc-fill{position:absolute;inset:0;width:calc(var(--p,0)*100%);background:rgba(0,0,0,.22);pointer-events:none}
@@ -145,7 +160,73 @@ html.dark .zc-list{background:rgba(245,158,11,.13);color:#fcd34d;box-shadow:inse
       if (e.key.length === 1 && /\S/.test(e.key)) { typed += e.key.toLowerCase(); clearTimeout(tt); tt = setTimeout(() => typed = '', 700); if (!isOpen(b)) open(); const k = cur.items.findIndex((i) => i.label.toLowerCase().startsWith(typed)); if (k >= 0) setAct(cur, k); } };
     sync(); }
   // enhance every select now and later (forms are built dynamically)
-  function auto(root) { root.querySelectorAll('select').forEach(select); new MutationObserver((ms) => ms.forEach((m) => m.addedNodes.forEach((n) => { if (n.nodeType !== 1) return; if (n.tagName === 'SELECT') select(n); else n.querySelectorAll && n.querySelectorAll('select').forEach(select); }))).observe(root, {childList: true, subtree: true}); }
+  // ---- Zuna calendar for <input type="date"> and <input type="month"> (the input stays the source of truth) ----
+  const MONS = ['January', 'February', 'March', 'April', 'May', 'June', 'July', 'August', 'September', 'October', 'November', 'December'];
+  const isoD = (d) => d.toISOString().slice(0, 10), parseD = (v) => new Date(v + 'T00:00:00Z');
+  const todayIso = () => { const d = new Date(); return new Date(Date.UTC(d.getFullYear(), d.getMonth(), d.getDate())).toISOString().slice(0, 10); };
+  const fmtD = (v) => { const d = parseD(v); return ['Sun', 'Mon', 'Tue', 'Wed', 'Thu', 'Fri', 'Sat'][d.getUTCDay()] + ', ' + d.getUTCDate() + ' ' + MONS[d.getUTCMonth()].slice(0, 3) + ' ' + d.getUTCFullYear(); };
+  const IVAL = Object.getOwnPropertyDescriptor(HTMLInputElement.prototype, 'value');
+  let cal = null;   // the open calendar
+  const closeCal = () => { if (!cal) return; const c = cal; cal = null; c.panel.remove(); c.btn.setAttribute('aria-expanded', 'false'); };
+  document.addEventListener('mousedown', (e) => { if (cal && !cal.panel.contains(e.target) && !cal.btn.contains(e.target)) closeCal(); }, true);
+  addEventListener('resize', () => closeCal());
+  document.addEventListener('scroll', (e) => { if (cal && !cal.panel.contains(e.target)) placeCal(); }, true);
+  const placeCal = () => { if (!cal) return; const r = cal.btn.getBoundingClientRect(), p = cal.panel, below = innerHeight - r.bottom - 12;
+    if (r.bottom < 0 || r.top > innerHeight) { closeCal(); return; }
+    p.style.left = Math.max(8, Math.min(r.left, innerWidth - p.offsetWidth - 8)) + 'px';
+    if (p.offsetHeight > below && r.top > below) { p.style.top = ''; p.style.bottom = (innerHeight - r.top + 6) + 'px'; } else { p.style.bottom = ''; p.style.top = (r.bottom + 6) + 'px'; } };
+  function dateField(inp) { if (inp._zcal || !inp.parentNode) return; const month = inp.type === 'month';
+    const b = el('button', (inp.className || '') + ' zd-btn zcal-btn'); b.type = 'button'; b.setAttribute('aria-haspopup', 'dialog'); b.setAttribute('aria-expanded', 'false');
+    const ic = svgIcon('zcal-ic', 'M8 2v4M16 2v4M3 10h18M5 4h14a2 2 0 0 1 2 2v14a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2V6a2 2 0 0 1 2-2z'); ic.setAttribute('stroke-width', '2');
+    const lab = el('span', 'zd-val'); b.append(ic, lab, chevron()); inp.after(b); inp.classList.add('zd-hide'); inp.tabIndex = -1; inp.setAttribute('aria-hidden', 'true'); inp._zcal = b;
+    const sync = () => { const v = IVAL.get.call(inp); lab.textContent = v ? (month ? MONS[+v.slice(5, 7) - 1] + ' ' + v.slice(0, 4) : fmtD(v).slice(5)) : (month ? 'Select month' : 'Select date'); lab.classList.toggle('zd-ph', !v);
+      b.setAttribute('aria-label', (inp.getAttribute('aria-label') || (month ? 'Month' : 'Date')) + ': ' + lab.textContent); };
+    Object.defineProperty(inp, 'value', {configurable: true, get() { return IVAL.get.call(inp); }, set(v) { IVAL.set.call(inp, v); sync(); if (inp._zpair && inp._zpair.other._zcal) inp._zpair.other._zsync(); }});
+    inp._zsync = sync; inp.addEventListener('change', sync);
+    // a From / To pair: two date fields side by side in the same grid
+    const grid = inp.closest('.grid'); if (!month && grid) { const ds = [...grid.querySelectorAll('input[type=date]')]; if (ds.length === 2 && ds[1] === inp && ds[0]._zcal) { ds[0]._zpair = {role: 'from', other: inp}; inp._zpair = {role: 'to', other: ds[0]}; } }
+    const set = (v) => { if (IVAL.get.call(inp) !== v) { IVAL.set.call(inp, v); sync(); inp.dispatchEvent(new Event('input', {bubbles: true})); inp.dispatchEvent(new Event('change', {bubbles: true})); } if (inp._zpair) inp._zpair.other._zsync(); };
+    const open = () => { closeCal(); const panel = el('div', 'zcal'); panel.setAttribute('role', 'dialog'); panel.setAttribute('aria-label', month ? 'Choose a month' : 'Choose a date'); panel.addEventListener('mousedown', (e) => e.preventDefault());
+      document.body.appendChild(panel); cal = {panel, btn: b}; b.setAttribute('aria-expanded', 'true');
+      const cur = IVAL.get.call(inp), pair = inp._zpair, other = pair ? IVAL.get.call(pair.other) : '';
+      const startAt = (pair && pair.role === 'to' && other) ? other : (cur || todayIso());   // the To calendar opens on the From month
+      let view = month ? (cur ? +cur.slice(0, 4) : +todayIso().slice(0, 4)) : startAt.slice(0, 7) + '-01', focus = cur && cur.slice(0, 7) === startAt.slice(0, 7) ? cur : startAt;
+      const draw = () => { panel.replaceChildren();
+        const hd = el('div', 'zcal-hd'), prev = el('button', 'zcal-nav'), next = el('button', 'zcal-nav'); prev.type = next.type = 'button';
+        prev.appendChild(svgIcon('', 'm15 18-6-6 6-6')); next.appendChild(svgIcon('', 'm9 18 6-6-6-6')); prev.setAttribute('aria-label', month ? 'Previous year' : 'Previous month'); next.setAttribute('aria-label', month ? 'Next year' : 'Next month');
+        const t = el('p', 'zcal-t', month ? String(view) : MONS[+view.slice(5, 7) - 1] + ' ' + view.slice(0, 4));
+        const step = (k) => { if (month) view += k; else { const d = parseD(view); view = isoD(new Date(Date.UTC(d.getUTCFullYear(), d.getUTCMonth() + k, 1))); focus = view; } draw(); };
+        prev.onclick = () => step(-1); next.onclick = () => step(1); hd.append(prev, t, next); panel.appendChild(hd);
+        if (month) { const g = el('div', 'zcal-months'); MONS.forEach((m, i) => { const v = view + '-' + String(i + 1).padStart(2, '0'); const c = el('button', 'zcal-m', m.slice(0, 3)); c.type = 'button';
+            if (v === cur) c.dataset.sel = ''; if (v === todayIso().slice(0, 7)) c.dataset.today = ''; c.onclick = () => { set(v); closeCal(); b.focus(); }; g.appendChild(c); }); panel.appendChild(g); }
+        else {
+          const wk = el('div', 'zcal-wk'); ['Mo', 'Tu', 'We', 'Th', 'Fr', 'Sa', 'Su'].forEach((d) => wk.appendChild(el('span', null, d))); panel.appendChild(wk);
+          const g = el('div', 'zcal-grid'); g.setAttribute('role', 'grid'); const first = parseD(view), lead = (first.getUTCDay() + 6) % 7, dim = new Date(Date.UTC(first.getUTCFullYear(), first.getUTCMonth() + 1, 0)).getUTCDate();
+          const lo = pair ? (pair.role === 'from' ? cur : other) : '', hi = pair ? (pair.role === 'from' ? other : cur) : '';
+          for (let i = 0; i < lead; i++) g.appendChild(el('span'));
+          for (let dd = 1; dd <= dim; dd++) { const v = view.slice(0, 8) + String(dd).padStart(2, '0'), c = el('button', 'zcal-d', String(dd)); c.type = 'button'; c.dataset.v = v; c.tabIndex = v === focus ? 0 : -1;
+            const dow = parseD(v).getUTCDay(); if (dow === 0 || dow === 6) c.dataset.we = '';
+            if (v === todayIso()) c.dataset.today = ''; if (v === cur) c.dataset.sel = ''; else if (v === other && pair) c.dataset.end = '';
+            if (lo && hi && v > lo && v < hi) c.dataset.in = '';
+            const blocked = pair && pair.role === 'to' && other && v < other; if (blocked) { c.disabled = true; c.title = 'Before the first date'; }
+            c.setAttribute('aria-label', fmtD(v)); c.onclick = () => { set(v); closeCal(); if (pair && pair.role === 'from') { if (IVAL.get.call(pair.other) && IVAL.get.call(pair.other) < v) pair.other.value = v; setTimeout(() => pair.other._zcal.click(), 60); } else b.focus(); };   // From picked: go straight to To
+            g.appendChild(c); }
+          panel.appendChild(g);
+          g.addEventListener('keydown', (e) => { const mv = {ArrowLeft: -1, ArrowRight: 1, ArrowUp: -7, ArrowDown: 7}[e.key]; if (mv == null && e.key !== 'PageUp' && e.key !== 'PageDown') return; e.preventDefault();
+            if (e.key === 'PageUp' || e.key === 'PageDown') { step(e.key === 'PageUp' ? -1 : 1); } else { const d = parseD(focus); d.setUTCDate(d.getUTCDate() + mv); focus = isoD(d); if (focus.slice(0, 7) !== view.slice(0, 7)) { view = focus.slice(0, 8) + '01'; draw(); } }
+            const f = panel.querySelector('[data-v="' + focus + '"]'); if (f) { [...panel.querySelectorAll('.zcal-d')].forEach((x) => x.tabIndex = -1); f.tabIndex = 0; f.focus(); } });
+          const ft = el('div', 'zcal-ft'), tb = el('button', 'zcal-link', 'Today'); tb.type = 'button'; tb.onclick = () => { if (pair && pair.role === 'to' && other && todayIso() < other) return; set(todayIso()); closeCal(); b.focus(); };
+          ft.appendChild(tb); if (pair) ft.appendChild(el('span', 'zcal-hint', pair.role === 'from' ? 'Choose the first date' : 'Choose the last date')); panel.appendChild(ft);
+        }
+        placeCal(); };
+      draw(); const f = panel.querySelector('.zcal-d[tabindex="0"], [data-sel]'); if (f) f.focus({preventScroll: true}); };
+    b.onclick = () => (cal && cal.btn === b) ? closeCal() : open();
+    b.addEventListener('keydown', (e) => { if (e.key === 'ArrowDown' && !cal) { e.preventDefault(); open(); } });
+    document.addEventListener('keydown', (e) => { if (e.key === 'Escape' && cal && cal.btn === b) { e.stopPropagation(); closeCal(); b.focus(); } }, true);
+    sync(); }
+  const enhance = (n) => { if (n.tagName === 'SELECT') select(n); else if (n.tagName === 'INPUT' && (n.type === 'date' || n.type === 'month')) dateField(n);
+    else if (n.querySelectorAll) { n.querySelectorAll('select').forEach(select); n.querySelectorAll('input[type=date], input[type=month]').forEach(dateField); } };
+  function auto(root) { enhance(root); new MutationObserver((ms) => ms.forEach((m) => m.addedNodes.forEach((n) => { if (n.nodeType === 1) enhance(n); }))).observe(root, {childList: true, subtree: true}); }
 
   // stop the browser offering previously typed text over our lists
   const noFill = (i) => { i.setAttribute('autocomplete', 'off'); i.setAttribute('autocorrect', 'off'); i.setAttribute('spellcheck', 'false'); i.name = 'z' + Math.random().toString(36).slice(2, 10); i.setAttribute('data-lpignore', 'true'); i.setAttribute('data-1p-ignore', ''); i.setAttribute('data-form-type', 'other'); };

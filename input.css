@@ -183,3 +183,40 @@ html.dark .sheet-handle span { background: #3a2c8a; }
 .kpi-hero .kpi-unit { color: #4fd9aa; }
 html.dark .kpi-unit { color: #4fd9aa; }
 @media (max-width: 640px) { .kpi-num { font-size: 28px; } .kpi-num.kpi-sm { font-size: 22px; } }
+
+/* ---------- Room rack (Gantt) ---------- */
+.rack-t { border-collapse: separate; border-spacing: 0 6px; }
+.rack-room { background: #fff; }
+.rack-cell { padding: 0 2px; height: 44px; cursor: pointer; outline-offset: -2px; }
+.rack-cell.rack-today { background: linear-gradient(#e6faf3, #e6faf3) center / calc(100% - 2px) 100% no-repeat; }
+.rack-cell.rack-we .rack-slot { background: #efedf9; }
+.rack-slot { height: 36px; border-radius: 10px; background: #f4f2fb; box-shadow: inset 0 0 0 1px #e6e2f6; transition: box-shadow .15s, background-color .15s; }
+.rack-cell:hover .rack-slot { box-shadow: inset 0 0 0 1.5px #02C988; background: #ffffff; }
+.rack-slot.rack-dec { background: repeating-linear-gradient(-45deg, #fef3c7 0 6px, #fde68a 6px 12px); box-shadow: inset 0 0 0 1px #fcd34d; }
+.rack-bar { height: 36px; display: flex; align-items: center; gap: 6px; padding: 0 8px 0 4px; border-radius: 6px; background: #02C988; color: #12005A; font-size: 12px; font-weight: 700; min-width: 0;
+  box-shadow: inset 0 -2px 0 rgba(0,0,0,.08); transition: transform .15s, box-shadow .15s, filter .15s; }
+.rack-bar.rack-start { border-top-left-radius: 18px; border-bottom-left-radius: 18px; }
+.rack-bar.rack-end { border-top-right-radius: 18px; border-bottom-right-radius: 18px; }
+.rack-cell:hover .rack-bar { transform: translateY(-1px); box-shadow: 0 8px 18px -8px rgba(2,201,136,.7); }
+.rack-bar.rack-past { background: #a7ebd2; color: #12005A; }
+.rack-bar.rack-mixed { background: #e11d48; color: #fff; }
+.rack-av { display: grid; place-items: center; flex-shrink: 0; width: 28px; height: 28px; border-radius: 999px; background: #12005A; color: #02C988; font-size: 10px; font-weight: 800; }
+.rack-past .rack-av { background: rgba(18,0,90,.75); }
+.rack-two { margin-left: auto; flex-shrink: 0; display: grid; place-items: center; min-width: 20px; height: 20px; padding: 0 5px; border-radius: 999px; background: #12005A; color: #fff; font-size: 10px; }
+html.dark .rack-room { background: #150c45; }
+html.dark .rack-slot { background: #1c1252; box-shadow: inset 0 0 0 1px #2a2066; }
+html.dark .rack-cell.rack-we .rack-slot { background: #211660; }
+html.dark .rack-cell:hover .rack-slot { background: #241866; }
+html.dark .rack-cell.rack-today { background-image: linear-gradient(rgba(2,201,136,.12), rgba(2,201,136,.12)); }
+html.dark .rack-bar.rack-past { background: #1e8f6c; color: #eeeaff; }
+
+/* ---------- Glass cards on the Overview ---------- */
+.glass-zone { position: relative; isolation: isolate; padding: 14px; margin: -14px; border-radius: 28px; }
+.glass-zone::before { content: ""; position: absolute; inset: 0; z-index: -1; border-radius: inherit; pointer-events: none;
+  background: radial-gradient(40% 70% at 8% 20%, rgba(2,201,136,.32), transparent 70%), radial-gradient(35% 80% at 55% 0%, rgba(124,104,198,.30), transparent 70%),
+              radial-gradient(40% 80% at 95% 85%, rgba(2,201,136,.22), transparent 70%), radial-gradient(45% 90% at 35% 100%, rgba(18,0,90,.14), transparent 70%); filter: blur(6px); }
+.glass-zone .card { background: rgba(255,255,255,.58); -webkit-backdrop-filter: blur(18px) saturate(170%); backdrop-filter: blur(18px) saturate(170%);
+  --tw-ring-color: rgba(255,255,255,.75); box-shadow: inset 0 1px 0 rgba(255,255,255,.9), 0 0 0 1px rgba(255,255,255,.6), 0 10px 28px -14px rgba(18,0,90,.35); }
+.glass-zone .card.from-zuna-900 { background-image: linear-gradient(135deg, rgba(18,0,90,.92), rgba(47,24,120,.86)); }
+html.dark .glass-zone::before { background: radial-gradient(40% 70% at 8% 20%, rgba(2,201,136,.22), transparent 70%), radial-gradient(35% 80% at 55% 0%, rgba(124,104,198,.35), transparent 70%), radial-gradient(40% 80% at 95% 85%, rgba(2,201,136,.15), transparent 70%); }
+html.dark .glass-zone .card { background: rgba(28,18,82,.55); --tw-ring-color: rgba(255,255,255,.08); box-shadow: inset 0 1px 0 rgba(255,255,255,.08), 0 0 0 1px rgba(255,255,255,.06), 0 10px 28px -14px rgba(0,0,0,.6); }

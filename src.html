@@ -80,8 +80,10 @@ if(document.readyState!=='loading')setTimeout(hide,150);else document.addEventLi
       <!-- OVERVIEW -->
       <section data-view="overview" class="view space-y-4">
         <div id="alerts" class="hidden"></div>
-        <div id="today" class="grid grid-cols-2 md:grid-cols-5 gap-3"></div>
-        <div id="kpis" class="grid grid-cols-2 md:grid-cols-3 xl:grid-cols-6 gap-3"></div>
+        <div class="glass-zone space-y-3">
+          <div id="today" class="grid grid-cols-2 md:grid-cols-5 gap-3"></div>
+          <div id="kpis" class="grid grid-cols-2 md:grid-cols-3 xl:grid-cols-6 gap-3"></div>
+        </div>
         <div class="grid grid-cols-1 xl:grid-cols-3 gap-4">
           <div class="card xl:col-span-2">
             <div class="card-h">
@@ -486,25 +488,55 @@ const renderRack = () => {
     for (let n = b.check_in; n < b.check_out; n = addDays(n, 1)) (grid[r][n] = grid[r][n] || []).push(b);
   });
   const dec = new Set(); myB().filter((b) => b.status !== 'Confirmed').forEach((b) => { for (let n = b.check_in; n < b.check_out; n = addDays(n, 1)) dec.add(n); });
-  const t = h('table', 'border-separate [border-spacing:4px]');
-  const r1 = h('tr'), r2 = h('tr'); { const c1 = h('th'); c1.appendChild(h('span', 'sr-only', 'Month')); const c2 = h('th'); c2.appendChild(h('span', 'sr-only', 'Room')); r1.appendChild(c1); r2.appendChild(c2); }
-  rn.forEach((n, i) => { const d = D(n.night); { const mh = h('th', 'text-left text-xs font-bold text-zuna-900', i === 0 || d.getUTCDate() === 1 ? MON[d.getUTCMonth()] : ''); if (!mh.textContent) mh.setAttribute('aria-hidden', 'true'); r1.appendChild(mh); } const w = d.getUTCDay(); r2.appendChild(h('th', 'text-xs font-semibold ' + (w === 0 || w === 6 ? 'text-mint-700' : 'text-zuna-500') + (n.night === today ? ' !text-zuna-900 underline decoration-2 decoration-mint-500' : ''), String(d.getUTCDate()))); });
-  const th = h('thead'); th.append(r1, r2); t.appendChild(th);
+  // Gantt-style rack: one bar per stay running across its nights, guest name inside; empty nights are soft slots
+  const bid = (b) => b.guest + '|' + b.check_in;
+  const short = (nm) => { const w = cleanName(nm).split(/\s+/).filter(Boolean); return w.length > 1 ? w[0] + ' ' + w[w.length - 1][0] + '.' : (w[0] || 'Guest'); };
+  const fit = rn.length <= 16;   // a week or two fills the width; longer ranges scroll
+  const t = h('table', 'rack-t table-fixed' + (fit ? ' w-full' : '')); if (!fit) t.style.width = (120 + rn.length * 42) + 'px';
+  const cg = h('colgroup'); { const c0 = h('col'); c0.style.width = '120px'; cg.appendChild(c0); } rn.forEach(() => { const c = h('col'); if (!fit) c.style.width = '42px'; cg.appendChild(c); }); t.appendChild(cg);
+  const hr = h('tr'); { const c = h('th', 'rack-corner text-left align-bottom pb-2'); c.appendChild(h('span', 'text-[11px] font-semibold text-zuna-500', 'Room')); hr.appendChild(c); }
+  rn.forEach((n, i) => { const d = D(n.night), w = d.getUTCDay(), isT = n.night === today, we = w === 0 || w === 6;
+    const c = h('th', 'pb-2 text-center align-bottom'); c.scope = 'col';
+    const mon = i === 0 || d.getUTCDate() === 1 ? MON[d.getUTCMonth()] : '';
+    const box = h('div', 'mx-auto inline-flex flex-col items-center rounded-xl px-1.5 py-1 ' + (isT ? 'bg-zuna-900 text-white shadow-md' : ''));
+    box.appendChild(h('span', 'text-[10px] font-semibold uppercase tracking-wide ' + (isT ? 'text-mint-400' : we ? 'text-mint-700' : 'text-zuna-500'), mon || ['Sun', 'Mon', 'Tue', 'Wed', 'Thu', 'Fri', 'Sat'][w]));
+    box.appendChild(h('span', 'text-sm font-bold tabular-nums leading-tight', String(d.getUTCDate())));
+    c.appendChild(box); c.setAttribute('aria-label', fDay(n.night) + (isT ? ' (today)' : '')); hr.appendChild(c); });
+  const th = h('thead'); th.appendChild(hr); t.appendChild(th);
   const tb = h('tbody');
   roomNames.forEach((name, ri) => {
-    const tr = h('tr'); tr.appendChild(h('td', 'sticky left-0 bg-white pr-3 text-xs font-bold whitespace-nowrap z-10', name));
-    rn.forEach((n) => {
-      const gs = grid[ri][n.night] || [], g = gs[0], past = n.night < today;
-      const mixed = gs.length > 1 && new Set(gs.map((x) => x._g).filter((x) => x !== 'Not stated')).size > 1;
-      let cls = 'w-7 min-w-7 h-8 rounded-md cursor-pointer transition-transform hover:scale-110 hover:shadow-md text-center align-middle text-xs font-bold ';
-      cls += mixed ? 'bg-rose-500 text-white ring-2 ring-rose-300' : g ? (past ? 'bg-mint-300 text-zuna-900' : 'bg-mint-500 text-zuna-900') : (dec.has(n.night) && ri === rooms - 1 ? 'bg-amber-100 ring-1 ring-amber-300' : 'bg-zuna-50 ring-1 ring-zuna-100');
-      if (n.night === today) cls += ' outline outline-2 outline-offset-1 outline-zuna-900';
-      const td = h('td', cls); td.tabIndex = 0;
-      td.title = fDay(n.night) + ' · ' + name + (g ? ' · ' + gs.map((x) => cleanName(x.guest) + ' (' + x._g + ')').join(' + ') + (gs.length > 1 ? ' · Double' : ' · Single') : ' · Vacant') + (mixed ? ' · MIXED GENDER — not allowed' : '');
-      if (mixed) td.appendChild(icon('triangle-alert', 'w-4 h-4 mx-auto')); else if (gs.length > 1) td.textContent = '2';
-      td.onclick = () => g ? bookingDrawer(g) : nightDrawer(n); td.onkeydown = (e) => { if (e.key === 'Enter') td.onclick(); };
-      tr.appendChild(td);
-    });
+    const tr = h('tr', 'rack-row');
+    const used = rn.filter((n) => (grid[ri][n.night] || []).length).length;
+    const lc = h('td', 'rack-room sticky left-0 z-10 pr-3'); lc.appendChild(h('p', 'text-sm font-bold whitespace-nowrap', name)); lc.appendChild(h('p', 'text-[11px] text-zuna-500 whitespace-nowrap', used + ' of ' + rn.length + ' nights')); tr.appendChild(lc);
+    let i = 0;
+    while (i < rn.length) {
+      const n = rn[i], gs = grid[ri][n.night] || [], key = gs.map(bid).sort().join('~');
+      let j = i + 1; if (key) while (j < rn.length && (grid[ri][rn[j].night] || []).map(bid).sort().join('~') === key) j++;
+      const span = rn.slice(i, j), td = h('td', 'rack-cell'); td.colSpan = span.length; td.tabIndex = 0;
+      const anyToday = span.some((x) => x.night === today), we = span.length === 1 && [0, 6].includes(D(n.night).getUTCDay());
+      if (anyToday) td.classList.add('rack-today'); if (we && !key) td.classList.add('rack-we');
+      if (!key) {
+        const declined = dec.has(n.night) && ri === rooms - 1;
+        const slot = h('div', 'rack-slot' + (declined ? ' rack-dec' : '')); td.appendChild(slot);
+        td.title = fDay(n.night) + ' · ' + name + ' · Vacant' + (declined ? ' · a request was declined' : ''); td.setAttribute('aria-label', td.title);
+        td.onclick = () => nightDrawer(n);
+      } else {
+        const g = gs[0], mixed = gs.length > 1 && new Set(gs.map((x) => x._g).filter((x) => x !== 'Not stated')).size > 1, past = span[span.length - 1].night < today;
+        const startsHere = g.check_in === n.night, endsHere = addDays(span[span.length - 1].night, 1) === g.check_out;
+        const bar = h('div', 'rack-bar ' + (mixed ? 'rack-mixed' : past ? 'rack-past' : '') + (startsHere ? ' rack-start' : '') + (endsHere ? ' rack-end' : ''));
+        if (mixed) bar.appendChild(icon('triangle-alert', 'w-3.5 h-3.5 shrink-0'));
+        else bar.appendChild(h('span', 'rack-av', initials(g.guest)));
+        const label = gs.length > 1 ? short(gs[0].guest) + ' + ' + (gs.length - 1) : short(g.guest);
+        bar.appendChild(h('span', 'truncate', span.length > 1 || fit ? label : ''));
+        if (gs.length > 1 && !mixed) bar.appendChild(h('span', 'rack-two', '2'));
+        td.appendChild(bar);
+        td.title = gs.map((x) => cleanName(x.guest) + ' (' + x._g + ')').join(' + ') + ' · ' + name + ' · ' + fShort(span[0].night) + (span.length > 1 ? ' → ' + fShort(addDays(span[span.length - 1].night, 1)) : '') + ' · ' + (gs.length > 1 ? 'Double' : 'Single') + (mixed ? ' · MIXED GENDER — not allowed' : '');
+        td.setAttribute('aria-label', td.title);
+        td.onclick = () => bookingDrawer(g);
+      }
+      td.onkeydown = (e) => { if (e.key === 'Enter') td.onclick(); };
+      tr.appendChild(td); i = j;
+    }
     tb.appendChild(tr);
   });
   t.appendChild(tb); box.appendChild(t);

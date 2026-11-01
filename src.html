@@ -27,16 +27,15 @@ if(document.readyState!=='loading')setTimeout(hide,150);else document.addEventLi
     <div class="px-5 pt-5 h-14 flex items-center gap-2 sb-full">
       <span class="logo-box bg-white rounded-lg px-2.5 py-1.5 inline-flex items-center"><img data-logo alt="LTM" src="__LTM__" class="h-[18px] w-auto"></span>
     </div>
-    <div class="sb-mini hidden pt-5 justify-center"><span class="logo-box w-11 h-9 rounded-lg bg-white grid place-items-center px-1.5"><img alt="LTM" src="__LTM__" class="w-full h-auto max-h-[14px] object-contain"></span></div>
-    <div class="pl-4 pr-5 mt-4 flex items-center gap-2 sb-full">
-      <button id="sbClose" title="Collapse sidebar" aria-label="Collapse sidebar" class="hidden lg:grid shrink-0 place-items-center w-10 h-10 rounded-xl text-zuna-200 hover:text-white hover:bg-white/10 transition-colors"><i data-i="panel-left-close" class="w-[18px] h-[18px]"></i></button>
+    <div class="sb-mini hidden absolute top-0 left-0 w-[72px] pt-5 justify-center"><span class="logo-box w-11 h-9 rounded-lg bg-white grid place-items-center px-1.5"><img alt="LTM" src="__LTM__" class="w-full h-auto max-h-[14px] object-contain"></span></div>
+    <div class="px-5 mt-4 flex items-center gap-2 sb-full">
       <div class="min-w-0 flex-1">
         <p class="text-base font-semibold leading-tight">Guest Houses</p>
         <p class="text-xs text-zuna-200 mt-0.5">Inventory &amp; occupancy</p>
       </div>
       <button id="sbCloseM" title="Close menu" aria-label="Close menu" class="lg:hidden grid place-items-center w-8 h-8 rounded-lg text-zuna-200 hover:text-white hover:bg-white/10"><i data-i="x" class="w-[18px] h-[18px]"></i></button>
     </div>
-    <div class="sb-mini hidden mt-4 justify-center"><button id="sbOpen" title="Expand sidebar" aria-label="Expand sidebar" class="grid place-items-center w-10 h-10 rounded-xl text-zuna-200 hover:text-white hover:bg-white/10 transition-colors"><i data-i="panel-left-open" class="w-[18px] h-[18px]"></i></button></div>
+    
     <nav id="nav" class="mt-6 px-3 flex flex-col gap-1">
       <button data-view="overview" class="navbtn" title="Overview"><i data-i="layout-dashboard"></i><span class="sb-label">Overview</span></button>
       <button data-view="rack" class="navbtn" title="Room rack"><i data-i="bed-double"></i><span class="sb-label">Room rack</span></button>
@@ -49,6 +48,9 @@ if(document.readyState!=='loading')setTimeout(hide,150);else document.addEventLi
       <div class="min-w-0 flex-1 sb-label"><p id="userName" class="text-sm font-semibold truncate">—</p><p id="userMail" class="text-xs text-zuna-300 truncate">—</p></div>
       <button type="button" id="themeBtn" title="Dark mode" aria-label="Switch to dark mode" aria-pressed="false" class="grid place-items-center w-9 h-9 shrink-0 rounded-lg text-zuna-200 hover:text-white hover:bg-white/10 transition-colors"><i data-i="moon" class="w-[18px] h-[18px]"></i></button>
       <a href="/logout" id="logoutBtn" title="Log out" aria-label="Log out" class="grid place-items-center w-9 h-9 shrink-0 rounded-lg text-zuna-200 hover:text-white hover:bg-white/10 transition-colors"><i data-i="log-out" class="w-[18px] h-[18px]"></i></a>
+    </div>
+    <div class="hidden lg:block px-3 py-2 border-t border-white/10">
+      <button id="sbToggle" type="button" class="navbtn" title="Collapse sidebar" aria-label="Collapse sidebar" aria-expanded="true"><i data-i="panel-left-close" class="w-[18px] h-[18px] shrink-0"></i><span class="sb-label">Collapse</span></button>
     </div>
   </aside>
   <div id="scrimSide" class="fixed inset-0 z-40 bg-zuna-900/40 backdrop-blur-sm hidden lg:hidden"></div>
@@ -853,7 +855,11 @@ ZUI.auto(document.body); ZUI.clickables(document.body);
     const dx = x0 - mw.getBoundingClientRect().left; mw.style.transition = 'none'; mw.style.transform = 'translate3d(' + dx + 'px,0,0)'; mw.getBoundingClientRect();
     mw.style.transition = 'transform .32s cubic-bezier(.2,.8,.2,1)'; mw.style.transform = 'translate3d(0,0,0)';
     clearTimeout(setCol.t); setCol.t = setTimeout(() => { mw.style.transition = ''; mw.style.transform = ''; R.classList.remove('sb-anim'); fitCharts(); }, 340); };
-  $('#sbClose').onclick = () => setCol(true); $('#sbOpen').onclick = () => setCol(false);
+  // one toggle, same place open or closed (bottom of the menu, aligned with the menu icons)
+  const syncToggle = () => { const c = document.documentElement.classList.contains('sb-c'), t = $('#sbToggle');
+    t.replaceChildren(icon(c ? 'panel-left-open' : 'panel-left-close', 'w-[18px] h-[18px] shrink-0'), h('span', 'sb-label', c ? 'Expand' : 'Collapse'));
+    t.title = c ? 'Expand sidebar' : 'Collapse sidebar'; t.setAttribute('aria-label', t.title); t.setAttribute('aria-expanded', c ? 'false' : 'true'); };
+  $('#sbToggle').onclick = () => { setCol(!document.documentElement.classList.contains('sb-c')); syncToggle(); }; syncToggle();
   $('#sbCloseM').onclick = () => closeSide();
 })();
 

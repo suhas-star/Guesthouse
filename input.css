@@ -24,7 +24,8 @@
   /* smooth open / close: width glides, icons never move, labels fade in once there is room */
   html.sb-c #app { grid-template-columns: 72px minmax(0,1fr); }
   html.sb-c #side { width: 72px; }
-  html.sb-c #side .sb-full, html.sb-c #side .sb-label { display: none !important; }
+  html.sb-c #side .sb-label { display: none !important; }
+  html.sb-c #side .sb-full { visibility: hidden; }   /* keeps its height, so the menu does not jump up or down */
   html.sb-c #side .sb-mini { display: flex !important; }
   html.sb-c #side .sb-user { flex-direction: column; gap: .5rem; }
   #app { transition: grid-template-columns .32s cubic-bezier(.2,.8,.2,1); }

@@ -951,7 +951,7 @@ const openWeekly = (onGo) => {
       i1.oninput = i2.oninput = show; range = () => [i1.value, i2.value]; } };
   const LBL = {daily: 'Daily', weekly: 'Weekly', monthly: 'Monthly', custom: 'Custom dates'};
   let mode = openWeekly.mode || 'weekly';
-  const pick = (m) => { mode = openWeekly.mode = m; [...seg.children].forEach((b) => { const on = b.dataset.m === m; b.setAttribute('aria-selected', on ? 'true' : 'false'); b.className = 'rounded-lg px-2 py-1.5 text-xs font-semibold transition-all ' + (on ? 'bg-white text-zuna-900 shadow ring-1 ring-zuna-100' : 'text-zuna-500 hover:text-zuna-900'); }); MODES[m](); show(); };
+  const pick = (m) => { mode = openWeekly.mode = m; [...seg.children].forEach((b) => { const on = b.dataset.m === m; b.setAttribute('aria-selected', on ? 'true' : 'false'); b.className = 'segbtn rounded-lg px-2 py-1.5 text-xs font-semibold transition-all ' + (on ? '' : 'text-zuna-500 hover:text-zuna-900'); }); MODES[m](); show(); };
   Object.keys(LBL).forEach((m) => { const b = h('button', '', LBL[m]); b.type = 'button'; b.dataset.m = m; b.setAttribute('role', 'tab'); b.onclick = () => pick(m); seg.appendChild(b); });
   f.appendChild(summary);
   const err = h('p', 'hidden text-xs font-semibold text-rose-600'); f.appendChild(err);

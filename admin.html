@@ -68,10 +68,10 @@ html.dark .sw{background:#3a2c8a}html.dark #acctMenu{background:#150c45;color:#e
 
 <!-- modal -->
 <div id="modal" role="dialog" aria-modal="true" aria-labelledby="mTitle" class="hidden fixed inset-0 z-50 bg-zuna-900/40 backdrop-blur-[2px] overflow-y-auto">
-  <div class="min-h-full flex items-start justify-center p-4 sm:p-8">
-    <div class="w-full max-w-3xl card shadow-2xl">
-      <div class="flex items-center gap-3 px-6 py-4 border-b border-zuna-100"><h2 id="mTitle" class="font-bold"></h2><button id="mClose" class="ml-auto iconbtn" aria-label="Close dialog"><svg class="w-4 h-4" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" aria-hidden="true"><path d="M18 6 6 18M6 6l12 12"/></svg></button></div>
-      <div id="mBody" class="p-6"></div>
+  <div class="min-h-full flex items-start sm:items-center justify-center p-3 sm:p-6">
+    <div class="w-full max-w-3xl card shadow-2xl flex flex-col max-h-[calc(100vh-1.5rem)] sm:max-h-[86vh] overflow-hidden">
+      <div class="shrink-0 flex items-center gap-3 px-6 py-4 border-b border-zuna-100"><h2 id="mTitle" class="font-bold"></h2><button id="mClose" class="ml-auto iconbtn" aria-label="Close dialog"><svg class="w-4 h-4" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" aria-hidden="true"><path d="M18 6 6 18M6 6l12 12"/></svg></button></div>
+      <div id="mBody" class="p-6 overflow-y-auto flex-1 min-h-0"></div>
     </div>
   </div>
 </div>
@@ -319,7 +319,18 @@ const editGH = (c, x) => {
   const s7 = sec('Show to client', 'Switch off anything the client should not see on their dashboard.'); const sw = h('div', 'grid sm:grid-cols-3 gap-3'); const shows = {};
   [['amenities', 'Amenities'], ['inclusions', 'Inclusions'], ['cancellation', 'Cancellation policy'], ['photos', 'Photos'], ['contacts', 'Contacts (POC)']].forEach(([k, l]) => { const e = switchEl(l, (x.show || {})[k] !== false); shows[k] = e.input; sw.appendChild(e); }); s7.appendChild(sw);
   // actions
-  const actions = h('div', 'flex items-center gap-2 pt-2 border-t border-zuna-100');
+  // tabs: one group of sections at a time, so the form stays short
+  const TABS = [['Details', ['Guest house']], ['Room types', ['Room types']], ['Inclusions & policy', ['Inclusions & amenities', 'Cancellation policy']], ['Contacts', ['Guest house contacts (POC)']], ['Photos & documents', ['Photos', 'Documents']], ['Client view', ['Show to client']]];
+  const secs = [...f.querySelectorAll(':scope > section')], byName = (n) => secs.find((q) => q.querySelector('h3').textContent === n);
+  const nav = h('div', 'sticky -top-6 z-20 -mx-6 -mt-6 mb-5 px-4 bg-white border-b border-zuna-100 flex gap-1 overflow-x-auto'); nav.setAttribute('role', 'tablist'); nav.setAttribute('aria-label', 'Guest house sections');
+  const tabBtns = [], panels = TABS.map(([lbl, names]) => { const pnl = h('div', 'space-y-6'); pnl.setAttribute('role', 'tabpanel'); names.forEach((n) => { const q = byName(n); if (q) pnl.appendChild(q); }); return pnl; });
+  const showTab = (i) => { editGH.tab = TABS[i][0]; editGH.tabFor = x.id; panels.forEach((pn, k) => pn.hidden = k !== i);
+    tabBtns.forEach((b, k) => { const on = k === i; b.setAttribute('aria-selected', on ? 'true' : 'false'); b.tabIndex = on ? 0 : -1; b.className = 'shrink-0 px-3 py-3 -mb-px text-sm font-semibold whitespace-nowrap border-b-2 transition-colors ' + (on ? 'border-mint-500 text-zuna-900' : 'border-transparent text-zuna-500 hover:text-zuna-900'); }); $('#mBody').scrollTop = 0; };
+  TABS.forEach(([lbl], i) => { const b = h('button', '', lbl); b.type = 'button'; b.setAttribute('role', 'tab'); b.onclick = () => showTab(i);
+    b.onkeydown = (e) => { if (e.key === 'ArrowRight' || e.key === 'ArrowLeft') { e.preventDefault(); const k = (i + (e.key === 'ArrowRight' ? 1 : TABS.length - 1)) % TABS.length; showTab(k); tabBtns[k].focus(); } }; tabBtns.push(b); nav.appendChild(b); });
+  f.className = ''; f.replaceChildren(nav, ...panels);
+  const want = editGH.tabFor === x.id ? TABS.findIndex(([l]) => l === editGH.tab) : 0; showTab(want < 0 ? 0 : want);
+  const actions = h('div', 'sticky -bottom-6 z-20 -mx-6 -mb-6 mt-6 px-6 py-3 bg-white border-t border-zuna-100 flex items-center gap-2');
   if (x.id) { const del = ib('button', 'btn text-rose-600', 'Delete guest house', 'trash-2'); del.onclick = async () => { if (!(await ZUI.confirm({title: 'Delete ' + x.property + '?', message: ['Its room types, photos, contacts and documents are deleted too.', 'Bookings are kept.'], ok: 'Delete guest house', tone: 'danger', hold: true}))) return; try { await api('gh/delete', {id: x.id}); closeModal(); toast('Deleted'); load(true); } catch (er) { toast(er.message, true); } }; actions.appendChild(del); }
   const save = h('button', 'ml-auto btn-primary', x.id ? 'Save changes' : 'Create guest house');
   save.onclick = async () => { save.disabled = true; try {
@@ -466,7 +477,7 @@ const docChip = (d) => { const n = d.days_left;
 const readFile = (file) => new Promise((res, rej) => { if (file.type === 'application/pdf') { const fr = new FileReader(); fr.onerror = rej; fr.onload = () => res(fr.result); fr.readAsDataURL(file); } else toDataUrl(file, 2000, false).then(res, rej); });
 const docSection = (sec, c, x) => {
   const list = h('div', 'rounded-xl ring-1 ring-zuna-100 divide-y divide-zuna-50 overflow-hidden'); sec.appendChild(list);
-  const reopen = async () => { await load(true); editGH(C(), C().guesthouses.find((g) => g.id === x.id)); setTimeout(() => { const el = [...$$('#mBody h3')].find((e) => e.textContent === 'Documents'); el && el.scrollIntoView({block: 'start'}); }, 50); };
+  const reopen = async () => { await load(true); editGH.tab = 'Photos & documents'; editGH.tabFor = x.id; editGH(C(), C().guesthouses.find((g) => g.id === x.id)); };
   (x.documents || []).forEach((d) => { const r = h('div', 'flex flex-wrap items-center gap-3 px-3 py-2.5 bg-white');
     const ic = h('span', 'grid place-items-center w-9 h-9 rounded-lg shrink-0 text-[10px] font-bold ' + (d.mime === 'application/pdf' ? 'bg-rose-50 text-rose-700' : 'bg-zuna-50 text-zuna-600'), d.mime === 'application/pdf' ? 'PDF' : 'IMG'); r.appendChild(ic);
     const m = h('div', 'min-w-0 flex-1'); m.appendChild(h('p', 'text-sm font-semibold truncate', d.title)); m.appendChild(h('p', 'text-xs text-zuna-500 truncate', [d.type !== d.title ? d.type : '', d.number ? 'No. ' + d.number : '', d.issued ? 'Issued ' + fD(d.issued) : '', d.visible ? 'Visible to client' : 'Hidden from client'].filter(Boolean).join(' · '))); r.appendChild(m);

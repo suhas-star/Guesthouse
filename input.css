@@ -15,7 +15,7 @@
   .btn-primary { @apply inline-flex items-center gap-1.5 rounded-xl bg-zuna-900 px-3 py-2 text-xs font-semibold text-white shadow-sm hover:bg-zuna-700 active:scale-95 transition-all; }
   .iconbtn { @apply grid place-items-center w-9 h-9 rounded-xl bg-white ring-1 ring-zuna-100 hover:ring-mint-500 disabled:opacity-40 disabled:pointer-events-none transition-all; }
   .th { @apply px-3 py-3 first:pl-5 last:pr-5 font-bold cursor-pointer select-none whitespace-nowrap hover:text-zuna-900; }
-  .th::after { content: attr(data-sort); @apply ml-1 text-mint-600; }
+  .th::after { content: attr(data-sort); @apply ml-1 text-mint-700; }
   .badge { @apply inline-flex items-center whitespace-nowrap rounded-full px-2.5 py-0.5 text-[11px] font-bold ring-1; }
 }
 .apexcharts-tooltip { border-radius: 12px !important; border: 1px solid #e6e2f6 !important; box-shadow: 0 12px 32px rgba(18,0,90,.14) !important; }
@@ -52,3 +52,23 @@
 :focus { outline: none; }
 :focus-visible { outline: 2px solid #02C988; outline-offset: 2px; }
 .overflow-x-auto:focus-visible, .overflow-auto:focus-visible, [tabindex]:focus-visible { outline: 2px solid #02C988; outline-offset: -2px; border-radius: 12px; }
+
+/* ---------- motion: small, quick, and off when the user prefers reduced motion ---------- */
+@keyframes zFadeUp { from { opacity: 0; transform: translateY(6px); } to { opacity: 1; transform: none; } }
+@keyframes zPop { from { opacity: 0; transform: translateY(10px) scale(.985); } to { opacity: 1; transform: none; } }
+.view, .anim-in { animation: zFadeUp .28s cubic-bezier(.2,.8,.2,1) both; }
+#modal:not(.hidden) > div > div { animation: zPop .22s cubic-bezier(.2,.8,.2,1) both; }
+.lift { transition: transform .2s ease, box-shadow .2s ease; }
+.lift:hover { transform: translateY(-2px); box-shadow: 0 12px 28px -12px rgba(18,0,90,.25), 0 0 0 1px #e6e2f6; }
+.btn svg, .btn-primary svg { transition: transform .18s ease; }
+.btn:hover svg, .btn-primary:hover svg { transform: scale(1.12); }
+tbody tr { transition: background-color .15s ease; }
+.navbtn svg { transition: transform .18s ease; }
+.navbtn:hover svg { transform: translateX(2px); }
+::placeholder { color: #716b9b; opacity: 1; }
+@media (prefers-reduced-motion: reduce) {
+  *, *::before, *::after { animation-duration: .01ms !important; animation-iteration-count: 1 !important; transition-duration: .01ms !important; scroll-behavior: auto !important; }
+}
+
+/* drag-and-drop target */
+.dz.dz-over { border-color: #02C988 !important; background-color: #e6faf3 !important; box-shadow: 0 0 0 4px rgba(2,201,136,.15); }

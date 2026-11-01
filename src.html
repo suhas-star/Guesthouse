@@ -8,6 +8,7 @@
 <style>/*__CSS__*/</style>
 </head>
 <body class="bg-zuna-50/60 text-zuna-900 antialiased font-sans">
+<a href="#main" class="sr-only focus:not-sr-only focus:fixed focus:top-3 focus:left-3 focus:z-[100] btn-primary">Skip to main content</a>
 __SPLASH__
 <script>(function(){var s=document.getElementById('splash'),h=document.getElementById('spHi'),n=null,t0=Date.now(),done=false;
 var q=null;try{n=sessionStorage.getItem('zp.hi');sessionStorage.removeItem('zp.hi');q=sessionStorage.getItem('zp.quiet');sessionStorage.removeItem('zp.quiet')}catch(e){}
@@ -70,7 +71,7 @@ window.addEventListener('load',function(){setTimeout(hide,150)});setTimeout(hide
       </div>
     </header>
 
-    <main class="px-4 lg:px-8 py-5 w-full max-w-[1500px]">
+    <main id="main" tabindex="-1" class="px-4 lg:px-8 py-5 w-full max-w-[1500px] focus:outline-none">
 
       <!-- OVERVIEW -->
       <section data-view="overview" class="view space-y-4">
@@ -80,27 +81,27 @@ window.addEventListener('load',function(){setTimeout(hide,150)});setTimeout(hide
         <div class="grid grid-cols-1 xl:grid-cols-3 gap-4">
           <div class="card xl:col-span-2">
             <div class="card-h">
-              <div><h3 class="card-t">Nightly occupancy</h3><p class="card-s">Rooms occupied each night · click a bar for details</p></div>
+              <div><h2 class="card-t">Nightly occupancy</h2><p class="card-s">Rooms occupied each night · click a bar for details</p></div>
               <div class="ml-auto flex items-center gap-3 text-xs text-zuna-500"><span class="flex items-center gap-1.5"><i class="w-2.5 h-2.5 rounded-sm bg-mint-500"></i>Occupied</span><span class="flex items-center gap-1.5"><i class="w-2.5 h-2.5 rounded-sm bg-zuna-100"></i>Vacant</span></div>
             </div>
             <div class="px-3 pb-2"><div id="chartMain" class="min-h-[230px]"></div></div>
           </div>
           <div class="card">
-            <div class="card-h"><div><h3 class="card-t">Room-nights</h3><p class="card-s" id="donutSub">Selected period</p></div></div>
+            <div class="card-h"><div><h2 class="card-t">Room-nights</h2><p class="card-s" id="donutSub">Selected period</p></div></div>
             <div class="px-3 pb-3"><div id="chartDonut" class="min-h-[230px]"></div></div>
           </div>
         </div>
         <div class="grid grid-cols-1 xl:grid-cols-3 gap-4">
           <div class="card">
-            <div class="card-h"><div><h3 class="card-t">Upcoming arrivals</h3><p class="card-s" id="arrSub">—</p></div></div>
+            <div class="card-h"><div><h2 class="card-t">Upcoming arrivals</h2><p class="card-s" id="arrSub">—</p></div></div>
             <ul id="arrivals" class="divide-y divide-zuna-50"></ul>
           </div>
           <div class="card">
-            <div class="card-h"><div><h3 class="card-t">Stays by grade</h3><p class="card-s">Confirmed stays, full period</p></div></div>
+            <div class="card-h"><div><h2 class="card-t">Stays by grade</h2><p class="card-s">Confirmed stays, full period</p></div></div>
             <div id="byGrade" class="p-5 space-y-3"></div>
           </div>
           <div class="card">
-            <div class="card-h"><div><h3 class="card-t">Stays by base location</h3><p class="card-s">Where guests travel from</p></div></div>
+            <div class="card-h"><div><h2 class="card-t">Stays by base location</h2><p class="card-s">Where guests travel from</p></div></div>
             <div id="byBase" class="p-5 space-y-3"></div>
           </div>
         </div>
@@ -110,7 +111,7 @@ window.addEventListener('load',function(){setTimeout(hide,150)});setTimeout(hide
       <section data-view="rack" class="view hidden">
         <div class="card">
           <div class="card-h">
-            <div><h3 class="card-t">Room rack</h3><p class="card-s">Each row is a room, each column a night. Click any cell for details.</p></div>
+            <div><h2 class="card-t">Room rack</h2><p class="card-s">Each row is a room, each column a night. Click any cell for details.</p></div>
             <div class="ml-auto flex flex-wrap items-center gap-3 text-xs text-zuna-500"><span class="flex items-center gap-1.5"><i class="w-2.5 h-2.5 rounded-sm bg-mint-500"></i>Occupied</span><span class="flex items-center gap-1.5"><i class="w-2.5 h-2.5 rounded-sm bg-zuna-50 ring-1 ring-zuna-100"></i>Vacant</span><span class="flex items-center gap-1.5"><i class="w-2.5 h-2.5 rounded-sm bg-amber-500"></i>Request declined</span><span class="flex items-center gap-1.5"><i class="w-2.5 h-2.5 rounded-sm bg-mint-500 text-[8px] leading-[10px] text-center font-bold text-zuna-900">2</i>Shared (double)</span><span class="flex items-center gap-1.5"><i class="w-2.5 h-2.5 rounded-sm bg-rose-500"></i>Mixed gender – not allowed</span></div>
           </div>
           <div id="rack" class="p-5 overflow-x-auto"></div>
@@ -121,7 +122,7 @@ window.addEventListener('load',function(){setTimeout(hide,150)});setTimeout(hide
       <section data-view="calendar" class="view hidden">
         <div class="card">
           <div class="card-h">
-            <div><h3 class="card-t">Night-wise availability</h3><p class="card-s">Rooms free each night · click a date for details</p></div>
+            <div><h2 class="card-t">Night-wise availability</h2><p class="card-s">Rooms free each night · click a date for details</p></div>
             <div class="flex items-center gap-2 mx-auto">
               <button id="calPrev" class="iconbtn" aria-label="Previous month"><i data-i="chevron-left" class="w-4 h-4"></i></button>
               <span id="calMonth" class="w-36 text-center font-semibold">—</span>
@@ -140,7 +141,7 @@ window.addEventListener('load',function(){setTimeout(hide,150)});setTimeout(hide
       <section data-view="bookings" class="view hidden">
         <div class="card">
           <div class="card-h">
-            <div><h3 class="card-t">Booking register</h3><p class="card-s">Click a booking for full details</p></div>
+            <div><h2 class="card-t">Booking register</h2><p class="card-s">Click a booking for full details</p></div>
             <div class="ml-auto flex gap-2"><button class="btn-primary" data-dl="register-pdf"><i data-i="download" class="w-4 h-4"></i>PDF</button><button class="btn" data-dl="register-xlsx"><i data-i="download" class="w-4 h-4"></i>Excel</button></div>
           </div>
           <div class="px-5 py-3 flex flex-wrap items-center gap-3 border-b border-zuna-50">
@@ -169,11 +170,11 @@ window.addEventListener('load',function(){setTimeout(hide,150)});setTimeout(hide
 
 <!-- Drawer -->
 <div id="scrim" class="fixed inset-0 z-50 bg-zuna-900/40 backdrop-blur-[2px] opacity-0 pointer-events-none transition-opacity"></div>
-<aside id="drawer" class="fixed top-0 right-0 z-[60] h-full w-full sm:w-[440px] bg-white shadow-2xl translate-x-full transition-transform duration-300 flex flex-col border-l-4 border-mint-500" aria-hidden="true">
+<aside id="drawer" inert role="dialog" aria-modal="true" aria-labelledby="dTitle" class="fixed top-0 right-0 z-[60] h-full w-full sm:w-[440px] bg-white shadow-2xl translate-x-full transition-transform duration-300 flex flex-col border-l-4 border-mint-500" aria-hidden="true">
   <div class="flex items-start gap-3 p-5 border-b border-zuna-100"><div class="min-w-0"><h3 id="dTitle" class="text-lg font-bold">—</h3><p id="dSub" class="text-xs text-zuna-500"></p></div><button id="dClose" class="iconbtn ml-auto" aria-label="Close"><i data-i="x" class="w-4 h-4"></i></button></div>
   <div id="dBody" class="p-5 overflow-y-auto space-y-5"></div>
 </aside>
-<div id="toast" class="fixed bottom-6 left-1/2 -translate-x-1/2 translate-y-4 opacity-0 transition-all z-[70] bg-zuna-900 text-white text-sm font-semibold px-4 py-2.5 rounded-xl shadow-xl flex items-center gap-2"><span class="w-2 h-2 rounded-full bg-mint-500"></span><span id="toastText"></span></div>
+<div id="toast" role="status" aria-live="polite" class="fixed bottom-6 left-1/2 -translate-x-1/2 translate-y-4 opacity-0 transition-all z-[70] bg-zuna-900 text-white text-sm font-semibold px-4 py-2.5 rounded-xl shadow-xl flex items-center gap-2"><span class="w-2 h-2 rounded-full bg-mint-500"></span><span id="toastText"></span></div>
 
 <!-- Tailwind component classes (kept here so the build sees them) -->
 <template id="tw-safelist"><div class="navbtn rangebtn card card-h card-t card-s btn btn-primary iconbtn th badge"></div></template>
@@ -251,11 +252,12 @@ const rangeLabel = () => { const [a, b] = rangeBounds(); return fShort(a) + ' �
 /* ---------- toast / drawer ---------- */
 let tt; const toast = (m) => { const t = $('#toast'); $('#toastText').textContent = m; t.classList.remove('opacity-0', 'translate-y-4'); clearTimeout(tt); tt = setTimeout(() => t.classList.add('opacity-0', 'translate-y-4'), 2200); };
 const openDrawer = (title, sub, body) => {
+  closeDrawer.from = document.activeElement; $('#drawer').inert = false;
   $('#dTitle').textContent = title; $('#dSub').textContent = sub || ''; $('#dBody').replaceChildren(body);
-  $('#drawer').classList.remove('translate-x-full'); $('#scrim').classList.remove('opacity-0', 'pointer-events-none'); $('#drawer').setAttribute('aria-hidden', 'false');
+  $('#drawer').classList.remove('translate-x-full'); $('#scrim').classList.remove('opacity-0', 'pointer-events-none'); $('#drawer').setAttribute('aria-hidden', 'false'); setTimeout(() => { const cb = $('#drawer button'); cb && cb.focus({preventScroll: true}); }, 60);
   setTimeout(() => $('#dClose').focus(), 60);
 };
-const closeDrawer = () => { $('#drawer').classList.add('translate-x-full'); $('#scrim').classList.add('opacity-0', 'pointer-events-none'); $('#drawer').setAttribute('aria-hidden', 'true'); };
+const closeDrawer = () => { $('#drawer').classList.add('translate-x-full'); $('#scrim').classList.add('opacity-0', 'pointer-events-none'); $('#drawer').setAttribute('aria-hidden', 'true'); $('#drawer').inert = true; if (closeDrawer.from && closeDrawer.from.focus) closeDrawer.from.focus(); };
 $('#dClose').onclick = closeDrawer; $('#scrim').onclick = closeDrawer;
 document.addEventListener('keydown', (e) => { if (e.key === 'Escape') closeDrawer(); });
 
@@ -466,8 +468,8 @@ const renderRack = () => {
   });
   const dec = new Set(); myB().filter((b) => b.status !== 'Confirmed').forEach((b) => { for (let n = b.check_in; n < b.check_out; n = addDays(n, 1)) dec.add(n); });
   const t = h('table', 'border-separate [border-spacing:4px]');
-  const r1 = h('tr'), r2 = h('tr'); r1.appendChild(h('th')); r2.appendChild(h('th'));
-  rn.forEach((n, i) => { const d = D(n.night); r1.appendChild(h('th', 'text-left text-xs font-bold text-zuna-900', i === 0 || d.getUTCDate() === 1 ? MON[d.getUTCMonth()] : '')); const w = d.getUTCDay(); r2.appendChild(h('th', 'text-xs font-semibold ' + (w === 0 || w === 6 ? 'text-mint-600' : 'text-zuna-400') + (n.night === today ? ' !text-zuna-900 underline decoration-2 decoration-mint-500' : ''), String(d.getUTCDate()))); });
+  const r1 = h('tr'), r2 = h('tr'); { const c1 = h('th'); c1.appendChild(h('span', 'sr-only', 'Month')); const c2 = h('th'); c2.appendChild(h('span', 'sr-only', 'Room')); r1.appendChild(c1); r2.appendChild(c2); }
+  rn.forEach((n, i) => { const d = D(n.night); { const mh = h('th', 'text-left text-xs font-bold text-zuna-900', i === 0 || d.getUTCDate() === 1 ? MON[d.getUTCMonth()] : ''); if (!mh.textContent) mh.setAttribute('aria-hidden', 'true'); r1.appendChild(mh); } const w = d.getUTCDay(); r2.appendChild(h('th', 'text-xs font-semibold ' + (w === 0 || w === 6 ? 'text-mint-700' : 'text-zuna-500') + (n.night === today ? ' !text-zuna-900 underline decoration-2 decoration-mint-500' : ''), String(d.getUTCDate()))); });
   const th = h('thead'); th.append(r1, r2); t.appendChild(th);
   const tb = h('tbody');
   roomNames.forEach((name, ri) => {
@@ -574,7 +576,7 @@ const renderHouses = () => {
   cities.forEach((city) => {
     const list = props.filter((p) => p.city === city).sort((x, y) => (y.status === 'Live') - (x.status === 'Live'));
     const sec = h('section', 'space-y-3');
-    const hd = h('div', 'flex items-baseline gap-2 px-1'); hd.appendChild(h('h3', 'text-base font-bold', city));
+    const hd = h('div', 'flex items-baseline gap-2 px-1'); hd.appendChild(h('h2', 'text-base font-bold', city));
     const nLive = list.filter((p) => p.status === 'Live').length;
     hd.appendChild(h('span', 'text-xs text-zuna-500', list.length + (list.length === 1 ? ' guest house' : ' guest houses') + (nLive ? ' · ' + nLive + ' live' : ' · opening soon')));
     sec.appendChild(hd);

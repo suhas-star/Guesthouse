@@ -749,10 +749,33 @@ async function dashboard(env, user, url) {
   return html(page);
 }
 
+// ---- branded error pages ----
+const ERR_ICON = {
+  404: '<circle cx="12" cy="12" r="10"/><polygon points="16.24 7.76 14.12 14.12 7.76 16.24 9.88 9.88 16.24 7.76"/>',
+  500: '<path d="M10.3 3.9 1.8 18a2 2 0 0 0 1.7 3h17a2 2 0 0 0 1.7-3L13.7 3.9a2 2 0 0 0-3.4 0z"/><path d="M12 9v4"/><path d="M12 17h.01"/>'};
+const errorPage = (status, title, msg, href = "/", btn = "Go to the portal") => new Response(ERRPAGE.replace(/__CODE__/g, String(status)).replace(/__TITLE__/g, title).replace("__MSG__", msg).replace("__HREF__", href).replace("__BTN__", btn).replace("__ICON__", ERR_ICON[status] || ERR_ICON[500]),
+  {status, headers: {"content-type": "text/html; charset=utf-8", "content-security-policy": CSP, "cache-control": "no-store", ...SEC}});
+// sign-in page; if the browser still sent a session cookie it has expired, so say so and clear it
+const signIn = (request) => {
+  if (!getCookie(request, COOKIE)) return html(LOGIN);
+  const note = "<script>(function(){var e=document.getElementById('err');if(!e)return;e.textContent='Your session has expired. Please sign in again.';e.className='mt-6 rounded-xl bg-amber-50 ring-1 ring-amber-200 px-4 py-3 text-sm text-amber-900 font-medium';e.setAttribute('role','status');})();</script></body>";
+  return html(LOGIN.replace("</body>", note), {"set-cookie": COOKIE + "=; Path=/; HttpOnly; Secure; SameSite=Lax; Max-Age=0"});
+};
+
 export default {
   // daily (Cloudflare cron trigger): e-mail reminders for guest house documents nearing expiry
   async scheduled(event, env, ctx) { ctx.waitUntil(docReminders(env)); },
   async fetch(request, env) {
+    try { return await handle(request, env); }
+    catch (e) {
+      console.error(e && e.stack || e);
+      if (new URL(request.url).pathname.startsWith("/api/")) return json({error: "Something went wrong. Please try again."}, 500);
+      return errorPage(500, "Something went wrong", "We couldn't load this page just now. Please try again in a moment. If it keeps happening, contact the Zuna Hotel Desk.", "/", "Try again");
+    }
+  },
+};
+async function handle(request, env) {
+  {
     const url = new URL(request.url);
     if (env.PRIMARY_HOST && url.hostname !== env.PRIMARY_HOST && url.hostname.endsWith("zuna.ai") && (request.method === "GET" || request.method === "HEAD"))
       return new Response(null, {status: 301, headers: {location: "https://" + env.PRIMARY_HOST + url.pathname + url.search, ...SEC}});
@@ -788,7 +811,7 @@ export default {
     }
     if (path === "/manage") {
       const u = await currentUser(request, env);
-      if (!u) return html(LOGIN);
+      if (!u) return signIn(request);
       if (u.admin) return redirect("/admin");
       if (!u.manager) return redirect("/");
       const safe = (o) => JSON.stringify(o).replace(/</g, "\\u003c").replace(/\u2028|\u2029/g, "");
@@ -799,19 +822,23 @@ export default {
     if (fm) { const u = await currentUser(request, env); return u ? serveFile(env, u, +fm[1]) : new Response("Not found", {status: 404, headers: SEC}); }
     if (path === "/admin") {
       const u = await currentUser(request, env);
-      if (!u) return html(LOGIN);
+      if (!u) return signIn(request);
       if (!u.admin) return redirect("/");
       const safe = (o) => JSON.stringify(o).replace(/</g, "\\u003c").replace(/\u2028|\u2029/g, "");
       const st = await adminState(env, u);   // sent with the page so it shows immediately
       return html(ADMIN.replace("__ME__", () => safe({name: u.name || "", email: u.email})).replace("__STATE__", () => safe(st)), {"content-security-policy": ADMIN_CSP});
     }
-    if (path !== "/") return redirect("/");
+    if (path !== "/") {
+      if (request.method === "GET" || request.method === "HEAD") return errorPage(404, "Page not found", "The page you're looking for doesn't exist or has moved. Check the address, or go back to the guest house portal.", "/", "Go to the portal");
+      return json({error: "Not found."}, 404);
+    }
     const user = await currentUser(request, env);
-    if (!user) return html(LOGIN);
+    if (!user) return signIn(request);
     return dashboard(env, user, url);
   }
-};
+}
 
 const LOGIN = "";
+const ERRPAGE = "";
 const TEMPLATE = "";
 const ADMIN = "";

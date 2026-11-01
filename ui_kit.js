@@ -6,7 +6,7 @@ const ZUI = (() => {
 .zd-btn{display:flex;align-items:center;gap:.5rem;text-align:left;cursor:pointer}
 .zd-btn:disabled{cursor:not-allowed;opacity:.6}
 .zd-val{flex:1;min-width:0;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
-.zd-ph{color:#9a94bd;font-weight:400}
+.zd-ph{color:#716b9b;font-weight:400}
 .zd-chev{width:16px;height:16px;flex-shrink:0;color:#8a83b3;transition:transform .18s ease}
 [aria-expanded=true]>.zd-chev,[aria-expanded=true]+.zd-chev{transform:rotate(180deg);color:#02C988}
 .zd-panel{position:fixed;z-index:1000;max-height:288px;max-width:min(520px,calc(100vw - 16px));overflow:auto;padding:6px;border-radius:14px;background:#fff;
@@ -19,10 +19,10 @@ const ZUI = (() => {
 .zd-opt[aria-selected=true] .zd-ck{opacity:1}
 .zd-tx{flex:1;min-width:0}
 .zd-sub{font-size:.75rem;color:#7a74a3;font-weight:400;margin-top:1px}
-.zd-hl{font-weight:700;color:#019b69;background:none}
+.zd-hl{font-weight:700;color:#00744f;background:none}
 .zd-ck{width:16px;height:16px;color:#02C988;opacity:0;flex-shrink:0}
-.zd-ph-opt{color:#9a94bd}
-.zd-group{padding:.55rem .65rem .25rem;font-size:.6875rem;font-weight:700;letter-spacing:.06em;text-transform:uppercase;color:#9a94bd}
+.zd-ph-opt{color:#716b9b}
+.zd-group{padding:.55rem .65rem .25rem;font-size:.6875rem;font-weight:700;letter-spacing:.06em;text-transform:uppercase;color:#716b9b}
 .zd-empty{padding:.75rem;font-size:.8125rem;color:#7a74a3;text-align:center}
 .zd-spin{display:inline-block;width:12px;height:12px;margin-right:6px;vertical-align:-2px;border-radius:50%;border:2px solid #cdc5ec;border-top-color:#02C988;animation:zdSpin .7s linear infinite}
 @keyframes zdSpin{to{transform:rotate(360deg)}}

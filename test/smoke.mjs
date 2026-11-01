@@ -206,6 +206,16 @@ check('old host redirects to PRIMARY_HOST', r.status === 301 && r.headers.get('l
   check('disabled user is signed out', (await (await call('/', {cookie: asha})).text()).includes('id="f"'));
 }
 
+// branded error pages
+env = {DB};
+r = await call('/no-such-page');
+let eh = await r.text(); check('unknown page -> branded 404', r.status === 404 && eh.includes('Page not found') && eh.includes('Go to the portal') && !/__[A-Z]+__/.test(eh));
+r = await call('/', {cookie: 'ltmgh_s=' + 'a'.repeat(64)});
+eh = await r.text(); check('expired session -> sign-in page says so and clears the cookie', eh.includes('Your session has expired') && /Max-Age=0/.test(r.headers.get('set-cookie') || ''));
+check('fresh visitor sees no expiry notice', !(await (await call('/')).text()).includes('Your session has expired'));
+r = await worker.fetch(new Request(ORIGIN + '/', {headers: {cookie: 'ltmgh_s=' + 'b'.repeat(64)}}), {DB: {prepare() { throw new Error('db down'); }}});
+eh = await r.text(); check('server error -> branded 500 page', r.status === 500 && eh.includes('Something went wrong') && !eh.includes('db down'));
+
 globalThis.fetch = realFetch;
 console.log(`\n${pass} passed, ${fail} failed`);
 process.exit(fail ? 1 : 0);

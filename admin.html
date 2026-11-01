@@ -19,6 +19,7 @@ input:checked+.sw{background:#02C988}input:checked+.sw::after{transform:translat
 </style>
 </head>
 <body class="bg-zuna-50/60 text-zuna-900 antialiased font-sans min-h-screen">
+<a href="#detail" class="sr-only focus:not-sr-only focus:fixed focus:top-3 focus:left-3 focus:z-[100] btn-primary">Skip to main content</a>
 <header class="sticky top-0 z-30 bg-zuna-900 text-white border-t-4 border-mint-500">
   <div class="max-w-7xl mx-auto px-4 sm:px-6 h-14 flex items-center gap-3">
     <a id="hdLogo" href="/" title="Go to dashboard" class="bg-white rounded-lg px-2 py-1 inline-flex transition hover:ring-2 hover:ring-mint-500 focus-visible:ring-2 focus-visible:ring-mint-500"><img src="__ZUNA__" alt="Zuna · go to dashboard" class="h-5"></a>
@@ -50,33 +51,38 @@ input:checked+.sw{background:#02C988}input:checked+.sw::after{transform:translat
 <div id="layout" class="max-w-7xl mx-auto px-4 sm:px-6 py-6 grid gap-6 lg:grid-cols-[260px_minmax(0,1fr)]">
   <!-- clients -->
   <aside id="aside" class="space-y-3">
-    <div class="flex items-center justify-between"><h2 class="text-sm font-bold">Clients</h2><button id="newClient" class="btn-primary !py-1.5 !px-3 text-xs">+ New client</button></div>
+    <div class="flex items-center justify-between"><h2 class="text-sm font-bold">Clients</h2><button id="newClient" class="btn-primary !py-1.5 !px-3 text-xs"><svg class="w-3.5 h-3.5" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" aria-hidden="true"><path d="M5 12h14M12 5v14"/></svg>New client</button></div>
     <div id="clients" class="space-y-2"></div>
   </aside>
 
   <!-- client detail -->
-  <main id="detail" class="min-w-0">
+  <main id="detail" tabindex="-1" class="min-w-0 focus:outline-none">
     
   </main>
 </div>
 
 <!-- modal -->
-<div id="modal" class="hidden fixed inset-0 z-50 bg-zuna-900/40 backdrop-blur-[2px] overflow-y-auto">
+<div id="modal" role="dialog" aria-modal="true" aria-labelledby="mTitle" class="hidden fixed inset-0 z-50 bg-zuna-900/40 backdrop-blur-[2px] overflow-y-auto">
   <div class="min-h-full flex items-start justify-center p-4 sm:p-8">
     <div class="w-full max-w-3xl card shadow-2xl">
-      <div class="flex items-center gap-3 px-6 py-4 border-b border-zuna-100"><h3 id="mTitle" class="font-bold"></h3><button id="mClose" class="ml-auto btn !px-2.5" aria-label="Close">✕</button></div>
+      <div class="flex items-center gap-3 px-6 py-4 border-b border-zuna-100"><h2 id="mTitle" class="font-bold"></h2><button id="mClose" class="ml-auto iconbtn" aria-label="Close dialog"><svg class="w-4 h-4" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" aria-hidden="true"><path d="M18 6 6 18M6 6l12 12"/></svg></button></div>
       <div id="mBody" class="p-6"></div>
     </div>
   </div>
 </div>
-<div id="toast" class="fixed bottom-5 left-1/2 -translate-x-1/2 z-[60] rounded-xl bg-zuna-900 text-white text-sm font-semibold px-4 py-2.5 shadow-xl opacity-0 translate-y-3 transition-all pointer-events-none"></div>
+<div id="toast" role="status" aria-live="polite" class="fixed bottom-5 left-1/2 -translate-x-1/2 z-[60] rounded-xl bg-zuna-900 text-white text-sm font-semibold px-4 py-2.5 shadow-xl opacity-0 translate-y-3 transition-all pointer-events-none"></div>
 
 <script>
 /*__UIKIT__*/
 (() => {
 const ME = __ME__;
+const ICONS = __ICONS__;
 const $ = (s, r = document) => r.querySelector(s), $$ = (s, r = document) => [...r.querySelectorAll(s)];
 const h = (tag, cls, text) => { const e = document.createElement(tag); if (cls) e.className = cls; if (text != null) e.textContent = text; return e; };
+// line icons shared with the dashboard
+const icon = (name, cls = 'w-4 h-4') => { const s = document.createElementNS('http://www.w3.org/2000/svg', 'svg'); s.setAttribute('viewBox', '0 0 24 24'); s.setAttribute('fill', 'none'); s.setAttribute('stroke', 'currentColor'); s.setAttribute('stroke-width', '2'); s.setAttribute('stroke-linecap', 'round'); s.setAttribute('stroke-linejoin', 'round'); s.setAttribute('class', cls); s.setAttribute('aria-hidden', 'true'); s.innerHTML = ICONS[name] || ''; return s; };
+// element with a leading icon
+const ib = (tag, cls, text, ic, icls) => { const e = h(tag, cls); e.classList.add('inline-flex', 'items-center', 'gap-1.5'); e.appendChild(icon(ic, icls || 'w-3.5 h-3.5 shrink-0')); e.appendChild(document.createTextNode(text)); return e; };
 let S = {clients: []}, cur = null, tab = 'gh';
 // client admins get the same page with only their own users (/manage)
 const CLIENT_MODE = ME.mode === 'client', API = CLIENT_MODE ? '/api/manage/' : '/api/admin/';
@@ -88,16 +94,45 @@ if (CLIENT_MODE) { tab = 'users'; document.title = 'Users & access · Guest Hous
   btn.onclick = (e) => { e.stopPropagation(); set(menu.classList.contains('hidden')); };
   document.addEventListener('click', (e) => { if (!menu.contains(e.target)) set(false); }); document.addEventListener('keydown', (e) => { if (e.key === 'Escape') set(false); }); }
 const toast = (m, bad) => { const t = $('#toast'); t.textContent = m; t.style.background = bad ? '#be123c' : '#12005A'; t.classList.remove('opacity-0', 'translate-y-3'); clearTimeout(toast.t); toast.t = setTimeout(() => t.classList.add('opacity-0', 'translate-y-3'), 2600); };
-const api = async (p, body) => { const r = await fetch(API + p, {method: 'POST', headers: {'content-type': 'application/json'}, body: JSON.stringify(body || {}), credentials: 'same-origin'}); const j = await r.json().catch(() => ({})); if (!r.ok) throw new Error(j.error || 'Request failed (' + r.status + ')'); return j; };
+// signed out elsewhere or session timed out: say so and offer to sign in again
+const sessionExpired = () => { if (sessionExpired.open) return; sessionExpired.open = true;
+  ZUI.confirm({title: 'Your session has expired', message: ['For your security you have been signed out.', 'Please sign in again to continue. Unsaved changes on this page will be lost.'], ok: 'Sign in again', cancel: 'Stay on this page', tone: 'warn', icon: 'M5 11h14a2 2 0 0 1 2 2v7a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-7a2 2 0 0 1 2-2zM7 11V7a5 5 0 0 1 10 0v4'})
+    .then((ok) => { sessionExpired.open = false; if (ok) location.href = CLIENT_MODE ? '/manage' : '/admin'; }); };
+const api = async (p, body) => { let r; try { r = await fetch(API + p, {method: 'POST', headers: {'content-type': 'application/json'}, body: JSON.stringify(body || {}), credentials: 'same-origin'}); } catch (e) { throw new Error('Network error. Check your connection and try again.'); }
+  const j = await r.json().catch(() => ({})); if (r.status === 403) { sessionExpired(); throw new Error('Your session has expired.'); } if (!r.ok) throw new Error(j.error || 'Request failed (' + r.status + ')'); return j; };
+// upload with progress (XHR reports upload progress; fetch does not)
+const apiUp = (p, body, onProgress) => new Promise((res, rej) => { const x = new XMLHttpRequest(); x.open('POST', API + p); x.setRequestHeader('content-type', 'application/json'); x.withCredentials = true;
+  x.upload.onprogress = (e) => { if (e.lengthComputable && onProgress) onProgress(e.loaded / e.total); };
+  x.onload = () => { let j = {}; try { j = JSON.parse(x.responseText); } catch (e) {} if (x.status >= 200 && x.status < 300) res(j); else { if (x.status === 403) sessionExpired(); rej(new Error(j.error || 'Upload failed (' + x.status + ')')); } };
+  x.onerror = () => rej(new Error('Network error. Check your connection and try again.')); x.send(JSON.stringify(body)); });
+// drop zone: highlight while dragging files over it, hand the files to onFiles
+const dropZone = (el, onFiles) => { let n = 0; const on = (v) => el.classList.toggle('dz-over', v);
+  el.addEventListener('dragenter', (e) => { if (![...(e.dataTransfer.types || [])].includes('Files')) return; e.preventDefault(); n++; on(true); });
+  el.addEventListener('dragover', (e) => { if ([...(e.dataTransfer.types || [])].includes('Files')) { e.preventDefault(); e.dataTransfer.dropEffect = 'copy'; } });
+  el.addEventListener('dragleave', () => { if (--n <= 0) { n = 0; on(false); } });
+  el.addEventListener('drop', (e) => { e.preventDefault(); n = 0; on(false); const f = [...e.dataTransfer.files]; if (f.length) onFiles(f); }); return el; };
+document.addEventListener('dragover', (e) => e.preventDefault()); document.addEventListener('drop', (e) => e.preventDefault());   // a missed drop must not open the file
+// one progress row per file
+const progressRow = (name) => { const r = h('div', 'rounded-lg bg-white ring-1 ring-zuna-100 px-3 py-2'); const top = h('div', 'flex items-center gap-2 text-xs');
+  top.appendChild(icon('image', 'w-3.5 h-3.5 text-zuna-500 shrink-0')); top.appendChild(h('span', 'flex-1 truncate font-medium', name)); const pct = h('span', 'tabular-nums text-zuna-500', 'Waiting'); top.appendChild(pct); r.appendChild(top);
+  const bar = h('div', 'mt-1.5 h-1.5 rounded-full bg-zuna-50 overflow-hidden'); const fill = h('div', 'h-full w-0 rounded-full bg-mint-500 transition-[width] duration-200'); bar.appendChild(fill); r.appendChild(bar);
+  bar.setAttribute('role', 'progressbar'); bar.setAttribute('aria-label', 'Upload ' + name); bar.setAttribute('aria-valuemin', '0'); bar.setAttribute('aria-valuemax', '100');
+  return {el: r, set: (f, label) => { const v = Math.round(f * 100); fill.style.width = v + '%'; bar.setAttribute('aria-valuenow', String(v)); pct.textContent = label || v + '%'; },
+    done: (ok, msg) => { fill.style.width = '100%'; fill.classList.replace('bg-mint-500', ok ? 'bg-mint-500' : 'bg-rose-500'); pct.textContent = ok ? 'Done' : (msg || 'Failed'); pct.className = 'tabular-nums font-semibold ' + (ok ? 'text-mint-700' : 'text-rose-600'); }}; };
 const load = async (keep) => { S = await api('state'); if (!keep || !S.clients.find((c) => c.id === cur)) cur = (S.clients[0] || {}).id || null; render(); };
 const C = () => S.clients.find((c) => c.id === cur);
-const modal = (title, body) => { $('#mTitle').textContent = title; $('#mBody').replaceChildren(body); $('#modal').classList.remove('hidden'); document.body.style.overflow = 'hidden'; };
-const closeModal = () => { $('#modal').classList.add('hidden'); document.body.style.overflow = ''; };
+const modal = (title, body) => { if ($('#modal').classList.contains('hidden')) modal.from = document.activeElement; $('#mTitle').textContent = title; $('#mBody').replaceChildren(body); $('#modal').classList.remove('hidden'); document.body.style.overflow = 'hidden';
+  const first = $('#mBody').querySelector('input:not([type=hidden]):not(.sr-only), textarea, button, [href]'); setTimeout(() => (first || $('#mClose')).focus({preventScroll: true}), 30); };
+const closeModal = () => { if ($('#modal').classList.contains('hidden')) return; $('#modal').classList.add('hidden'); document.body.style.overflow = ''; if (modal.from && modal.from.isConnected) modal.from.focus(); };
+// keep Tab inside the open dialog
+document.addEventListener('keydown', (e) => { if (e.key !== 'Tab' || $('#modal').classList.contains('hidden') || document.querySelector('.zc-ov')) return; const f = [...$('#modal').querySelectorAll('button, [href], input:not([type=hidden]), select, textarea, [tabindex]:not([tabindex="-1"])')].filter((x) => !x.disabled && x.offsetParent !== null && !x.classList.contains('zd-hide')); if (!f.length) return; const a = f[0], z = f[f.length - 1]; if (e.shiftKey && document.activeElement === a) { e.preventDefault(); z.focus(); } else if (!e.shiftKey && document.activeElement === z) { e.preventDefault(); a.focus(); } });
 ZUI.auto(document.body); $('#mClose').onclick = closeModal; document.addEventListener('keydown', (e) => { if (e.key === 'Escape') closeModal(); });
 const toDataUrl = (file, max, png) => new Promise((res, rej) => { const fr = new FileReader(); fr.onerror = rej; fr.onload = () => { const img = new Image(); img.onerror = () => rej(new Error('Not an image')); img.onload = () => {
   const sc = Math.min(1, max / Math.max(img.width, img.height)), c = document.createElement('canvas'); c.width = Math.round(img.width * sc); c.height = Math.round(img.height * sc);
   const x = c.getContext('2d'); if (!png) { x.fillStyle = '#fff'; x.fillRect(0, 0, c.width, c.height); } x.drawImage(img, 0, 0, c.width, c.height); res(c.toDataURL(png ? 'image/png' : 'image/jpeg', .82)); }; img.src = fr.result; }; fr.readAsDataURL(file); });
-const field = (label, input, cls) => { const w = h(['INPUT', 'TEXTAREA'].includes(input.tagName) ? 'label' : 'div', 'block ' + (cls || '')); w.appendChild(h('span', 'lbl', label)); w.appendChild(input); return w; };
+const field = (label, input, cls) => { const w = h(['INPUT', 'TEXTAREA'].includes(input.tagName) ? 'label' : 'div', 'block ' + (cls || '')); w.appendChild(h('span', 'lbl', label)); w.appendChild(input);
+  if (w.tagName === 'DIV') { const ctl = input.matches('input, select, textarea, button') ? input : input.querySelector('input, select, textarea'); if (ctl && !ctl.getAttribute('aria-label')) ctl.setAttribute('aria-label', label); if (input.tagName === 'SELECT') setTimeout(() => input._zd && input._zd.setAttribute('aria-label', label + ': ' + (input.options[input.selectedIndex] || {}).textContent), 0); }
+  return w; };
 const inp = (v, ph, type) => { const i = h('input', 'inp'); ZUI.noFill(i); i.value = v == null ? '' : v; if (ph) i.placeholder = ph; if (type) i.type = type; return i; };
 // opts: 'Value' or ['value', 'Label']; an empty value with a label is shown as the placeholder
 const sel = (v, opts) => { const s = h('select', 'inp'); opts.forEach((o) => { const [val, l] = Array.isArray(o) ? o : [o, o]; const op = h('option', null, l); op.value = val; if (val === '') op.dataset.placeholder = '1'; s.appendChild(op); }); s.value = v; return s; };
@@ -120,10 +155,11 @@ const gradePicker = (all, on, peers) => { const w = h('div', 'flex flex-wrap ite
   const addG = () => { ng.value.split(',').map((g) => g.trim()).filter(Boolean).forEach((g) => { if (!all.includes(g)) all.push(g); set.add(g); }); ng.value = ''; peers.forEach((p) => p !== w && p.draw()); draw(); ng.focus(); };
   ng.onkeydown = (e) => { if (e.key === 'Enter' || e.key === ',') { e.preventDefault(); addG(); } }; ng.onblur = () => { if (ng.value.trim()) addG(); };
   const removeG = async (g) => { if (!(await ZUI.confirm({title: 'Remove grade ' + g + '?', message: 'It is taken off every room type in this form and removed from the client\'s grade list when you save.', ok: 'Remove grade', tone: 'danger'}))) return; all.splice(all.indexOf(g), 1); peers.forEach((p) => p.drop(g)); };
-  const draw = () => { w.replaceChildren(quick); all.forEach((g) => { const c = h('span', 'chip group !pr-1'); if (set.has(g)) c.dataset.on = ''; c.appendChild(h('span', null, g)); c.title = 'Click to ' + (set.has(g) ? 'untick' : 'tick');
-      c.onclick = () => { set.has(g) ? set.delete(g) : set.add(g); draw(); };
-      const x = h('button', 'ml-0.5 w-4 h-4 grid place-items-center rounded text-[13px] leading-none opacity-50 hover:opacity-100 hover:bg-rose-500 hover:text-white', '×'); x.type = 'button'; x.title = 'Remove grade ' + g; x.setAttribute('aria-label', 'Remove grade ' + g);
-      x.onclick = (e) => { e.stopPropagation(); removeG(g); }; c.appendChild(x); w.appendChild(c); }); w.appendChild(ng); };
+  const draw = () => { const fk = document.activeElement && document.activeElement.dataset && document.activeElement.dataset.g; w.replaceChildren(quick); all.forEach((g) => { const c = h('span', 'chip group !p-0 !cursor-default overflow-hidden'); if (set.has(g)) c.dataset.on = '';
+      const t = h('button', 'pl-2 pr-0.5 py-0.5 font-semibold rounded-l-lg focus-visible:!outline-offset-[-2px]', g); t.type = 'button'; t.dataset.g = g; t.setAttribute('aria-pressed', set.has(g) ? 'true' : 'false'); t.title = (set.has(g) ? 'Untick ' : 'Tick ') + g; c.appendChild(t);
+      t.onclick = () => { set.has(g) ? set.delete(g) : set.add(g); draw(); };
+      const x = h('button', 'mr-1 ml-0.5 w-4 h-4 grid place-items-center rounded text-[13px] leading-none opacity-60 hover:opacity-100 focus-visible:opacity-100 hover:bg-rose-500 hover:text-white', '×'); x.type = 'button'; x.title = 'Remove grade ' + g; x.setAttribute('aria-label', 'Remove grade ' + g);
+      x.onclick = (e) => { e.stopPropagation(); removeG(g); }; c.appendChild(x); w.appendChild(c); }); w.appendChild(ng); if (fk) { const b = [...w.querySelectorAll('[data-g]')].find((e) => e.dataset.g === fk); b && b.focus(); } };
   w.drop = (g) => { set.delete(g); draw(); };
   draw(); w.draw = draw; peers.push(w); w.get = () => all.filter((g) => set.has(g)); return w; };
 const combo = (v, src, ph, onPick, emptyMsg) => { const w = h('div', 'zd-cwrap'); const i = inp(v, ph); i.setAttribute('role', 'combobox'); i.setAttribute('aria-expanded', 'false');
@@ -157,24 +193,25 @@ const render = () => {
     const m = h('div', 'min-w-0'); m.appendChild(h('p', 'font-semibold text-sm truncate', c.name)); m.appendChild(h('p', 'text-xs text-zuna-500', c.guesthouses.length + ' guest houses · ' + c.users.length + ' users' + (c.active ? '' : ' · inactive')));
     b.append(lg, m); b.onclick = () => { cur = c.id; render(); }; L.appendChild(b); });
   const D = $('#detail'); D.replaceChildren(); const c = C();
+  const vk = cur + ':' + tab; if (render.vk !== vk) { render.vk = vk; D.classList.remove('anim-in'); void D.offsetWidth; D.classList.add('anim-in'); }
   if (!c) { D.appendChild(h('div', 'card p-10 text-center text-sm text-zuna-500', 'Create your first client to get started.')); return; }
   const top = h('div', 'flex flex-wrap items-center gap-3 mb-4');
   top.appendChild(h('h1', 'text-xl font-bold', c.name));
   const tabs = h('div', 'ml-auto flex gap-1 rounded-xl bg-white ring-1 ring-zuna-100 p-1');
-  (CLIENT_MODE ? [] : [['gh', 'Guest houses'], ['bookings', 'Bookings'], ['users', 'Users'], ['settings', 'Client settings']]).forEach(([k, l]) => { const b = h('button', 'tab rounded-lg px-3 py-1.5 text-xs font-semibold text-zuna-600', l); if (tab === k) b.dataset.on = ''; b.onclick = () => { tab = k; render(); }; tabs.appendChild(b); });
+  (CLIENT_MODE ? [] : [['gh', 'Guest houses', 'building-2'], ['bookings', 'Bookings', 'calendar-days'], ['users', 'Users', 'users'], ['settings', 'Client settings', 'sliders-horizontal']]).forEach(([k, l, ic]) => { const b = ib('button', 'tab rounded-lg px-3 py-1.5 text-xs font-semibold text-zuna-600 transition-colors hover:text-zuna-900', l, ic); if (tab === k) b.dataset.on = ''; b.onclick = () => { tab = k; render(); }; tabs.appendChild(b); });
   if (!CLIENT_MODE) top.appendChild(tabs); D.appendChild(top);
   ({gh: renderGH, bookings: renderBookings, users: renderUsers, settings: renderSettings})[tab](D, c);
 };
 
 const renderGH = (D, c) => {
   const bar = h('div', 'flex items-center gap-2 mb-3'); bar.appendChild(h('p', 'text-sm text-zuna-500', c.guesthouses.length + ' guest houses · ' + c.guesthouses.filter((g) => g.status === 'Live').length + ' live'));
-  const add = h('button', 'ml-auto btn-primary', '+ Add guest house'); add.onclick = () => editGH(c, null); bar.appendChild(add); D.appendChild(bar);
+  const add = ib('button', 'ml-auto btn-primary', 'Add guest house', 'plus'); add.onclick = () => editGH(c, null); bar.appendChild(add); D.appendChild(bar);
   const due = c.guesthouses.flatMap((g) => (g.documents || []).filter((d) => d.state === 'expired' || d.state === 'expiring').map((d) => ({g, d}))).sort((a, b) => a.d.days_left - b.d.days_left);
-  if (due.length) { const w = h('div', 'card p-4 mb-3 ring-1 !ring-amber-200 bg-amber-50/40'); w.appendChild(h('p', 'text-sm font-bold mb-2', '⚠ Documents needing renewal'));
+  if (due.length) { const w = h('div', 'card p-4 mb-3 ring-1 !ring-amber-200 bg-amber-50/40'); w.appendChild(ib('p', 'text-sm font-bold mb-2 text-amber-900', 'Documents needing renewal', 'triangle-alert', 'w-4 h-4 text-amber-600'));
     due.forEach(({g, d}) => { const r = h('button', 'w-full flex flex-wrap items-center gap-2 rounded-lg px-2 py-1.5 text-left text-sm hover:bg-white'); r.appendChild(h('span', 'font-semibold', d.title)); r.appendChild(h('span', 'text-zuna-500', '· ' + g.property)); const ch = docChip(d); ch.classList.add('ml-auto'); r.appendChild(ch); r.onclick = () => editGH(c, g); w.appendChild(r); });
     D.appendChild(w); }
   const g = h('div', 'grid gap-3 md:grid-cols-2');
-  c.guesthouses.forEach((x) => { const card = h('div', 'card p-4 flex gap-3');
+  c.guesthouses.forEach((x) => { const card = h('div', 'card lift p-4 flex gap-3');
     const th = h('div', 'w-20 h-20 rounded-xl bg-zuna-50 ring-1 ring-zuna-100 overflow-hidden shrink-0 grid place-items-center text-zuna-300 text-xs'); const i = h('img', 'w-full h-full object-cover'); i.src = x.photos && x.photos[0] ? x.photos[0].url : ZUI.art.gh; i.alt = ''; th.appendChild(i);
     const m = h('div', 'min-w-0 flex-1'); const t = h('div', 'flex items-start gap-2'); t.appendChild(h('p', 'font-bold leading-tight', x.property));
     t.appendChild(h('span', 'ml-auto shrink-0 rounded-full px-2 py-0.5 text-[11px] font-bold ' + (x.status === 'Live' ? 'bg-mint-50 text-mint-700 ring-1 ring-mint-200' : 'bg-zuna-50 text-zuna-500 ring-1 ring-zuna-100'), x.status)); m.appendChild(t);
@@ -183,7 +220,7 @@ const renderGH = (D, c) => {
     const hidden = Object.entries(x.show || {}).filter(([, v]) => !v).map(([k]) => k); m.appendChild(h('p', 'text-[11px] mt-1 ' + (hidden.length ? 'text-amber-700' : 'text-mint-700'), hidden.length ? 'Hidden from client: ' + hidden.join(', ') : 'All details visible to client'));
     const dc = x.documents || [], bad = dc.filter((d) => d.state === 'expired').length, soon = dc.filter((d) => d.state === 'expiring').length;
     m.appendChild(h('p', 'text-[11px] ' + (bad ? 'text-rose-700 font-semibold' : soon ? 'text-amber-700 font-semibold' : 'text-zuna-500'), dc.length ? dc.length + (dc.length === 1 ? ' document' : ' documents') + (bad ? ' · ' + bad + ' expired' : '') + (soon ? ' · ' + soon + ' expiring soon' : '') : 'No documents'));
-    const ed = h('button', 'btn !py-1 !px-2.5 text-xs mt-2', 'Edit'); ed.onclick = () => editGH(c, x); m.appendChild(ed);
+    const ed = ib('button', 'btn !py-1 !px-2.5 text-xs mt-2', 'Edit', 'pencil'); ed.onclick = () => editGH(c, x); m.appendChild(ed);
     card.append(th, m); g.appendChild(card); });
   if (!c.guesthouses.length) g.appendChild(h('div', 'card p-8 text-center text-sm text-zuna-500 md:col-span-2', 'No guest houses yet.'));
   D.appendChild(g);
@@ -199,7 +236,7 @@ const INCL = ['Breakfast', 'Wi-Fi', 'Lunch', 'Dinner', 'Laundry (2 pcs/day)', 'A
 const editGH = (c, x) => {
   x = x || {status: 'Coming soon', country: 'India', room_types: [{name: 'Standard', rooms: 1, room_nos: '', occupancy: 'Single', grades: c.grades}], contacts: [{}], inclusions: [], amenities: [], show: {amenities: true, inclusions: true, cancellation: true, photos: true, contacts: true}};
   const f = h('div', 'space-y-6');
-  const sec = (t, sub) => { const s = h('section', 'space-y-3'); const hd = h('div'); hd.appendChild(h('h4', 'text-sm font-bold', t)); if (sub) hd.appendChild(h('p', 'text-xs text-zuna-500', sub)); s.appendChild(hd); f.appendChild(s); return s; };
+  const sec = (t, sub) => { const s = h('section', 'space-y-3'); const hd = h('div'); hd.appendChild(h('h3', 'text-sm font-bold', t)); if (sub) hd.appendChild(h('p', 'text-xs text-zuna-500', sub)); s.appendChild(hd); f.appendChild(s); return s; };
   // basics
   const s1 = sec('Guest house'); const g1 = h('div', 'grid sm:grid-cols-2 gap-3');
   const nm = inp(x.property, 'e.g. My Home Bhooja'), op = inp(x.operator, 'e.g. Sapphire Asta Hospitality'), st = sel(x.status, ['Live', 'Coming soon']);
@@ -232,11 +269,11 @@ const editGH = (c, x) => {
     const bd = sel(r.bed_type || '', [['', 'Select bed type']].concat(BEDS));
     gg.append(field('Room type', rn), field('No. of rooms', rc), field('Bed type', bd), field('Room numbers', rnos, 'col-span-2'), field('Occupancy', oc)); card.appendChild(gg);
     const gp = gradePicker(grades, r.grades || [], pickers); card.appendChild(field('Eligible grades', gp));
-    const rm = h('button', 'text-xs font-semibold text-rose-600 hover:underline', 'Remove room type'); rm.type = 'button'; rm.onclick = () => { card.remove(); rts.splice(rts.indexOf(o), 1); pickers.splice(pickers.indexOf(gp), 1); }; card.appendChild(rm);
+    const rm = ib('button', 'text-xs font-semibold text-rose-700 hover:underline', 'Remove room type', 'trash-2'); rm.type = 'button'; rm.onclick = () => { card.remove(); rts.splice(rts.indexOf(o), 1); pickers.splice(pickers.indexOf(gp), 1); }; card.appendChild(rm);
     const o = {get: () => ({name: rn.get(), rooms: rc.value, room_nos: rnos.value, occupancy: oc.value, bed_type: bd.value, grades: gp.get()})}; rts.push(o); rtBox.appendChild(card); };
   (x.room_types || []).forEach(addRT);
   const arw = h('div', 'flex flex-wrap items-center gap-2'); arw.appendChild(h('span', 'text-xs font-semibold text-zuna-500 mr-1', 'Add room type'));
-  [['Standard', 'Queen'], ['Deluxe', 'King'], ['Suite', 'King'], ['Other', '']].forEach(([n, bed]) => { const b = h('button', 'btn !py-1.5 text-xs', '+ ' + n); b.type = 'button';
+  [['Standard', 'Queen'], ['Deluxe', 'King'], ['Suite', 'King'], ['Other', '']].forEach(([n, bed]) => { const b = ib('button', 'btn !py-1.5 text-xs', n, 'plus'); b.type = 'button';
     b.onclick = () => { addRT({name: n === 'Other' ? '' : n, rooms: 1, occupancy: 'Single', bed_type: bed, grades: []}); const last = rtBox.lastElementChild; last.scrollIntoView({behavior: 'smooth', block: 'center'}); if (n === 'Other') last.querySelector('input').focus(); }; arw.appendChild(b); });
   s2.appendChild(arw);
   // inclusions / amenities / policy
@@ -249,19 +286,25 @@ const editGH = (c, x) => {
   // contacts
   const s5 = sec('Guest house contacts (POC)'); const ctBox = h('div', 'space-y-2'); s5.appendChild(ctBox); const cts = [];
   const addCT = (k) => { const row = h('div', 'grid grid-cols-2 sm:grid-cols-[1fr_1fr_1.2fr_1fr_auto] gap-2 items-end'); const a = inp(k.name, 'Name'), d = inp(k.designation, 'e.g. Caretaker'), e = inp(k.email, 'email@…', 'email'), p = inp(k.phone, '+91 …');
-    const rm = h('button', 'btn !px-2.5 text-rose-600', '✕'); rm.type = 'button'; rm.title = 'Remove'; rm.onclick = () => { row.remove(); cts.splice(cts.indexOf(o), 1); };
+    const rm = h('button', 'btn !px-2.5 !py-2.5 text-rose-600'); rm.appendChild(icon('trash-2')); rm.type = 'button'; rm.title = 'Remove contact'; rm.setAttribute('aria-label', 'Remove contact'); rm.onclick = () => { row.remove(); cts.splice(cts.indexOf(o), 1); };
     row.append(field('Name', a), field('Designation', d), field('Email', e), field('Phone', p), rm); const o = {get: () => ({name: a.value, designation: d.value, email: e.value, phone: p.value})}; cts.push(o); ctBox.appendChild(row); };
-  (x.contacts && x.contacts.length ? x.contacts : [{}]).forEach(addCT); const act = h('button', 'btn text-xs', '+ Add contact'); act.type = 'button'; act.onclick = () => addCT({}); s5.appendChild(act);
+  (x.contacts && x.contacts.length ? x.contacts : [{}]).forEach(addCT); const act = ib('button', 'btn text-xs', 'Add contact', 'user-plus'); act.type = 'button'; act.onclick = () => addCT({}); s5.appendChild(act);
   // photos
   const s6 = sec('Photos', x.id ? 'JPG, PNG or WEBP. Resized automatically.' : 'Save the guest house first, then add photos.');
   if (x.id) { const grid = h('div', 'grid grid-cols-3 sm:grid-cols-4 gap-2');
     (x.photos || []).forEach((p) => { const t = h('div', 'relative group rounded-xl overflow-hidden ring-1 ring-zuna-100 aspect-[4/3]'); const i = h('img', 'w-full h-full object-cover'); i.src = p.url; t.appendChild(i);
       const del = h('button', 'absolute top-1.5 right-1.5 rounded-lg bg-white/90 px-2 py-0.5 text-xs font-bold text-rose-600 opacity-0 group-hover:opacity-100', 'Delete'); del.type = 'button';
       del.onclick = async () => { if (!(await ZUI.confirm({title: 'Delete this photo?', message: 'It is removed from the guest house and the client dashboard.', ok: 'Delete photo', tone: 'danger'}))) return; try { await api('photo/delete', {id: p.id}); toast('Photo deleted'); await load(true); editGH(C(), C().guesthouses.find((g) => g.id === x.id)); } catch (er) { toast(er.message, true); } }; t.appendChild(del); grid.appendChild(t); });
-    const up = h('label', 'rounded-xl ring-1 ring-dashed ring-zuna-200 aspect-[4/3] grid place-items-center text-xs font-semibold text-mint-700 cursor-pointer hover:bg-mint-50', '+ Add photos'); const fi = h('input', 'hidden'); fi.type = 'file'; fi.accept = 'image/*'; fi.multiple = true; up.appendChild(fi);
-    fi.onchange = async () => { const files = [...fi.files]; for (const [n, file] of files.entries()) { try { toast('Uploading ' + (n + 1) + ' of ' + files.length + '…'); await api('photo', {gh_id: x.id, data_url: await toDataUrl(file, 1600, false)}); } catch (er) { toast(er.message, true); } }
-      toast('Photos added'); await load(true); editGH(C(), C().guesthouses.find((g) => g.id === x.id)); };
-    grid.appendChild(up); s6.appendChild(grid); }
+    const up = h('label', 'dz rounded-xl border-2 border-dashed border-zuna-200 aspect-[4/3] flex flex-col items-center justify-center gap-1 p-2 text-center cursor-pointer transition-colors hover:border-mint-500 hover:bg-mint-50/50 focus-within:border-mint-500');
+    const ui = h('span', 'grid place-items-center w-9 h-9 rounded-full bg-mint-50 text-mint-700'); ui.appendChild(icon('upload', 'w-4 h-4')); up.append(ui, h('span', 'text-xs font-semibold text-zuna-900', 'Drop photos here'), h('span', 'text-[11px] text-zuna-500', 'or click to browse'));
+    const fi = h('input', 'sr-only'); fi.type = 'file'; fi.accept = 'image/png,image/jpeg,image/webp'; fi.multiple = true; fi.setAttribute('aria-label', 'Add photos'); up.appendChild(fi);
+    const prog = h('div', 'grid sm:grid-cols-2 gap-2 mt-2');
+    const send = async (files) => { files = files.filter((f) => /^image\//.test(f.type)); if (!files.length) { toast('Drop JPG, PNG or WEBP images.', true); return; }
+      const rows = files.map((f) => { const r = progressRow(f.name); prog.appendChild(r.el); return r; }); let ok = 0;
+      for (const [n, file] of files.entries()) { try { rows[n].set(0, 'Preparing…'); const data = await toDataUrl(file, 1600, false); await apiUp('photo', {gh_id: x.id, data_url: data}, (f) => rows[n].set(f)); rows[n].done(true); ok++; } catch (er) { rows[n].done(false, er.message.length > 40 ? 'Failed' : er.message); toast(er.message, true); } }
+      if (ok) { toast(ok + (ok === 1 ? ' photo added' : ' photos added')); setTimeout(async () => { await load(true); editGH(C(), C().guesthouses.find((g) => g.id === x.id)); }, 500); } };
+    fi.onchange = () => send([...fi.files]); dropZone(up, send);
+    grid.appendChild(up); s6.appendChild(grid); s6.appendChild(prog); }
   // documents
   const sD = sec('Documents', x.id ? 'Agreements, licences and certificates. Reminders are e-mailed before the expiry date.' : 'Save the guest house first, then add documents.');
   if (x.id) docSection(sD, c, x);
@@ -270,7 +313,7 @@ const editGH = (c, x) => {
   [['amenities', 'Amenities'], ['inclusions', 'Inclusions'], ['cancellation', 'Cancellation policy'], ['photos', 'Photos'], ['contacts', 'Contacts (POC)']].forEach(([k, l]) => { const e = switchEl(l, (x.show || {})[k] !== false); shows[k] = e.input; sw.appendChild(e); }); s7.appendChild(sw);
   // actions
   const actions = h('div', 'flex items-center gap-2 pt-2 border-t border-zuna-100');
-  if (x.id) { const del = h('button', 'btn text-rose-600', 'Delete guest house'); del.onclick = async () => { if (!(await ZUI.confirm({title: 'Delete ' + x.property + '?', message: ['Its room types, photos, contacts and documents are deleted too.', 'Bookings are kept.'], ok: 'Delete guest house', tone: 'danger'}))) return; try { await api('gh/delete', {id: x.id}); closeModal(); toast('Deleted'); load(true); } catch (er) { toast(er.message, true); } }; actions.appendChild(del); }
+  if (x.id) { const del = ib('button', 'btn text-rose-600', 'Delete guest house', 'trash-2'); del.onclick = async () => { if (!(await ZUI.confirm({title: 'Delete ' + x.property + '?', message: ['Its room types, photos, contacts and documents are deleted too.', 'Bookings are kept.'], ok: 'Delete guest house', tone: 'danger'}))) return; try { await api('gh/delete', {id: x.id}); closeModal(); toast('Deleted'); load(true); } catch (er) { toast(er.message, true); } }; actions.appendChild(del); }
   const save = h('button', 'ml-auto btn-primary', x.id ? 'Save changes' : 'Create guest house');
   save.onclick = async () => { save.disabled = true; try {
     const show = {}; Object.entries(shows).forEach(([k, v]) => show[k] = v.checked);
@@ -286,40 +329,75 @@ const TODAY = new Date(Date.now() + 5.5 * 3600e3).toISOString().slice(0, 10);
 const fD = (d) => d ? new Date(d + 'T00:00:00').toLocaleDateString('en-IN', {day: '2-digit', month: 'short', year: 'numeric'}) : '—';
 const nightsBetween = (a, b) => a && b ? Math.round((Date.parse(b) - Date.parse(a)) / 864e5) : 0;
 const badge = (t, cls) => h('span', 'inline-flex items-center rounded-full px-2 py-0.5 text-[11px] font-bold whitespace-nowrap ' + cls, t);
+// ---------- data table: sticky header, sortable columns, pages, actions on row hover ----------
+// cols: [{k, label, sort: (row) => value, render: (row) => Node, td: 'classes', actions: true}]
+const dataTable = ({cols, rows, st, pageSize = 20, empty = 'Nothing to show.', noun = 'rows'}) => {
+  const wrap = h('div', 'card overflow-hidden');
+  const scroll = h('div', 'max-h-[68vh] overflow-auto'); scroll.tabIndex = 0; scroll.setAttribute('aria-label', 'Table, scrollable'); wrap.appendChild(scroll);
+  const foot = h('div', 'flex flex-wrap items-center gap-3 px-4 py-2.5 border-t border-zuna-100 bg-zuna-50/40 text-xs text-zuna-500'); wrap.appendChild(foot);
+  const draw = () => {
+    let list = rows.slice(); const sc = cols.find((x) => x.k === st.sort.k);
+    if (sc && sc.sort) list.sort((a, b) => { const x = sc.sort(a), y = sc.sort(b); return (x < y ? -1 : x > y ? 1 : 0) * st.sort.dir; });
+    const pages = Math.max(1, Math.ceil(list.length / pageSize)); st.page = Math.min(Math.max(1, st.page || 1), pages);
+    const from = (st.page - 1) * pageSize, shown = list.slice(from, from + pageSize);
+    const tb = h('table', 'w-full text-sm'); const th = h('thead', 'sticky top-0 z-10'); const hr = h('tr', 'text-left text-xs font-semibold text-zuna-500 bg-zuna-50 shadow-[inset_0_-1px_0_#e6e2f6]');
+    cols.forEach((col) => { const c = h('th', 'px-4 py-2.5 whitespace-nowrap font-semibold ' + (col.actions ? 'text-right' : '')); c.scope = 'col';
+      if (col.sort) { const on = st.sort.k === col.k; c.setAttribute('aria-sort', on ? (st.sort.dir > 0 ? 'ascending' : 'descending') : 'none');
+        const b = h('button', 'inline-flex items-center gap-1 rounded-md -mx-1 px-1 py-0.5 hover:text-zuna-900 hover:bg-white transition-colors ' + (on ? 'text-zuna-900' : '')); b.type = 'button'; b.appendChild(document.createTextNode(col.label));
+        b.appendChild(icon(on ? (st.sort.dir > 0 ? 'chevron-up' : 'chevron-down') : 'chevrons-up-down', 'w-3.5 h-3.5 ' + (on ? 'text-mint-700' : 'text-zuna-300')));
+        b.onclick = () => { st.sort = {k: col.k, dir: on ? -st.sort.dir : 1}; st.page = 1; draw(); }; c.appendChild(b);
+      } else if (col.label) c.textContent = col.label; else c.appendChild(h('span', 'sr-only', 'Actions'));
+      hr.appendChild(c); });
+    th.appendChild(hr); tb.appendChild(th);
+    const body = h('tbody', 'divide-y divide-zuna-50');
+    shown.forEach((r) => { const tr = h('tr', 'group align-middle hover:bg-zuna-50/50');
+      cols.forEach((col) => { const td = h('td', 'px-4 py-3 ' + (col.td || '')); const n = col.render(r);
+        if (col.actions) { const box = h('div', 'flex justify-end transition-opacity md:opacity-0 md:group-hover:opacity-100 md:group-focus-within:opacity-100'); box.appendChild(n); td.appendChild(box); }
+        else if (n != null) td.append(...[].concat(n)); tr.appendChild(td); });
+      body.appendChild(tr); });
+    if (!shown.length) { const tr = h('tr'); const td = h('td', 'px-4 py-12 text-center text-zuna-500', empty); td.colSpan = cols.length; tr.appendChild(td); body.appendChild(tr); }
+    tb.appendChild(body); scroll.replaceChildren(tb);
+    foot.replaceChildren(h('span', 'tabular-nums', list.length ? 'Showing ' + (from + 1) + '–' + (from + shown.length) + ' of ' + list.length + ' ' + noun : 'No ' + noun));
+    if (pages > 1) { const nav = h('nav', 'ml-auto flex items-center gap-1'); nav.setAttribute('aria-label', 'Pages');
+      const pb = (label, page, cur, ic) => { const b = h('button', 'min-w-[2rem] h-8 px-2 rounded-lg text-xs font-semibold tabular-nums transition-colors ' + (cur ? 'bg-zuna-900 text-white' : 'text-zuna-700 hover:bg-white hover:ring-1 hover:ring-zuna-100') + (page ? '' : ' opacity-40 pointer-events-none')); b.type = 'button';
+        if (ic) { b.appendChild(icon(ic, 'w-4 h-4 mx-auto')); b.setAttribute('aria-label', label); } else b.textContent = label; if (cur) b.setAttribute('aria-current', 'page'); if (page) b.onclick = () => { st.page = page; draw(); scroll.scrollTop = 0; }; return b; };
+      nav.appendChild(pb('Previous page', st.page > 1 ? st.page - 1 : 0, false, 'chevron-left'));
+      const want = [...new Set([1, st.page - 1, st.page, st.page + 1, pages])].filter((x) => x >= 1 && x <= pages).sort((x, y) => x - y);
+      want.forEach((x, i) => { if (i && x - want[i - 1] > 1) nav.appendChild(h('span', 'px-1 text-zuna-400', '…')); nav.appendChild(pb(String(x), x, x === st.page)); });
+      nav.appendChild(pb('Next page', st.page < pages ? st.page + 1 : 0, false, 'chevron-right')); foot.appendChild(nav); }
+  };
+  draw(); wrap.redraw = (r) => { if (r) rows = r; draw(); }; return wrap;
+};
 const renderBookings = (D, c) => {
   const bar = h('div', 'flex flex-wrap items-center gap-2 mb-3');
   const q = inp(BF.q, 'Search guest, room or TR'); q.classList.add('!w-60'); q.type = 'search';
   const gsel = sel(BF.gh, [['', 'All guest houses']].concat(c.guesthouses.map((g) => [g.property, g.property]))); gsel.classList.add('!w-52');
   const wsel = sel(BF.when, [['upcoming', 'Upcoming & in-house'], ['past', 'Past stays'], ['all', 'All stays']]); wsel.classList.add('!w-48');
-  const add = h('button', 'ml-auto btn-primary', '+ Add booking'); add.onclick = () => editBooking(c, null);
+  const add = ib('button', 'ml-auto btn-primary', 'Add booking', 'plus'); add.onclick = () => editBooking(c, null);
   bar.append(q, gsel, wsel, add); D.appendChild(bar);
   const info = h('p', 'text-sm text-zuna-500 mb-2'); D.appendChild(info);
-  const t = h('div', 'card overflow-x-auto'); D.appendChild(t);
+  const cancel = async (b) => { if (!(await ZUI.confirm({title: 'Cancel this stay?', message: [b.guest + ' · ' + b.property, fD(b.check_in) + ' → ' + fD(b.check_out) + '. It is removed from the client dashboard.'], ok: 'Cancel stay', cancel: 'Keep booking', tone: 'danger', icon: 'M8 2v4M16 2v4M3 10h18M5 4h14a2 2 0 0 1 2 2v14a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2V6a2 2 0 0 1 2-2zM10 14l4 4M14 14l-4 4'}))) return;
+    try { await api('booking/delete', {client_id: c.id, guest: b.guest, check_in: b.check_in}); toast('Booking cancelled'); load(true); } catch (er) { toast(er.message, true); } };
+  const nameKey = (b) => b.guest.replace(/^(mr|ms|mrs|dr)\.?\s+/i, '').toLowerCase();
+  const cols = [
+    {k: 'guest', label: 'Guest', sort: nameKey, render: (b) => { const sub = h('p', 'text-xs text-zuna-500 mt-0.5 flex items-center gap-1.5 whitespace-nowrap'); sub.appendChild(document.createTextNode(['Grade ' + (b.grade || '—'), b.base, b.concur_tr].filter((x) => x && x !== 'Not stated').join(' · ')));
+      if (b.manual) sub.appendChild(badge('Zuna entry', '!px-1.5 !py-0 bg-zuna-50 text-zuna-600 ring-1 ring-zuna-100')); return [h('p', 'font-semibold whitespace-nowrap', b.guest), sub]; }},
+    {k: 'gh', label: 'Guest house · Room', sort: (b) => b.property + ' ' + b.room, render: (b) => [h('p', 'font-medium whitespace-nowrap', b.property), h('p', 'text-xs ' + (b.room === 'Not assigned' ? 'text-amber-700' : 'text-zuna-500'), b.status === 'Confirmed' ? 'Room ' + b.room : '—')]},
+    {k: 'stay', label: 'Stay', td: 'whitespace-nowrap', sort: (b) => b.check_in + b.check_out, render: (b) => [h('p', 'font-medium', fD(b.check_in) + ' → ' + fD(b.check_out)), h('p', 'text-xs text-zuna-500', b.nights + (b.nights === '1' ? ' night' : ' nights') + (b.check_in <= TODAY && b.check_out > TODAY ? ' · in house' : ''))]},
+    {k: 'occ', label: 'Occupancy', sort: (b) => b.occupancy, render: (b) => [h('p', null, b.occupancy || '—'), h('p', 'text-xs text-zuna-500', b.gender && b.gender !== 'Not stated' ? b.gender : '')]},
+    {k: 'status', label: 'Status', sort: (b) => b.status, render: (b) => b.status === 'Confirmed' ? badge('Confirmed', 'bg-mint-50 text-mint-700 ring-1 ring-mint-200') : badge(b.status, 'bg-amber-50 text-amber-800 ring-1 ring-amber-200')},
+    {k: 'act', label: '', actions: true, render: (b) => { const g = h('div', 'flex gap-1.5 whitespace-nowrap');
+      const ibn = (ic, label, cls, fn) => { const x = h('button', 'iconbtn !w-8 !h-8 ' + (cls || '')); x.type = 'button'; x.title = label; x.setAttribute('aria-label', label + ': ' + b.guest); x.appendChild(icon(ic, 'w-4 h-4')); x.onclick = fn; return x; };
+      g.append(ibn('pencil', 'Edit booking', 'text-zuna-700', () => editBooking(c, b)), ibn('circle-x', 'Cancel stay', 'text-rose-600 hover:!ring-rose-300', () => cancel(b))); return g; }}];
+  BF.st = BF.st || {sort: {k: 'stay', dir: 1}, page: 1};
+  let table = null;
   const draw = () => {
     const qq = BF.q.trim().toLowerCase();
     const list = c.bookings.filter((b) => (!BF.gh || b.property === BF.gh) && (BF.when === 'all' || (BF.when === 'upcoming' ? b.check_out > TODAY : b.check_out <= TODAY))
-      && (!qq || [b.guest, b.room, b.concur_tr, b.grade, b.base, b.note].join(' ').toLowerCase().includes(qq)))
-      .sort((a, b) => BF.when === 'past' ? b.check_in.localeCompare(a.check_in) : a.check_in.localeCompare(b.check_in));
-    info.textContent = list.length + ' of ' + c.bookings.length + ' bookings' + (c.bookings.some((b) => b.manual) ? ' · ' + c.bookings.filter((b) => b.manual).length + ' added or edited by Zuna' : '');
-    const tb = h('table', 'w-full text-sm'); const hr = h('tr', 'text-left text-xs font-semibold text-zuna-500 bg-zuna-50/70');
-    ['Guest', 'Guest house · Room', 'Stay', 'Occupancy', 'Status', ''].forEach((x) => hr.appendChild(h('th', 'px-4 py-2.5 whitespace-nowrap', x))); const th = h('thead'); th.appendChild(hr); tb.appendChild(th);
-    const body = h('tbody', 'divide-y divide-zuna-50');
-    list.forEach((b) => { const tr = h('tr', 'align-middle hover:bg-zuna-50/40');
-      const g = h('td', 'px-4 py-3'); g.appendChild(h('p', 'font-semibold whitespace-nowrap', b.guest));
-      const sub = h('p', 'text-xs text-zuna-500 mt-0.5 flex items-center gap-1.5 whitespace-nowrap'); sub.appendChild(document.createTextNode(['Grade ' + (b.grade || '—'), b.base, b.concur_tr].filter((x) => x && x !== 'Not stated').join(' · ')));
-      if (b.manual) sub.appendChild(badge('Zuna entry', '!px-1.5 !py-0 bg-zuna-50 text-zuna-600 ring-1 ring-zuna-100')); g.appendChild(sub); tr.appendChild(g);
-      const p = h('td', 'px-4 py-3'); p.appendChild(h('p', 'font-medium whitespace-nowrap', b.property)); p.appendChild(h('p', 'text-xs ' + (b.room === 'Not assigned' ? 'text-amber-700' : 'text-zuna-500'), b.status === 'Confirmed' ? 'Room ' + b.room : '—')); tr.appendChild(p);
-      const st = h('td', 'px-4 py-3 whitespace-nowrap'); st.appendChild(h('p', 'font-medium', fD(b.check_in) + ' → ' + fD(b.check_out))); st.appendChild(h('p', 'text-xs text-zuna-500', b.nights + (b.nights === '1' ? ' night' : ' nights') + (b.check_in <= TODAY && b.check_out > TODAY ? ' · in house' : ''))); tr.appendChild(st);
-      const oc = h('td', 'px-4 py-3'); oc.appendChild(h('p', null, b.occupancy || '—')); oc.appendChild(h('p', 'text-xs text-zuna-500', b.gender && b.gender !== 'Not stated' ? b.gender : '')); tr.appendChild(oc);
-      const ss = h('td', 'px-4 py-3'); ss.appendChild(b.status === 'Confirmed' ? badge('Confirmed', 'bg-mint-50 text-mint-700 ring-1 ring-mint-200') : badge(b.status, 'bg-amber-50 text-amber-800 ring-1 ring-amber-200')); tr.appendChild(ss);
-      const ac = h('td', 'px-4 py-3 text-right whitespace-nowrap space-x-2');
-      const ed = h('button', 'btn !py-1 !px-2.5 text-xs', 'Edit'); ed.onclick = () => editBooking(c, b);
-      const cx = h('button', 'btn !py-1 !px-2.5 text-xs text-rose-600', 'Cancel'); cx.onclick = async () => { if (!(await ZUI.confirm({title: 'Cancel this stay?', message: [b.guest + ' · ' + b.property, fD(b.check_in) + ' → ' + fD(b.check_out) + '. It is removed from the client dashboard.'], ok: 'Cancel stay', cancel: 'Keep booking', tone: 'danger', icon: 'M8 2v4M16 2v4M3 10h18M5 4h14a2 2 0 0 1 2 2v14a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2V6a2 2 0 0 1 2-2zM10 14l4 4M14 14l-4 4'}))) return;
-        try { await api('booking/delete', {client_id: c.id, guest: b.guest, check_in: b.check_in}); toast('Booking cancelled'); load(true); } catch (er) { toast(er.message, true); } };
-      ac.append(ed, cx); tr.appendChild(ac); body.appendChild(tr); });
-    if (!list.length) { const tr = h('tr'); const td = h('td', 'px-4 py-10 text-center text-zuna-500', c.bookings.length ? 'No bookings match these filters.' : 'No bookings yet.'); td.colSpan = 6; tr.appendChild(td); body.appendChild(tr); }
-    tb.appendChild(body); t.replaceChildren(tb); };
-  q.oninput = () => { BF.q = q.value; draw(); }; gsel.onchange = () => { BF.gh = gsel.value; draw(); }; wsel.onchange = () => { BF.when = wsel.value; draw(); };
+      && (!qq || [b.guest, b.room, b.concur_tr, b.grade, b.base, b.note].join(' ').toLowerCase().includes(qq)));
+    info.textContent = c.bookings.length + ' bookings in total' + (c.bookings.some((b) => b.manual) ? ' · ' + c.bookings.filter((b) => b.manual).length + ' added or edited by Zuna' : '');
+    if (!table) { table = dataTable({cols, rows: list, st: BF.st, noun: 'bookings', empty: c.bookings.length ? 'No bookings match these filters.' : 'No bookings yet.'}); D.appendChild(table); } else { BF.st.page = 1; table.redraw(list); } };
+  q.oninput = () => { BF.q = q.value; draw(); }; gsel.onchange = () => { BF.gh = gsel.value; draw(); }; wsel.onchange = () => { BF.when = wsel.value; BF.st.sort = {k: 'stay', dir: BF.when === 'past' ? -1 : 1}; draw(); };
   draw();
 };
 const CITY_LIST = [...new Set(Object.values(IN_STATES).flatMap((v) => v.split(',')))].sort();
@@ -358,7 +436,7 @@ const editBooking = (c, b) => {
         if (occ.value === 'Single' || o.occupancy === 'Single') msgs.push('Room ' + room.value + ' is booked for ' + nm2 + '. Choose another room or set both to Double occupancy.');
         else if (o.gender && sexOf() && o.gender !== 'Not stated' && o.gender !== sexOf()) msgs.push('Double occupancy is allowed only for two male or two female guests. ' + nm2 + ' is ' + o.gender.toLowerCase() + '.'); });
     }
-    warn.replaceChildren(...msgs.map((x) => h('p', null, '⚠ ' + x))); warn.classList.toggle('hidden', !msgs.length); return msgs; };
+    warn.replaceChildren(...msgs.map((x) => { const p = h('p', 'flex items-start gap-2'); p.appendChild(icon('triangle-alert', 'w-4 h-4 mt-0.5 shrink-0 text-amber-600')); p.appendChild(document.createTextNode(x)); return p; })); warn.classList.toggle('hidden', !msgs.length); return msgs; };
   [title, gender, ci, co, room, occ, status].forEach((e) => e.addEventListener('change', check)); [ci, co].forEach((e) => e.addEventListener('input', check));
   gh.addEventListener('change', () => { fillRooms(); check(); });
   check();
@@ -381,76 +459,80 @@ const docChip = (d) => { const n = d.days_left;
 const readFile = (file) => new Promise((res, rej) => { if (file.type === 'application/pdf') { const fr = new FileReader(); fr.onerror = rej; fr.onload = () => res(fr.result); fr.readAsDataURL(file); } else toDataUrl(file, 2000, false).then(res, rej); });
 const docSection = (sec, c, x) => {
   const list = h('div', 'rounded-xl ring-1 ring-zuna-100 divide-y divide-zuna-50 overflow-hidden'); sec.appendChild(list);
-  const reopen = async () => { await load(true); editGH(C(), C().guesthouses.find((g) => g.id === x.id)); setTimeout(() => { const el = [...$$('#mBody h4')].find((e) => e.textContent === 'Documents'); el && el.scrollIntoView({block: 'start'}); }, 50); };
+  const reopen = async () => { await load(true); editGH(C(), C().guesthouses.find((g) => g.id === x.id)); setTimeout(() => { const el = [...$$('#mBody h3')].find((e) => e.textContent === 'Documents'); el && el.scrollIntoView({block: 'start'}); }, 50); };
   (x.documents || []).forEach((d) => { const r = h('div', 'flex flex-wrap items-center gap-3 px-3 py-2.5 bg-white');
     const ic = h('span', 'grid place-items-center w-9 h-9 rounded-lg shrink-0 text-[10px] font-bold ' + (d.mime === 'application/pdf' ? 'bg-rose-50 text-rose-700' : 'bg-zuna-50 text-zuna-600'), d.mime === 'application/pdf' ? 'PDF' : 'IMG'); r.appendChild(ic);
     const m = h('div', 'min-w-0 flex-1'); m.appendChild(h('p', 'text-sm font-semibold truncate', d.title)); m.appendChild(h('p', 'text-xs text-zuna-500 truncate', [d.type !== d.title ? d.type : '', d.number ? 'No. ' + d.number : '', d.issued ? 'Issued ' + fD(d.issued) : '', d.visible ? 'Visible to client' : 'Hidden from client'].filter(Boolean).join(' · '))); r.appendChild(m);
     r.appendChild(docChip(d));
-    const v = h('a', 'btn !py-1 !px-2.5 text-xs', 'View'); v.href = d.url; v.target = '_blank'; v.rel = 'noopener';
-    const e = h('button', 'btn !py-1 !px-2.5 text-xs', 'Edit'); e.type = 'button'; e.onclick = () => form(d);
-    const del = h('button', 'btn !py-1 !px-2.5 text-xs text-rose-600', 'Delete'); del.type = 'button'; del.onclick = async () => { if (!(await ZUI.confirm({title: 'Delete ' + d.title + '?', message: 'The file is removed and the client can no longer open it.', ok: 'Delete document', tone: 'danger'}))) return; try { await api('doc/delete', {id: d.id}); toast('Document deleted'); reopen(); } catch (er) { toast(er.message, true); } };
+    const v = ib('a', 'btn !py-1 !px-2.5 text-xs', 'View', 'external-link'); v.href = d.url; v.target = '_blank'; v.rel = 'noopener';
+    const e = ib('button', 'btn !py-1 !px-2.5 text-xs', 'Edit', 'pencil'); e.type = 'button'; e.onclick = () => form(d);
+    const del = ib('button', 'btn !py-1 !px-2.5 text-xs text-rose-600', 'Delete', 'trash-2'); del.type = 'button'; del.onclick = async () => { if (!(await ZUI.confirm({title: 'Delete ' + d.title + '?', message: 'The file is removed and the client can no longer open it.', ok: 'Delete document', tone: 'danger'}))) return; try { await api('doc/delete', {id: d.id}); toast('Document deleted'); reopen(); } catch (er) { toast(er.message, true); } };
     r.append(v, e, del); list.appendChild(r); });
   if (!(x.documents || []).length) list.appendChild(h('p', 'px-3 py-4 text-sm text-zuna-500 text-center bg-white', 'No documents yet.'));
   const box = h('div'); sec.appendChild(box);
-  const addB = h('button', 'btn text-xs', '+ Add document'); addB.type = 'button'; addB.onclick = () => form(null); sec.appendChild(addB);
+  const addB = ib('button', 'btn text-xs', 'Add document', 'upload'); addB.type = 'button'; addB.onclick = () => form(null); sec.appendChild(addB);
   const form = (d) => { addB.classList.add('hidden'); const f = h('div', 'rounded-xl bg-zuna-50/60 ring-1 ring-zuna-100 p-4 space-y-3'); const g = h('div', 'grid sm:grid-cols-2 gap-3');
     const ty = sel(d ? d.type : 'Lease agreement', DOC_TYPES), ti = inp(d ? d.title : '', 'e.g. Lease agreement 2026–27'), no = inp(d ? d.number : '', 'Licence / agreement number');
     const is = inp(d ? d.issued : '', '', 'date'), ex = inp(d ? d.expires : '', '', 'date'), rd = sel(String(d ? d.remind_days : 30), [['15', '15 days before expiry'], ['30', '30 days before expiry'], ['45', '45 days before expiry'], ['60', '60 days before expiry'], ['90', '90 days before expiry']]);
     const vis = switchEl('Visible to client', d ? d.visible : true);
-    const fileL = h('label', 'flex items-center gap-3 rounded-xl bg-white ring-1 ring-dashed ring-zuna-200 px-4 py-3 cursor-pointer hover:ring-mint-500'); const fi = h('input', 'hidden'); fi.type = 'file'; fi.accept = 'application/pdf,image/png,image/jpeg,image/webp';
-    const fn = h('span', 'text-sm text-zuna-600', d ? 'Replace file (optional) · PDF, JPG or PNG, max 1.4 MB' : 'Choose file · PDF, JPG or PNG, max 1.4 MB'); fileL.append(h('span', 'grid place-items-center w-9 h-9 rounded-lg bg-mint-50 text-mint-700 font-bold', '↑'), fn, fi);
-    fi.onchange = () => { const F = fi.files[0]; if (!F) return; if (F.type === 'application/pdf' && F.size > 1.4 * 1024 * 1024) { toast('PDF is larger than 1.4 MB. Please compress it.', true); fi.value = ''; return; } fn.textContent = F.name + ' · ' + Math.round(F.size / 1024) + ' KB'; if (!ti.value) ti.value = ty.value; };
-    g.append(field('Document type', ty), field('Title', ti), field('Number', no), field('Remind', rd), field('Issue date', is), field('Expiry date', ex)); f.appendChild(g); f.appendChild(fileL); f.appendChild(vis);
+    const fileL = h('label', 'dz flex items-center gap-3 rounded-xl bg-white border-2 border-dashed border-zuna-200 px-4 py-3 cursor-pointer transition-colors hover:border-mint-500 focus-within:border-mint-500'); const fi = h('input', 'sr-only'); fi.setAttribute('aria-label', 'Document file'); fi.type = 'file'; fi.accept = 'application/pdf,image/png,image/jpeg,image/webp';
+    const fn = h('span', 'text-sm text-zuna-600', d ? 'Drop a new file here or click to replace (optional) · PDF, JPG or PNG, max 1.4 MB' : 'Drop the file here or click to browse · PDF, JPG or PNG, max 1.4 MB'); const upI = h('span', 'grid place-items-center w-9 h-9 rounded-lg bg-mint-50 text-mint-700'); upI.appendChild(icon('upload')); fileL.append(upI, fn, fi);
+    let picked = null; const pick = (F) => { if (!F) return; if (!/^(application\/pdf|image\/(png|jpeg|webp))$/.test(F.type)) { toast('Use a PDF, JPG, PNG or WEBP file.', true); return; } if (F.type === 'application/pdf' && F.size > 1.4 * 1024 * 1024) { toast('PDF is larger than 1.4 MB. Please compress it.', true); fi.value = ''; return; } picked = F; fn.textContent = F.name + ' · ' + Math.round(F.size / 1024) + ' KB'; fn.className = 'text-sm font-semibold text-zuna-900'; if (!ti.value) ti.value = ty.value; };
+    fi.onchange = () => pick(fi.files[0]); dropZone(fileL, (fs) => pick(fs[0])); const prog = h('div');
+    g.append(field('Document type', ty), field('Title', ti), field('Number', no), field('Remind', rd), field('Issue date', is), field('Expiry date', ex)); f.appendChild(g); f.appendChild(fileL); f.appendChild(prog); f.appendChild(vis);
     const act = h('div', 'flex gap-2'); const cancel = h('button', 'btn text-xs', 'Cancel'); cancel.type = 'button'; cancel.onclick = () => { f.remove(); addB.classList.remove('hidden'); };
     const sv = h('button', 'btn-primary text-xs', d ? 'Save document' : 'Upload document'); sv.type = 'button';
-    sv.onclick = async () => { sv.disabled = true; try { const F = fi.files[0]; if (!d && !F) throw new Error('Choose the document file.');
-        toast(F ? 'Uploading…' : 'Saving…');
-        await api('doc', {id: d ? d.id : undefined, gh_id: x.id, doc_type: ty.value, title: ti.value, number: no.value, issued: is.value, expires: ex.value, remind_days: +rd.value, visible: vis.input.checked, data_url: F ? await readFile(F) : undefined, file_name: F ? F.name : undefined});
-        toast('Document saved'); reopen(); } catch (er) { toast(er.message, true); sv.disabled = false; } };
+    sv.onclick = async () => { sv.disabled = true; try { const F = picked; if (!d && !F) throw new Error('Choose the document file.');
+        const row = F ? progressRow(F.name) : null; if (row) { prog.replaceChildren(row.el); row.set(0, 'Preparing…'); }
+        await apiUp('doc', {id: d ? d.id : undefined, gh_id: x.id, doc_type: ty.value, title: ti.value, number: no.value, issued: is.value, expires: ex.value, remind_days: +rd.value, visible: vis.input.checked, data_url: F ? await readFile(F) : undefined, file_name: F ? F.name : undefined}, (p) => row && row.set(p));
+        if (row) row.done(true); toast('Document saved'); setTimeout(reopen, row ? 400 : 0); } catch (er) { prog.firstChild && prog.replaceChildren(); toast(er.message, true); sv.disabled = false; } };
     act.append(sv, cancel); f.appendChild(act); box.replaceChildren(f); f.scrollIntoView({block: 'nearest', behavior: 'smooth'}); };
 };
 
 const pwBox = (email, pw) => { const b = h('div', 'rounded-xl bg-mint-50 ring-1 ring-mint-200 p-4 space-y-2'); b.appendChild(h('p', 'text-sm font-semibold', 'Login details for ' + email));
   const row = h('div', 'flex items-center gap-2'); row.appendChild(h('code', 'flex-1 rounded-lg bg-white ring-1 ring-mint-200 px-3 py-2 font-bold text-base', pw)); const cp = h('button', 'btn', 'Copy'); cp.onclick = () => { navigator.clipboard.writeText(pw).then(() => toast('Copied')); }; row.appendChild(cp); b.appendChild(row);
   b.appendChild(h('p', 'text-xs text-zuna-600', 'Shown once. Share it privately with the user; they can change it with "Forgot password?".')); return b; };
-const ROLE = {client: 'Viewer', client_admin: 'Client admin'};
+const ROLE = {client: 'Viewer', client_admin: 'Client admin'}, UF = {};
 const renderUsers = (D, c) => {
   const bar = h('div', 'flex items-center gap-2 mb-3'); bar.appendChild(h('p', 'text-sm text-zuna-500', c.users.length + ' users · Viewers see the ' + c.name + ' dashboard; client admins can also manage users'));
-  const add = h('button', 'ml-auto btn-primary', '+ Add user'); add.onclick = () => { const f = h('div', 'space-y-4'); const g = h('div', 'grid sm:grid-cols-2 gap-3'); const n = inp('', 'Full name'), e = inp('', 'name@company.com', 'email');
+  const add = ib('button', 'ml-auto btn-primary', 'Add user', 'user-plus'); add.onclick = () => { const f = h('div', 'space-y-4'); const g = h('div', 'grid sm:grid-cols-2 gap-3'); const n = inp('', 'Full name'), e = inp('', 'name@company.com', 'email');
     const rl = sel('client', [['client', 'Viewer · can view the dashboard'], ['client_admin', 'Client admin · can also manage users']]);
     g.append(field('Name', n), field('Email (login)', e), field('Role', rl, 'sm:col-span-2')); f.appendChild(g); const go = h('button', 'btn-primary', 'Create user'); const out = h('div');
     go.onclick = async () => { go.disabled = true; try { const r = await api('user', {client_id: c.id, name: n.value, email: e.value, role: rl.value}); if (!r.created) throw new Error('That email already has an account.'); out.replaceChildren(pwBox(e.value.trim().toLowerCase(), r.password)); go.remove(); load(true); } catch (er) { toast(er.message, true); go.disabled = false; } };
     f.append(go, out); modal('Add user · ' + c.name, f); }; bar.appendChild(add); D.appendChild(bar);
-  const t = h('div', 'card overflow-x-auto'); const tb = h('table', 'w-full text-sm'); const hd = h('thead'); const hr = h('tr', 'text-left text-xs font-semibold text-zuna-500 bg-zuna-50/70'); ['User', 'Role', 'Last login', 'Status', ''].forEach((x) => hr.appendChild(h('th', 'px-4 py-2.5', x))); hd.appendChild(hr); tb.appendChild(hd);
-  const body = h('tbody', 'divide-y divide-zuna-50');
-  c.users.forEach((u) => { const tr = h('tr', 'align-middle'); const me = u.email === ME.email;
-    const nm = h('td', 'px-4 py-3'); const row = h('div', 'flex items-center gap-3'); row.appendChild(h('span', 'grid place-items-center w-8 h-8 rounded-full text-[11px] font-bold shrink-0 ' + (u.role === 'client_admin' ? 'bg-zuna-900 text-mint-400' : 'bg-zuna-50 text-zuna-600 ring-1 ring-zuna-100'), (u.name || u.email).split(/\s+/).map((w) => w[0]).join('').slice(0, 2).toUpperCase()));
-    const tx = h('div', 'min-w-0'); const n1 = h('p', 'font-semibold'); n1.textContent = u.name; if (me) n1.appendChild(h('span', 'ml-1.5 text-[11px] font-semibold text-zuna-400', '(you)')); tx.append(n1, h('p', 'text-xs text-zuna-500', u.email)); row.appendChild(tx); nm.appendChild(row); tr.appendChild(nm);
-    const rc = h('td', 'px-4 py-3'); rc.appendChild(h('span', 'rounded-full px-2 py-0.5 text-[11px] font-bold whitespace-nowrap ' + (u.role === 'client_admin' ? 'bg-zuna-900 text-white' : 'bg-zuna-50 text-zuna-600 ring-1 ring-zuna-100'), ROLE[u.role] || 'Viewer')); tr.appendChild(rc);
-    tr.appendChild(h('td', 'px-4 py-3 text-zuna-500 whitespace-nowrap', u.last_login ? new Date(u.last_login).toLocaleString('en-IN', {dateStyle: 'medium', timeStyle: 'short'}) : 'Never'));
-    const st = h('td', 'px-4 py-3'); st.appendChild(h('span', 'rounded-full px-2 py-0.5 text-[11px] font-bold ' + (u.active ? 'bg-mint-50 text-mint-700 ring-1 ring-mint-200' : 'bg-zuna-50 text-zuna-500 ring-1 ring-zuna-100'), u.active ? 'Active' : 'Disabled')); tr.appendChild(st);
-    const ac = h('td', 'px-4 py-3'); const grid = h('div', 'grid grid-cols-[118px_132px_76px] gap-1.5 justify-end ml-auto w-max'); ac.appendChild(grid);
-    const B = 'btn !py-1 !px-2 text-xs w-full justify-center whitespace-nowrap';
-    const rs = h('button', B, 'Reset password'); rs.onclick = async () => { if (!(await ZUI.confirm({title: 'Reset password?', message: ['A new password is created for ' + u.name + ' (' + u.email + ').', 'The old password stops working and they are signed out.'], ok: 'Reset password', tone: 'warn'}))) return; try { const r = await api('user/reset', {email: u.email}); modal('New password', pwBox(u.email, r.password)); } catch (er) { toast(er.message, true); } };
+  const B = 'btn !py-1 !px-2 text-xs w-full justify-center whitespace-nowrap';
+  const actions = (u) => { const me = u.email === ME.email; const grid = h('div', 'grid grid-cols-[136px_158px_92px] gap-1.5');
+    const rs = ib('button', B, 'Reset password', 'key-round'); rs.setAttribute('aria-label', 'Reset password for ' + u.name); rs.onclick = async () => { if (!(await ZUI.confirm({title: 'Reset password?', message: ['A new password is created for ' + u.name + ' (' + u.email + ').', 'The old password stops working and they are signed out.'], ok: 'Reset password', tone: 'warn'}))) return; try { const r = await api('user/reset', {email: u.email}); modal('New password', pwBox(u.email, r.password)); } catch (er) { toast(er.message, true); } };
     grid.appendChild(rs);
-    if (me) grid.append(h('span'), h('span'));
-    if (!me) {
-      const to = u.role === 'client_admin' ? 'client' : 'client_admin';
-      const rb = h('button', B, to === 'client_admin' ? 'Make client admin' : 'Make viewer'); rb.onclick = async () => { if (!(await ZUI.confirm(to === 'client_admin' ? {title: 'Make ' + u.name + ' a client admin?', message: 'They can add users, reset passwords and disable users for ' + c.name + '.', ok: 'Make client admin'} : {title: 'Change ' + u.name + ' to Viewer?', message: 'They keep access to the dashboard but can no longer manage users.', ok: 'Make viewer'}))) return;
-        try { await api('user', {email: u.email, name: u.name, active: !!u.active, role: to}); toast('Role updated'); load(true); } catch (er) { toast(er.message, true); } };
-      const tg = h('button', B + ' ' + (u.active ? 'text-rose-600' : 'text-mint-700'), u.active ? 'Disable' : 'Enable'); tg.onclick = async () => { if (u.active && !(await ZUI.confirm({title: 'Disable ' + u.name + '?', message: 'They are signed out and can no longer log in. You can enable them again at any time.', ok: 'Disable user', tone: 'danger', icon: 'M4.9 4.9l14.2 14.2M12 22a10 10 0 1 0 0-20 10 10 0 0 0 0 20z'}))) return; try { await api('user', {email: u.email, name: u.name, active: !u.active}); toast(u.active ? 'User disabled' : 'User enabled'); load(true); } catch (er) { toast(er.message, true); } };
-      grid.append(rb, tg); }
-    tr.appendChild(ac); body.appendChild(tr); });
-  if (!c.users.length) { const tr = h('tr'); const td = h('td', 'px-4 py-8 text-center text-zuna-500', 'No users yet.'); td.colSpan = 5; tr.appendChild(td); body.appendChild(tr); }
-  tb.appendChild(body); t.appendChild(tb); D.appendChild(t);
+    if (me) { grid.append(h('span'), h('span')); return grid; }
+    const to = u.role === 'client_admin' ? 'client' : 'client_admin';
+    const rb = ib('button', B, to === 'client_admin' ? 'Make client admin' : 'Make viewer', to === 'client_admin' ? 'shield-check' : 'eye'); rb.setAttribute('aria-label', (to === 'client_admin' ? 'Make client admin: ' : 'Make viewer: ') + u.name);
+    rb.onclick = async () => { if (!(await ZUI.confirm(to === 'client_admin' ? {title: 'Make ' + u.name + ' a client admin?', message: 'They can add users, reset passwords and disable users for ' + c.name + '.', ok: 'Make client admin'} : {title: 'Change ' + u.name + ' to Viewer?', message: 'They keep access to the dashboard but can no longer manage users.', ok: 'Make viewer'}))) return;
+      try { await api('user', {email: u.email, name: u.name, active: !!u.active, role: to}); toast('Role updated'); load(true); } catch (er) { toast(er.message, true); } };
+    const tg = ib('button', B + ' ' + (u.active ? 'text-rose-600' : 'text-mint-700'), u.active ? 'Disable' : 'Enable', u.active ? 'ban' : 'circle-check'); tg.setAttribute('aria-label', (u.active ? 'Disable ' : 'Enable ') + u.name);
+    tg.onclick = async () => { if (u.active && !(await ZUI.confirm({title: 'Disable ' + u.name + '?', message: 'They are signed out and can no longer log in. You can enable them again at any time.', ok: 'Disable user', tone: 'danger', icon: 'M4.9 4.9l14.2 14.2M12 22a10 10 0 1 0 0-20 10 10 0 0 0 0 20z'}))) return; try { await api('user', {email: u.email, name: u.name, active: !u.active}); toast(u.active ? 'User disabled' : 'User enabled'); load(true); } catch (er) { toast(er.message, true); } };
+    grid.append(rb, tg); return grid; };
+  const cols = [
+    {k: 'user', label: 'User', sort: (u) => (u.name || '').toLowerCase(), render: (u) => { const row = h('div', 'flex items-center gap-3'); row.appendChild(h('span', 'grid place-items-center w-8 h-8 rounded-full text-[11px] font-bold shrink-0 ' + (u.role === 'client_admin' ? 'bg-zuna-900 text-mint-400' : 'bg-zuna-50 text-zuna-600 ring-1 ring-zuna-100'), (u.name || u.email).split(/\s+/).map((w) => w[0]).join('').slice(0, 2).toUpperCase()));
+      const tx = h('div', 'min-w-0'); const n1 = h('p', 'font-semibold'); n1.textContent = u.name; if (u.email === ME.email) n1.appendChild(h('span', 'ml-1.5 text-[11px] font-semibold text-zuna-500', '(you)')); tx.append(n1, h('p', 'text-xs text-zuna-500', u.email)); row.appendChild(tx); return row; }},
+    {k: 'role', label: 'Role', sort: (u) => u.role, render: (u) => h('span', 'rounded-full px-2 py-0.5 text-[11px] font-bold whitespace-nowrap ' + (u.role === 'client_admin' ? 'bg-zuna-900 text-white' : 'bg-zuna-50 text-zuna-600 ring-1 ring-zuna-100'), ROLE[u.role] || 'Viewer')},
+    {k: 'last', label: 'Last login', td: 'text-zuna-500 whitespace-nowrap', sort: (u) => u.last_login || '', render: (u) => document.createTextNode(u.last_login ? new Date(u.last_login).toLocaleString('en-IN', {dateStyle: 'medium', timeStyle: 'short'}) : 'Never')},
+    {k: 'status', label: 'Status', sort: (u) => u.active ? 0 : 1, render: (u) => h('span', 'rounded-full px-2 py-0.5 text-[11px] font-bold ' + (u.active ? 'bg-mint-50 text-mint-700 ring-1 ring-mint-200' : 'bg-zuna-50 text-zuna-500 ring-1 ring-zuna-100'), u.active ? 'Active' : 'Disabled')},
+    {k: 'act', label: '', actions: true, render: actions}];
+  UF.st = UF.st || {sort: {k: 'user', dir: 1}, page: 1};
+  D.appendChild(dataTable({cols, rows: c.users, st: UF.st, noun: 'users', empty: 'No users yet.'}));
 };
 
 const renderSettings = (D, c) => {
   const card = h('div', 'card p-6 space-y-5 max-w-2xl');
   const lg = h('div', 'flex items-center gap-4'); const pv = h('div', 'w-36 h-16 rounded-xl bg-white ring-1 ring-zuna-100 grid place-items-center overflow-hidden'); if (c.logo) { const i = h('img', 'max-h-12 max-w-32 object-contain'); i.src = c.logo; pv.appendChild(i); } else pv.appendChild(h('span', 'text-xs text-zuna-400', 'No logo'));
-  const up = h('label', 'btn cursor-pointer', c.logo ? 'Replace logo' : 'Upload logo'); const fi = h('input', 'hidden'); fi.type = 'file'; fi.accept = 'image/*'; up.appendChild(fi);
-  fi.onchange = async () => { try { await api('client/logo', {client_id: c.id, data_url: await toDataUrl(fi.files[0], 600, true)}); toast('Logo updated'); load(true); } catch (er) { toast(er.message, true); } };
-  lg.append(pv, up); card.appendChild(field('Client logo (shown in the client\'s dashboard)', lg));
+  const up = ib('label', 'btn cursor-pointer focus-within:ring-mint-500', c.logo ? 'Replace logo' : 'Upload logo', 'upload'); const fi = h('input', 'sr-only'); fi.type = 'file'; fi.accept = 'image/png,image/jpeg,image/webp'; fi.setAttribute('aria-label', 'Client logo'); up.appendChild(fi);
+  const prog = h('div', 'w-56');
+  const send = async (F) => { if (!F || !/^image\//.test(F.type)) { toast('Use a PNG, JPG or WEBP image.', true); return; } const r = progressRow(F.name); prog.replaceChildren(r.el);
+    try { await apiUp('client/logo', {client_id: c.id, data_url: await toDataUrl(F, 600, true)}, (f) => r.set(f)); r.done(true); toast('Logo updated'); setTimeout(() => load(true), 400); } catch (er) { r.done(false); toast(er.message, true); } };
+  fi.onchange = () => send(fi.files[0]);
+  lg.classList.add('dz', 'rounded-2xl', 'border-2', 'border-dashed', 'border-transparent', 'p-2', '-m-2', 'transition-colors'); dropZone(lg, (fs) => send(fs[0]));
+  lg.append(pv, up, h('span', 'text-xs text-zuna-500', 'or drop an image here'), prog); card.appendChild(field('Client logo (shown in the client\'s dashboard)', lg));
   const n = inp(c.name); card.appendChild(field('Client name', n));
   const gr = h('textarea', 'inp'); gr.rows = 2; gr.value = c.grades.join(', '); card.appendChild(field('Grades used by this client (comma separated, in order)', gr));
   const act = switchEl('Client active (users can log in)', c.active); card.appendChild(act);

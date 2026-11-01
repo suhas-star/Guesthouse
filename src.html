@@ -874,26 +874,49 @@ window.addEventListener('load', () => { if (state.view === 'overview' && !charts
 // GH Report: pick the nights (default: last full week, Monday–Sunday), then download LTM's Excel format
 const ghReportName = () => ((DATA.client && DATA.client.name) || 'LTM') + ' GH Report';
 const openWeekly = (onGo) => {
-  const lw = addDays(monday(today), -7), cur = state.range === 'custom' ? [state.cfrom, state.cto] : null;
+  // report period: daily, weekly (Mon–Sun), monthly or any dates; shows the exact nights before downloading
+  const nightsBetween = (a, b) => Math.round((Date.parse(b) - Date.parse(a)) / 864e5);
+  const lw = addDays(monday(today), -7), yday = addDays(today, -1), cur = state.range === 'custom' ? [state.cfrom, state.cto] : null;
+  const mStart = (m) => m + '-01', mEnd = (m) => { const [y, mo] = m.split('-').map(Number); return iso(new Date(Date.UTC(y, mo, 0))); };
+  const prevMonth = (() => { const d = D(today); return iso(new Date(Date.UTC(d.getUTCFullYear(), d.getUTCMonth() - 1, 1))).slice(0, 7); })();
   const f = h('div', 'space-y-4'); const p = P();
   f.appendChild(h('p', 'text-sm text-zuna-600', 'Night-by-night occupancy with bed and room occupancy and the guest list. One guest house downloads as an Excel file; all guest houses download as a zip folder with one Excel file each.'));
   const gw = h('label', 'block'); gw.appendChild(h('span', 'block text-xs font-semibold text-zuna-500 mb-1', 'Guest house'));
   const gs = h('select', 'w-full rounded-xl bg-white ring-1 ring-zuna-100 px-3 py-2.5 text-sm'); [['*', 'All guest houses (zip)']].concat(props.filter((x) => +x.rooms > 0).map((x) => [x.property, x.property + (x.city ? ', ' + x.city : '')])).forEach(([v, t]) => { const o = h('option', null, t); o.value = v; gs.appendChild(o); });
   gs.value = p.property; gw.appendChild(gs); f.appendChild(gw);
-  const g = h('div', 'grid grid-cols-2 gap-3'); const mk = (l, v) => { const w = h('label', 'block'); w.appendChild(h('span', 'block text-xs font-semibold text-zuna-500 mb-1', l)); const i = h('input', 'w-full rounded-xl bg-white ring-1 ring-zuna-100 px-3 py-2.5 text-sm focus:outline-none focus:ring-2 focus:ring-mint-500'); i.type = 'date'; i.value = v; w.appendChild(i); g.appendChild(w); return i; };
-  const fi = mk('First night', cur ? cur[0] : lw), ti = mk('Last night', cur ? cur[1] : addDays(lw, 6)); f.appendChild(g);
-  const q = h('div', 'flex flex-wrap gap-1.5');
-  [['Last week', lw, addDays(lw, 6)], ['This week', monday(today), addDays(monday(today), 6)], ['Week before last', addDays(lw, -7), addDays(lw, -1)]].concat(cur ? [['Dates on screen', cur[0], cur[1]]] : []).forEach(([l, a, b]) => {
-    const c = h('button', 'rounded-lg px-2.5 py-1 text-xs font-semibold bg-zuna-50 text-zuna-700 ring-1 ring-zuna-100 hover:ring-mint-500', l); c.type = 'button'; c.onclick = () => { fi.value = a; ti.value = b; }; q.appendChild(c); });
-  f.appendChild(q);
+  // report type
+  const tw = h('div'); tw.appendChild(h('span', 'block text-xs font-semibold text-zuna-500 mb-1', 'Report'));
+  const seg = h('div', 'grid grid-cols-4 gap-1 rounded-xl bg-zuna-50 p-1 ring-1 ring-zuna-100'); seg.setAttribute('role', 'tablist'); tw.appendChild(seg); f.appendChild(tw);
+  const body = h('div', 'space-y-3'); f.appendChild(body);
+  const field = (l, type, v) => { const w = h('label', 'block'); w.appendChild(h('span', 'block text-xs font-semibold text-zuna-500 mb-1', l)); const i = h('input', 'w-full rounded-xl bg-white ring-1 ring-zuna-100 px-3 py-2.5 text-sm focus:outline-none focus:ring-2 focus:ring-mint-500'); i.type = type; i.value = v; w.appendChild(i); return [w, i]; };
+  const chips = (list, apply) => { const q = h('div', 'flex flex-wrap gap-1.5'); list.forEach(([l, v]) => { const c = h('button', 'rounded-lg px-2.5 py-1 text-xs font-semibold bg-zuna-50 text-zuna-700 ring-1 ring-zuna-100 hover:ring-mint-500', l); c.type = 'button'; c.onclick = () => apply(v); q.appendChild(c); }); return q; };
+  const summary = h('div', 'rounded-xl bg-mint-50 ring-1 ring-mint-200 px-3 py-2 text-sm font-semibold text-zuna-900 flex items-center gap-2');
+  let range = () => [null, null];
+  const show = () => { const [a, b] = range(); summary.replaceChildren(icon('calendar-days', 'w-4 h-4 text-mint-700 shrink-0'));
+    summary.appendChild(document.createTextNode(a && b && b >= a ? (a === b ? fFull(a) + ' · 1 night' : fShort(a) + ' – ' + fLong(b) + ' · ' + (nightsBetween(a, b) + 1) + ' nights') : 'Choose the dates')); };
+  const MODES = {
+    daily: () => { const [w, i] = field('Night of', 'date', yday); body.replaceChildren(w, chips([['Yesterday', yday], ['Today', today], ['Day before yesterday', addDays(today, -2)]], (v) => { i.value = v; show(); }));
+      i.oninput = show; range = () => [i.value, i.value]; },
+    weekly: () => { const [w, i] = field('Any day in the week', 'date', lw); body.replaceChildren(w, chips([['Last week', lw], ['This week', monday(today)], ['Week before last', addDays(lw, -7)]], (v) => { i.value = v; show(); }));
+      i.oninput = show; range = () => i.value ? [monday(i.value), addDays(monday(i.value), 6)] : [null, null]; },
+    monthly: () => { const [w, i] = field('Month', 'month', prevMonth); body.replaceChildren(w, chips([['Last month', prevMonth], ['This month', today.slice(0, 7)]], (v) => { i.value = v; show(); }));
+      i.oninput = show; range = () => i.value ? [mStart(i.value), mEnd(i.value)] : [null, null]; },
+    custom: () => { const g = h('div', 'grid grid-cols-2 gap-3'); const [w1, i1] = field('First night', 'date', cur ? cur[0] : lw), [w2, i2] = field('Last night', 'date', cur ? cur[1] : addDays(lw, 6)); g.append(w1, w2);
+      body.replaceChildren(g, chips([['Last 7 nights', [addDays(today, -7), yday]], ['Last 30 nights', [addDays(today, -30), yday]]].concat(cur ? [['Dates on screen', cur]] : []), ([a, b]) => { i1.value = a; i2.value = b; show(); }));
+      i1.oninput = i2.oninput = show; range = () => [i1.value, i2.value]; } };
+  const LBL = {daily: 'Daily', weekly: 'Weekly', monthly: 'Monthly', custom: 'Custom dates'};
+  let mode = openWeekly.mode || 'weekly';
+  const pick = (m) => { mode = openWeekly.mode = m; [...seg.children].forEach((b) => { const on = b.dataset.m === m; b.setAttribute('aria-selected', on ? 'true' : 'false'); b.className = 'rounded-lg px-2 py-1.5 text-xs font-semibold transition-all ' + (on ? 'bg-white text-zuna-900 shadow ring-1 ring-zuna-100' : 'text-zuna-500 hover:text-zuna-900'); }); MODES[m](); show(); };
+  Object.keys(LBL).forEach((m) => { const b = h('button', '', LBL[m]); b.type = 'button'; b.dataset.m = m; b.setAttribute('role', 'tab'); b.onclick = () => pick(m); seg.appendChild(b); });
+  f.appendChild(summary);
   const err = h('p', 'hidden text-xs font-semibold text-rose-600'); f.appendChild(err);
   const go = h('button', 'btn-primary w-full justify-center !py-2.5 !text-sm'); go.appendChild(icon('download', 'w-4 h-4')); const goT = document.createTextNode('Download Excel'); go.appendChild(goT); gs.addEventListener('change', () => { goT.textContent = gs.value === '*' ? 'Download zip folder' : 'Download Excel'; });
-  go.onclick = () => { const a = fi.value, b = ti.value;
-    if (!a || !b || b < a) { err.textContent = !a || !b ? 'Choose both dates.' : 'The last night must be on or after the first night.'; err.classList.remove('hidden'); return; }
-    if ((Date.parse(b) - Date.parse(a)) / 864e5 > 61) { err.textContent = 'Choose up to 62 nights.'; err.classList.remove('hidden'); return; }
-    err.classList.add('hidden'); onGo(a, b, gs.value); };
+  go.onclick = () => { const [a, b] = range();
+    if (!a || !b || b < a) { err.textContent = !a || !b ? 'Choose the dates.' : 'The last night must be on or after the first night.'; err.classList.remove('hidden'); return; }
+    if (nightsBetween(a, b) > 91) { err.textContent = 'Choose up to 92 nights.'; err.classList.remove('hidden'); return; }
+    err.classList.add('hidden'); onGo(a, b, gs.value, LBL[mode]); };
   f.appendChild(go); const w = h('div', 'p-5'); w.appendChild(f);
-  openDrawer(ghReportName(), 'Choose the nights and guest house', w);
+  openDrawer(ghReportName(), 'Daily, weekly, monthly or any dates', w); pick(mode);
 };
 $$('[data-ghname]').forEach((e) => { e.textContent = ghReportName(); });
 window.__ltm = {openWeekly, props, ghReportName, P, myB, nightsAll, period, stateOf, fDay, fShort, fLong, toast, today, rangeBounds, inRange: (b) => { const [a, z] = rangeBounds(); return state.range === 'all' || (b.check_in <= z && b.check_out > a); }, rangeText: () => rangeLabel(), rackGrid, cleanName, client: DATA.client || null, addDays, monday};

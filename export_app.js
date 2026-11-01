@@ -286,7 +286,7 @@
     const beds = roomNames.map((_, ri) => Math.max(1, ...nights.map((n) => who(ri, n).length)));
     const totalBeds = beds.reduce((a, b) => a + b, 0), D = nights.length;
     const client = L.client || {}, circle = client.legal_name || client.name || 'LTM Limited';
-    const title = (client.name ? client.name + ' ' : '') + p.property + (p.city ? '-' + p.city : '') + ' - ' + DMY(from) + ' to ' + DMY(to);
+    const title = (client.name ? client.name + ' ' : '') + p.property + (p.city ? '-' + p.city : '') + ' - ' + (from === to ? DMY(from) : DMY(from) + ' to ' + DMY(to));
     const short = (r) => { const m = /-(\w+)$/.exec(r); return m ? m[1] : r; };
     const name = (b) => L.cleanName(b.guest) + (placed.has(b) ? ' *' : '');
     const cells = [], merges = [], put = (r, c, v, s) => cells.push({r, c, v, s});
@@ -329,11 +329,11 @@
   const dl = (f) => { const url = URL.createObjectURL(f.data), a = document.createElement('a'); a.href = url; a.download = f.filename; document.body.appendChild(a); a.click(); a.remove(); setTimeout(() => URL.revokeObjectURL(url), 4000); L.toast('Downloading ' + f.filename); };
   L.weeklyReport = weeklyReport;
   // one guest house -> Excel; all guest houses -> zip folder of the individual Excel files
-  const ghReport = async (from, to, which) => {
+  const ghReport = async (from, to, which, kind) => {
     if (which !== '*') return weeklyReport(from, to, L.props.find((x) => x.property === which) || L.P());
     const files = []; for (const p of L.props.filter((x) => +x.rooms > 0)) { const r = weeklyReport(from, to, p); files.push({name: r.filename, data: new Uint8Array(await r.data.arrayBuffer())}); }
-    const name = (L.ghReportName() + ' - ' + DMY(from) + ' to ' + DMY(to)).replace(/\//g, '_').replace(/[^A-Za-z0-9_-]+/g, '_').replace(/_+/g, '_');
+    const name = (L.ghReportName() + (kind && kind !== 'Custom dates' ? ' - ' + kind : '') + ' - ' + (from === to ? DMY(from) : DMY(from) + ' to ' + DMY(to))).replace(/\//g, '_').replace(/[^A-Za-z0-9_-]+/g, '_').replace(/_+/g, '_');
     return {filename: name + '.zip', data: zip(files)};
   };
-  document.querySelectorAll('[data-weekly]').forEach((btn) => btn.addEventListener('click', () => L.openWeekly(async (from, to, which) => { try { dl(await ghReport(from, to, which)); } catch (e) { console.error(e); L.toast('Could not create the report'); } })));
+  document.querySelectorAll('[data-weekly]').forEach((btn) => btn.addEventListener('click', () => L.openWeekly(async (from, to, which, kind) => { try { dl(await ghReport(from, to, which, kind)); } catch (e) { console.error(e); L.toast('Could not create the report'); } })));
 })();

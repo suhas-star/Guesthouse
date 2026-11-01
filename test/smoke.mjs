@@ -171,7 +171,7 @@ check('old host redirects to PRIMARY_HOST', r.status === 301 && r.headers.get('l
   check('cancel removes the booking and records the cancellation', x.status === 200 && !brow.some((b) => /Neha Iyer/.test(b.guest)) && mrow.filter((m) => /Neha Iyer/.test(m.guest)).every((m) => m.status === 'Cancelled'));
   x = await A('client', {id: acme, name: 'Acme', legal_name: 'Acme Industries Limited', grades: ['E1', 'E2']});
   { const pg = await (await call('/', {cookie: asha})).text(); const dd = JSON.parse(pg.match(/window\.__LTMGH_DATA = (.*?);\nconst REPORT_DATE/s)[1]);
-    check('client company name (for the weekly GH report) reaches the dashboard', dd.client.legal_name === 'Acme Industries Limited'); }
+    check('client company name (for the GH Report) reaches the dashboard', dd.client.legal_name === 'Acme Industries Limited'); }
   // client admins
   x = await A('user', {client_id: acme, name: 'Meera Nair', email: 'meera@acme.example', role: 'client_admin'});
   const meera = (await call('/api/login', {method: 'POST', body: {email: 'meera@acme.example', password: x.j.password}})).headers.get('set-cookie').split(';')[0];

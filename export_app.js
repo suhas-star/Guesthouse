@@ -240,7 +240,7 @@
     } catch (e) { console.error(e); L.toast('Could not create the file'); }
   }));
 
-  // ---------- Weekly GH report (LTM format) ----------
+  // ---------- GH Report (LTM format) ----------
   // Layout follows LTM's sheet: title, one column per room bed, one row per night, bed and room occupancy blocks, totals, master guest details.
   const DMY = (d) => d.slice(8, 10) + '/' + d.slice(5, 7) + '/' + d.slice(0, 4);
   const WD = ['Sunday', 'Monday', 'Tuesday', 'Wednesday', 'Thursday', 'Friday', 'Saturday'];
@@ -278,8 +278,8 @@
       {name: 'xl/styles.xml', data: WEEK_STYLES},
       {name: 'xl/worksheets/sheet1.xml', data: xml}]);
   };
-  const weeklyReport = (from, to) => {
-    const p = L.P(), {roomNames, grid, placed} = L.rackGrid(p);
+  const weeklyReport = (from, to, p = L.P()) => {
+    const {roomNames, grid, placed} = L.rackGrid(p);
     const nights = []; for (let n = from; n <= to; n = L.addDays(n, 1)) nights.push(n);
     const who = (ri, n) => (grid[ri] && grid[ri][n]) || [];
     // beds per room: one, or as many guests as ever shared that room in these nights
@@ -328,5 +328,12 @@
   };
   const dl = (f) => { const url = URL.createObjectURL(f.data), a = document.createElement('a'); a.href = url; a.download = f.filename; document.body.appendChild(a); a.click(); a.remove(); setTimeout(() => URL.revokeObjectURL(url), 4000); L.toast('Downloading ' + f.filename); };
   L.weeklyReport = weeklyReport;
-  document.querySelectorAll('[data-weekly]').forEach((btn) => btn.addEventListener('click', () => L.openWeekly((from, to) => { try { dl(weeklyReport(from, to)); } catch (e) { console.error(e); L.toast('Could not create the report'); } })));
+  // one guest house -> Excel; all guest houses -> zip folder of the individual Excel files
+  const ghReport = async (from, to, which) => {
+    if (which !== '*') return weeklyReport(from, to, L.props.find((x) => x.property === which) || L.P());
+    const files = []; for (const p of L.props.filter((x) => +x.rooms > 0)) { const r = weeklyReport(from, to, p); files.push({name: r.filename, data: new Uint8Array(await r.data.arrayBuffer())}); }
+    const name = (L.ghReportName() + ' - ' + DMY(from) + ' to ' + DMY(to)).replace(/\//g, '_').replace(/[^A-Za-z0-9_-]+/g, '_').replace(/_+/g, '_');
+    return {filename: name + '.zip', data: zip(files)};
+  };
+  document.querySelectorAll('[data-weekly]').forEach((btn) => btn.addEventListener('click', () => L.openWeekly(async (from, to, which) => { try { dl(await ghReport(from, to, which)); } catch (e) { console.error(e); L.toast('Could not create the report'); } })));
 })();

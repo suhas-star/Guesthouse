@@ -3,7 +3,7 @@
 <head>
 <script>try{if(localStorage.getItem('zp.theme')==='dark')document.documentElement.classList.add('dark')}catch(e){}
 /* sidebar starts closed (icons only) before the first paint; opening it lasts for this visit only */
-try{if(sessionStorage.getItem('ltmgh.sb')!=='open')document.documentElement.classList.add('sb-c')}catch(e){document.documentElement.classList.add('sb-c')}</script>
+try{if(sessionStorage.getItem('zp.hi'))sessionStorage.removeItem('ltmgh.sb');if(sessionStorage.getItem('ltmgh.sb')!=='open')document.documentElement.classList.add('sb-c')}catch(e){document.documentElement.classList.add('sb-c')}</script>
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width,initial-scale=1">
 <meta name="robots" content="noindex,nofollow">
@@ -17,9 +17,9 @@ __SPLASH__
 var q=null;try{n=sessionStorage.getItem('zp.hi');sessionStorage.removeItem('zp.hi');q=sessionStorage.getItem('zp.quiet');sessionStorage.removeItem('zp.quiet')}catch(e){}
 if(q||!n){s.remove();return}
 s.classList.add('sp-cont');h.textContent=n==='-'?'Welcome':'Welcome, '+n;
-function hide(){if(done)return;done=true;setTimeout(function(){s.classList.add('sp-hide');setTimeout(function(){s.remove()},600)},Math.max(0,(n?700:250)-(Date.now()-t0)))}
-window.addEventListener('load',function(){setTimeout(hide,150)});setTimeout(hide,10000)})();</script>
-<script defer src="https://cdn.jsdelivr.net/npm/apexcharts@3.54.1/dist/apexcharts.min.js"></script>
+function hide(){if(done)return;done=true;setTimeout(function(){s.classList.add('sp-hide');setTimeout(function(){s.remove()},450)},Math.max(0,(n?500:200)-(Date.now()-t0)))}
+if(document.readyState!=='loading')setTimeout(hide,150);else document.addEventListener('DOMContentLoaded',function(){setTimeout(hide,150)});setTimeout(hide,4000)})();</script>
+<script async src="https://cdn.jsdelivr.net/npm/apexcharts@3.54.1/dist/apexcharts.min.js" onload="window.dispatchEvent(new Event('apexready'))"></script>
 <div id="app" class="min-h-screen lg:grid lg:grid-cols-[256px_minmax(0,1fr)]">
 
   <!-- Sidebar -->
@@ -792,6 +792,7 @@ setInterval(() => {
 }, 30000);
 document.addEventListener('visibilitychange', () => { if (document.visibilityState === 'visible' && Date.now() - LOADED > 10 * 60000 && $('#drawer').getAttribute('aria-hidden') !== 'false') { try { sessionStorage.setItem('zp.quiet', '1'); } catch (e) {} location.reload(); } });
 render();
+window.addEventListener('apexready', () => { if (state.view === 'overview') render(); });   // charts arrive after the page is shown
 window.addEventListener('load', () => { if (state.view === 'overview' && !charts.main) render(); });
 
 window.__ltm = {P, myB, nightsAll, period, stateOf, fDay, fShort, fLong, toast, today};

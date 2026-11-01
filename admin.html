@@ -40,7 +40,7 @@ input:checked+.sw{background:#02C988}input:checked+.sw::after{transform:translat
 
   <!-- client detail -->
   <main id="detail" class="min-w-0">
-    <div class="card p-10 text-center text-sm text-zuna-500">Loading…</div>
+    
   </main>
 </div>
 
@@ -282,7 +282,8 @@ const renderSettings = (D, c) => {
 $('#newClient').onclick = () => { const f = h('div', 'space-y-3'); const n = inp('', 'e.g. LTM'); f.appendChild(field('Client name', n)); f.appendChild(h('p', 'text-xs text-zuna-500', 'You can add the logo, guest houses and users next.'));
   const go = h('button', 'btn-primary', 'Create client'); go.onclick = async () => { try { const r = await api('client', {name: n.value}); cur = r.id; tab = 'settings'; closeModal(); toast('Client created'); load(true); } catch (er) { toast(er.message, true); } }; f.appendChild(go); modal('New client', f); };
 
-load().catch((e) => { $('#detail').replaceChildren(h('div', 'card p-10 text-center text-sm text-rose-700', e.message)); });
+const INIT = __STATE__;
+if (INIT && INIT.clients) { S = INIT; cur = (S.clients[0] || {}).id || null; render(); } else load().catch((e) => { $('#detail').replaceChildren(h('div', 'card p-10 text-center text-sm text-rose-700', e.message)); });
 })();
 </script>
 </body>

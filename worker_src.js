@@ -421,14 +421,27 @@ function expandRooms(t) {
   return s.split(/\s*,\s*/).filter(Boolean);
 }
 async function multiClient(env) { await ensureSchema(env); return !!(await env.DB.prepare("SELECT id FROM clients LIMIT 1").first()); }
+async function adminState(env, user) {
+  await ensureSchema(env);
+  const {results: clients} = await env.DB.prepare("SELECT id, name, logo_file, grades, active FROM clients ORDER BY id").all();
+  const out = await Promise.all(clients.map(async (c) => {
+    const [{results: users}, guesthouses] = await Promise.all([env.DB.prepare("SELECT email, name, active, last_login, locked_until FROM users WHERE client_id = ? ORDER BY name").bind(c.id).all(), clientGuestHouses(env, c, true)]);
+    return {id: c.id, name: c.name, active: !!c.active, logo: c.logo_file ? "/files/" + c.logo_file : "", grades: (c.grades || DEFAULT_GRADES).split(",").filter(Boolean), users, guesthouses}; }));
+  return {clients: out, me: user.email};
+}
 async function clientGuestHouses(env, client, forAdmin) {
   const all = (client.grades || DEFAULT_GRADES).split(",").map((g) => g.trim()).filter(Boolean);
   const {results: ghs} = await env.DB.prepare("SELECT * FROM guesthouses WHERE client_id = ? ORDER BY sort, id").bind(client.id).all();
   const out = [];
+  // one query per table for the whole client, not per guest house
+  const sub = "(SELECT id FROM guesthouses WHERE client_id = ?)";
+  const [R, K, F] = await Promise.all([
+    env.DB.prepare("SELECT * FROM room_types WHERE gh_id IN " + sub + " ORDER BY sort, id").bind(client.id).all(),
+    env.DB.prepare("SELECT * FROM contacts WHERE gh_id IN " + sub + " ORDER BY sort, id").bind(client.id).all(),
+    env.DB.prepare("SELECT id, gh_id, file_id, caption FROM photos WHERE gh_id IN " + sub + " ORDER BY sort, id").bind(client.id).all()]);
+  const by = (rows, id) => (rows.results || []).filter((r) => r.gh_id === id);
   for (const g of ghs) {
-    const {results: rts} = await env.DB.prepare("SELECT * FROM room_types WHERE gh_id = ? ORDER BY sort, id").bind(g.id).all();
-    const {results: cts} = await env.DB.prepare("SELECT * FROM contacts WHERE gh_id = ? ORDER BY sort, id").bind(g.id).all();
-    const {results: phs} = await env.DB.prepare("SELECT id, file_id, caption FROM photos WHERE gh_id = ? ORDER BY sort, id").bind(g.id).all();
+    const rts = by(R, g.id), cts = by(K, g.id), phs = by(F, g.id);
     const show = Object.assign({}, SHOW_DEFAULT, jparse(g.show_json, {})), multi = rts.length > 1;
     const types = rts.map((r) => ({id: r.id, name: r.name || "", rooms: r.rooms || 0, room_nos: r.room_nos || "", occupancy: r.occupancy || "Single", bed_type: r.bed_type || "", grades: list(r.grades), eligible: gradeText(list(r.grades), all)}));
     const contacts = cts.map((c) => ({id: c.id, name: c.name || "", designation: c.designation || "", email: c.email || "", phone: c.phone || ""}));
@@ -480,15 +493,7 @@ async function adminApi(req, env, user, path) {
   const now = new Date().toISOString();
   try {
     switch (path) {
-      case "/api/admin/state": {
-        const {results: clients} = await env.DB.prepare("SELECT id, name, logo_file, grades, active FROM clients ORDER BY id").all();
-        const out = [];
-        for (const c of clients) {
-          const {results: users} = await env.DB.prepare("SELECT email, name, active, last_login, locked_until FROM users WHERE client_id = ? ORDER BY name").bind(c.id).all();
-          out.push({id: c.id, name: c.name, active: !!c.active, logo: c.logo_file ? "/files/" + c.logo_file : "", grades: (c.grades || DEFAULT_GRADES).split(",").filter(Boolean), users, guesthouses: await clientGuestHouses(env, c, true)});
-        }
-        return json({clients: out, me: user.email});
-      }
+      case "/api/admin/state": return json(await adminState(env, user));
       case "/api/admin/client": {
         const name = clean(b.name, 120); if (!name) return json({error: "Enter the client name."}, 400);
         const grades = (Array.isArray(b.grades) ? b.grades : String(b.grades || DEFAULT_GRADES).split(",")).map((g) => clean(g, 20)).filter(Boolean).join(",") || DEFAULT_GRADES;
@@ -629,7 +634,9 @@ export default {
       const u = await currentUser(request, env);
       if (!u) return html(LOGIN);
       if (!u.admin) return redirect("/");
-      return html(ADMIN.replace("__ME__", () => JSON.stringify({name: u.name || "", email: u.email}).replace(/</g, "\\u003c")), {"content-security-policy": ADMIN_CSP});
+      const safe = (o) => JSON.stringify(o).replace(/</g, "\\u003c").replace(/\u2028|\u2029/g, "");
+      const st = await adminState(env, u);   // sent with the page so it shows immediately
+      return html(ADMIN.replace("__ME__", () => safe({name: u.name || "", email: u.email})).replace("__STATE__", () => safe(st)), {"content-security-policy": ADMIN_CSP});
     }
     if (path !== "/") return redirect("/");
     const user = await currentUser(request, env);

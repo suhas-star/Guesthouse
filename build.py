@@ -17,7 +17,7 @@ lg=open('login.html').read().replace('/*__CSS__*/',css).replace('__ZUNA__',logos
 open('login_page.html','w').write(lg)
 w=open('worker_src.js').read()
 adm=open('admin.html').read().replace('/*__UIKIT__*/',open('ui_kit.js').read()).replace('/*__CSS__*/',css).replace('__ZUNA__',logos[0])
-open('admin_page.html','w').write(adm.replace('__ME__',json.dumps({'name':'Suhas','email':'suhas@zuna.ai'})))
+open('admin_page.html','w').write(adm.replace('__ME__',json.dumps({'name':'Suhas','email':'suhas@zuna.ai'})).replace('__STATE__','null'))
 w=w.replace('const LOGIN = "";','const LOGIN = '+json.dumps(lg)+';').replace('const TEMPLATE = "";','const TEMPLATE = '+json.dumps(app)+';').replace('const ADMIN = "";','const ADMIN = '+json.dumps(adm)+';')
 open('worker.js','w').write(w); open('worker.mjs','w').write(w)
 print(len(app), len(lg), len(w))

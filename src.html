@@ -180,7 +180,8 @@ window.addEventListener('load',function(){setTimeout(hide,150)});setTimeout(hide
 <!-- Drawer -->
 <div id="scrim" class="fixed inset-0 z-50 bg-zuna-900/40 backdrop-blur-[2px] opacity-0 pointer-events-none transition-opacity"></div>
 <aside id="drawer" inert role="dialog" aria-modal="true" aria-labelledby="dTitle" class="fixed top-0 right-0 z-[60] h-full w-full sm:w-[440px] bg-white shadow-2xl translate-x-full transition-transform duration-300 flex flex-col border-l-4 border-mint-500" aria-hidden="true">
-  <div class="flex items-start gap-3 p-5 border-b border-zuna-100"><div class="min-w-0"><h3 id="dTitle" class="text-lg font-bold">—</h3><p id="dSub" class="text-xs text-zuna-500"></p></div><button id="dClose" class="iconbtn ml-auto" aria-label="Close"><i data-i="x" class="w-4 h-4"></i></button></div>
+  <div id="dHandle" class="sheet-handle" aria-hidden="true"><span></span></div>
+  <div id="dHead" class="flex items-start gap-3 p-5 border-b border-zuna-100"><div class="min-w-0"><h3 id="dTitle" class="text-lg font-bold">—</h3><p id="dSub" class="text-xs text-zuna-500"></p></div><button id="dClose" class="iconbtn ml-auto" aria-label="Close"><i data-i="x" class="w-4 h-4"></i></button></div>
   <div id="dBody" class="p-5 overflow-y-auto space-y-5"></div>
 </aside>
 <div id="toast" role="status" aria-live="polite" class="fixed bottom-6 left-1/2 -translate-x-1/2 translate-y-4 opacity-0 transition-all z-[70] bg-zuna-900 text-white text-sm font-semibold px-4 py-2.5 rounded-xl shadow-xl flex items-center gap-2"><span class="w-2 h-2 rounded-full bg-mint-500"></span><span id="toastText"></span></div>
@@ -671,7 +672,7 @@ const renderHouses = () => {
       cb.onclick = () => { ct.classList.toggle('hidden'); cbt.textContent = ct.classList.contains('hidden') ? 'Contacts' : 'Hide contacts'; }; ft.appendChild(cb);
       if (live) { const vb = h('button', 'btn-primary ml-auto'); vb.appendChild(document.createTextNode('Open dashboard')); vb.appendChild(icon('arrow-right', 'w-4 h-4')); vb.onclick = () => { state.prop = p.property; $('#propSel').value = p.property; go('overview'); }; ft.appendChild(vb); }
       if (hasCt || live) c.appendChild(ft); else c.appendChild(h('div', 'mt-auto'));
-      grid.appendChild(c);
+      grid.appendChild(c); ZUI.tilt(c, 3);
     });
     sec.appendChild(grid); box.appendChild(sec);
   });
@@ -691,7 +692,7 @@ const userForm = () => { const f = h('div', 'p-5 space-y-4'); const fld = (l, el
   const n = h('input', cls); n.placeholder = 'Full name'; n.autocomplete = 'off'; const e = h('input', cls); e.type = 'email'; e.placeholder = 'name@company.com'; e.autocomplete = 'off';
   const rl = h('select', cls); [['client', 'Viewer · can view the dashboard'], ['client_admin', 'Client admin · can also manage users']].forEach(([v, t]) => { const o = h('option', null, t); o.value = v; rl.appendChild(o); });
   f.append(fld('Name', n), fld('Email (login)', e), fld('Role', rl)); const go2 = h('button', 'btn-primary w-full justify-center !py-2.5 !text-sm'); go2.appendChild(icon('user-plus', 'w-4 h-4')); go2.appendChild(document.createTextNode('Create user')); const out = h('div');
-  go2.onclick = async () => { go2.disabled = true; try { const r = await mApi('user', {name: n.value, email: e.value, role: rl.value}); if (!r.created) throw new Error('That email already has an account.'); out.replaceChildren(pwCard(e.value.trim().toLowerCase(), r.password)); go2.remove(); reloadUsers(); } catch (er) { toast(er.message); go2.disabled = false; } };
+  go2.onclick = async () => { go2.disabled = true; try { const r = await mApi('user', {name: n.value, email: e.value, role: rl.value}); if (!r.created) throw new Error('That email already has an account.'); out.replaceChildren(pwCard(e.value.trim().toLowerCase(), r.password)); go2.remove(); ZUI.celebrate('User created', e.value.trim().toLowerCase()); reloadUsers(); } catch (er) { toast(er.message); go2.disabled = false; } };
   f.append(go2, out); setTimeout(() => n.focus(), 80); return f; };
 const renderUsersView = () => {
   const box = $('#usersView'); box.replaceChildren(); const us = (DATA.users || []).slice().sort((a, b) => (a.name || '').localeCompare(b.name || ''));
@@ -715,7 +716,7 @@ const renderUsersView = () => {
     else { const to = u.role === 'client_admin' ? 'client' : 'client_admin';
       const rb = ab(to === 'client_admin' ? 'Make admin' : 'Make viewer', to === 'client_admin' ? 'shield-check' : 'eye'); rb.title = to === 'client_admin' ? 'Make client admin' : 'Make viewer'; rb.setAttribute('aria-label', rb.title + ': ' + u.name); rb.onclick = async () => { if (!(await ZUI.confirm(to === 'client_admin' ? {title: 'Make ' + u.name + ' a client admin?', message: 'They can add users, reset passwords and disable users.', ok: 'Make client admin'} : {title: 'Change ' + u.name + ' to Viewer?', message: 'They keep access to the dashboard but can no longer manage users.', ok: 'Make viewer'}))) return;
         try { await mApi('user', {email: u.email, name: u.name, active: !!u.active, role: to}); toast('Role updated'); reloadUsers(); } catch (er) { toast(er.message); } };
-      const tg = ab(u.active ? 'Disable' : 'Enable', u.active ? 'ban' : 'circle-check', u.active ? 'text-rose-600' : 'text-mint-700'); tg.title = (u.active ? 'Disable ' : 'Enable ') + u.name; tg.setAttribute('aria-label', tg.title); tg.onclick = async () => { if (u.active && !(await ZUI.confirm({title: 'Disable ' + u.name + '?', message: 'They are signed out and can no longer log in. You can enable them again at any time.', ok: 'Disable user', tone: 'danger', icon: 'M4.9 4.9l14.2 14.2M12 22a10 10 0 1 0 0-20 10 10 0 0 0 0 20z'}))) return;
+      const tg = ab(u.active ? 'Disable' : 'Enable', u.active ? 'ban' : 'circle-check', u.active ? 'text-rose-600' : 'text-mint-700'); tg.title = (u.active ? 'Disable ' : 'Enable ') + u.name; tg.setAttribute('aria-label', tg.title); tg.onclick = async () => { if (u.active && !(await ZUI.confirm({title: 'Disable ' + u.name + '?', message: 'They are signed out and can no longer log in. You can enable them again at any time.', ok: 'Disable user', tone: 'danger', hold: true, icon: 'M4.9 4.9l14.2 14.2M12 22a10 10 0 1 0 0-20 10 10 0 0 0 0 20z'}))) return;
         try { await mApi('user', {email: u.email, name: u.name, active: !u.active}); toast(u.active ? 'User disabled' : 'User enabled'); reloadUsers(); } catch (er) { toast(er.message); } };
       g.append(rb, tg); }
     tr.appendChild(c5); body.appendChild(tr); });
@@ -771,6 +772,13 @@ ZUI.auto(document.body); ZUI.clickables(document.body);
 })();
 
 hydrateIcons();
+// phones: details open as a bottom sheet; drag the handle or header down to close
+{ const dr = $('#drawer'); let y0 = null, dy = 0, t0 = 0;
+  const startY = (e) => { if (innerWidth >= 640) return; y0 = e.touches[0].clientY; dy = 0; t0 = Date.now(); dr.style.transition = 'none'; };
+  const moveY = (e) => { if (y0 == null) return; dy = Math.max(0, e.touches[0].clientY - y0); dr.style.setProperty('--drag', dy + 'px'); if (dy > 4) e.preventDefault(); };
+  const endY = () => { if (y0 == null) return; y0 = null; dr.style.transition = ''; const fast = dy > 40 && dy / Math.max(1, Date.now() - t0) > .5;
+    if (dy > 110 || fast) { closeDrawer(); setTimeout(() => dr.style.setProperty('--drag', '0px'), 350); } else dr.style.setProperty('--drag', '0px'); };
+  ['#dHandle', '#dHead'].forEach((sel) => { const n = $(sel); n.addEventListener('touchstart', startY, {passive: true}); n.addEventListener('touchmove', moveY, {passive: false}); n.addEventListener('touchend', endY); n.addEventListener('touchcancel', endY); }); }
 { const tb = $('#themeBtn'); const sync = () => { const dk = ZUI.theme.get() === 'dark'; tb.replaceChildren(icon(dk ? 'sun' : 'moon', 'w-[18px] h-[18px]')); tb.title = dk ? 'Light mode' : 'Dark mode'; tb.setAttribute('aria-label', dk ? 'Switch to light mode' : 'Switch to dark mode'); tb.setAttribute('aria-pressed', dk ? 'true' : 'false'); };
   tb.onclick = () => { ZUI.theme.set(ZUI.theme.get() === 'dark' ? 'light' : 'dark'); sync(); render(); toast(ZUI.theme.get() === 'dark' ? 'Dark mode on' : 'Light mode on'); }; sync(); }
 const hs = location.hash.slice(1); if (TITLES[hs] && (hs !== 'users' || (USER.manager && !USER.admin))) state.view = hs;

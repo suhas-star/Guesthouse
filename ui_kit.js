@@ -31,6 +31,30 @@ const ZUI = (() => {
 .zd-cwrap{position:relative}.zd-cwrap>input{padding-right:2.25rem}
 .zd-cwrap>.zd-chev{position:absolute;right:.75rem;top:50%;margin-top:-8px;cursor:pointer}
 @media (prefers-reduced-motion:reduce){.zd-panel{animation:none}}
+/* hold to confirm */
+.zc-hold{position:relative;overflow:hidden;display:inline-flex;align-items:center;gap:8px;touch-action:none;user-select:none;-webkit-user-select:none}
+.zc-hold .zc-fill{position:absolute;inset:0;width:calc(var(--p,0)*100%);background:rgba(0,0,0,.22);pointer-events:none}
+.zc-hold svg{position:relative;width:18px;height:18px;flex-shrink:0;transform:rotate(-90deg)}
+.zc-hold .zc-ring-bg{stroke:rgba(255,255,255,.35)}.zc-hold .zc-ring{stroke:#fff;stroke-dasharray:44;stroke-dashoffset:calc(44 - var(--p,0)*44)}
+.zc-hold span{position:relative}
+.zc-foot{flex-wrap:wrap}.zc-b{white-space:nowrap}.zc-hint{flex-basis:100%;margin:0 0 2px;text-align:right;font-size:12px;color:#716b9b}
+.zc-shake{animation:zcShake .35s}@keyframes zcShake{20%,60%{transform:translateX(-4px)}40%,80%{transform:translateX(4px)}}
+/* success moment */
+.zs-ov{position:fixed;inset:0;z-index:2100;display:grid;place-items:center;pointer-events:none}
+.zs-card{position:relative;display:grid;justify-items:center;gap:10px;padding:26px 30px 22px;border-radius:22px;background:#fff;color:#12005A;box-shadow:0 30px 70px -20px rgba(18,0,90,.45),0 0 0 1px rgba(18,0,90,.06);animation:zsIn .32s cubic-bezier(.2,.9,.3,1.3) both;min-width:240px;max-width:min(360px,calc(100vw - 32px));text-align:center}
+.zs-out{animation:zsOut .25s ease-in both}
+@keyframes zsIn{from{opacity:0;transform:scale(.8) translateY(10px)}to{opacity:1;transform:none}}@keyframes zsOut{to{opacity:0;transform:scale(.95) translateY(-6px)}}
+.zs-tick{width:64px;height:64px}.zs-tick circle{fill:#02C988;transform-origin:center;animation:zsPop .35s cubic-bezier(.2,.9,.3,1.4) both}
+.zs-tick path{fill:none;stroke:#12005A;stroke-width:5;stroke-linecap:round;stroke-linejoin:round;stroke-dasharray:40;stroke-dashoffset:40;animation:zsDraw .35s .22s ease-out forwards}
+@keyframes zsPop{from{transform:scale(0)}to{transform:scale(1)}}@keyframes zsDraw{to{stroke-dashoffset:0}}
+.zs-t{margin:0;font-size:16px;font-weight:700}.zs-s{margin:-6px 0 0;font-size:13px;color:#5d5887}
+.zs-dot{position:absolute;left:50%;top:58px;width:8px;height:8px;border-radius:2px;background:#02C988;opacity:0;animation:zsBurst .8s cubic-bezier(.1,.7,.3,1) forwards}
+@keyframes zsBurst{0%{opacity:1;transform:translate(-50%,-50%) rotate(0)}100%{opacity:0;transform:translate(calc(-50% + var(--x)),calc(-50% + var(--y))) rotate(var(--r))}}
+html.dark .zs-card{background:#150c45;color:#eeeaff;box-shadow:0 30px 70px -20px rgba(0,0,0,.7),0 0 0 1px #2a2066}html.dark .zs-s{color:#b3aadf}html.dark .zc-hint{color:#b3aadf}
+/* tilt */
+.ztilt{transform-style:preserve-3d;will-change:transform}.ztilt .ztilt-sheen{position:absolute;inset:0;border-radius:inherit;pointer-events:none;opacity:0;transition:opacity .25s;background:radial-gradient(420px circle at var(--mx,50%) var(--my,50%),rgba(255,255,255,.35),rgba(255,255,255,0) 45%);z-index:2}
+.ztilt:hover .ztilt-sheen{opacity:1}html.dark .ztilt .ztilt-sheen{background:radial-gradient(420px circle at var(--mx,50%) var(--my,50%),rgba(2,201,136,.14),rgba(2,201,136,0) 45%)}
+@media (prefers-reduced-motion:reduce){.zs-card,.zs-dot,.zs-tick circle,.zs-tick path{animation:none!important;stroke-dashoffset:0}.zs-dot{display:none}}
 html.dark .zd-panel{background:#150c45;box-shadow:0 0 0 1px #2a2066,0 18px 40px -12px rgba(0,0,0,.6)}
 html.dark .zd-opt{color:#eeeaff}html.dark .zd-opt[data-act]{background:#241866}html.dark .zd-sub,html.dark .zd-group,html.dark .zd-empty{color:#b3aadf}html.dark .zd-ph{color:#8f86c4}html.dark .zd-hl{color:#4fd9aa}
 html.dark .zc-card{background:#150c45;color:#eeeaff;box-shadow:0 30px 70px -20px rgba(0,0,0,.7),0 0 0 1px #2a2066}html.dark .zc-m{color:#b3aadf}html.dark .zc-foot{background:#110a3a;border-color:#2a2066}
@@ -195,11 +219,28 @@ html.dark .zc-list{background:rgba(245,158,11,.13);color:#fcd34d;box-shadow:inse
     [].concat(o.message || []).forEach((m) => tx.appendChild(el('p', 'zc-m', m)));
     if (o.items && o.items.length) { const ul = el('ul', 'zc-list'); o.items.forEach((m) => ul.appendChild(el('li', null, '⚠ ' + m))); tx.appendChild(ul); }
     body.append(ic, tx); const foot = el('div', 'zc-foot');
-    const no = el('button', 'zc-b zc-cancel', o.cancel || 'Cancel'), yes = el('button', 'zc-b zc-ok ' + tone, o.ok || 'Confirm'); no.type = yes.type = 'button'; foot.append(no, yes);
+    const no = el('button', 'zc-b zc-cancel', o.cancel || 'Cancel'), yes = el('button', 'zc-b zc-ok ' + tone + (o.hold ? ' zc-hold' : ''), o.hold ? null : (o.ok || 'Confirm')); no.type = yes.type = 'button';
+    let hint = null;
+    if (o.hold) { // press and hold (mouse, touch, Enter or Space) until the ring fills
+      yes.appendChild(el('i', 'zc-fill')); const r = document.createElementNS(NS, 'svg'); r.setAttribute('viewBox', '0 0 18 18'); r.setAttribute('aria-hidden', 'true'); r.innerHTML = '<circle class="zc-ring-bg" cx="9" cy="9" r="7" fill="none" stroke-width="2.5"/><circle class="zc-ring" cx="9" cy="9" r="7" fill="none" stroke-width="2.5" stroke-linecap="round"/>'; yes.appendChild(r);
+      yes.appendChild(el('span', null, 'Hold to ' + (o.ok || 'confirm').replace(/^./, (c) => c.toLowerCase()))); yes.setAttribute('aria-label', 'Press and hold to ' + (o.ok || 'confirm').toLowerCase());
+      hint = el('p', 'zc-hint', 'Press and hold to confirm'); foot.appendChild(hint); }
+    foot.append(no, yes);
     card.append(body, foot); ov.appendChild(card); document.body.appendChild(ov);
     const done = (v) => { document.removeEventListener('keydown', kd, true); ov.remove(); if (prev && prev.focus) prev.focus(); res(v); };
     const kd = (e) => { if (e.key === 'Escape') { e.preventDefault(); e.stopPropagation(); done(false); } else if (e.key === 'Tab') { e.preventDefault(); (document.activeElement === yes ? no : yes).focus(); } };
-    document.addEventListener('keydown', kd, true); no.onclick = () => done(false); yes.onclick = () => done(true); ov.onmousedown = (e) => { if (e.target === ov) done(false); };
+    document.addEventListener('keydown', kd, true); no.onclick = () => done(false); ov.onmousedown = (e) => { if (e.target === ov) done(false); };
+    if (!o.hold) yes.onclick = () => done(true);
+    else { const MS = matchMedia('(prefers-reduced-motion: reduce)').matches ? 600 : 1100; let raf = 0, t0 = 0, on = false;
+      const set = (p) => yes.style.setProperty('--p', p.toFixed(3));
+      const step = (t) => { if (!t0) t0 = t; const p = Math.min(1, (t - t0) / MS); set(p); if (p >= 1) { on = false; done(true); return; } raf = requestAnimationFrame(step); };
+      const start = () => { if (on) return; on = true; t0 = 0; raf = requestAnimationFrame(step); };
+      const stop = () => { if (!on) return; on = false; cancelAnimationFrame(raf); const cur = parseFloat(yes.style.getPropertyValue('--p') || 0); if (cur < 1) { set(0); hint.textContent = 'Keep holding until the circle fills'; hint.style.color = tone === 'danger' ? '#e11d48' : ''; yes.classList.remove('zc-shake'); void yes.offsetWidth; yes.classList.add('zc-shake'); } };
+      yes.addEventListener('pointerdown', (e) => { e.preventDefault(); yes.setPointerCapture && yes.setPointerCapture(e.pointerId); start(); });
+      ['pointerup', 'pointercancel', 'lostpointercapture'].forEach((ev) => yes.addEventListener(ev, stop));
+      yes.addEventListener('keydown', (e) => { if ((e.key === ' ' || e.key === 'Enter') && !e.repeat) { e.preventDefault(); start(); } });
+      yes.addEventListener('keyup', (e) => { if (e.key === ' ' || e.key === 'Enter') stop(); });
+      yes.addEventListener('contextmenu', (e) => e.preventDefault()); }
     (tone === 'danger' ? no : yes).focus(); }); }
   // pointer hints: a hand on anything clickable that isn't a real button or link (and make it keyboard-usable)
   const NATIVE = /^(A|BUTTON|INPUT|SELECT|TEXTAREA|LABEL|SUMMARY|OPTION)$/;
@@ -215,5 +256,21 @@ html.dark .zc-list{background:rgba(245,158,11,.13);color:#fcd34d;box-shadow:inse
   // optional dark theme, remembered per browser
   const theme = {get: () => document.documentElement.classList.contains('dark') ? 'dark' : 'light',
     set: (t) => { document.documentElement.classList.toggle('dark', t === 'dark'); try { localStorage.setItem('zp.theme', t); } catch (e) {} document.dispatchEvent(new CustomEvent('zthemechange', {detail: t})); } };
-  return {show, close, key, isOpen, select, auto, noFill, chevron, art, confirm, clickables, busy, theme};
+  // success moment: animated tick with a small green burst
+  function celebrate(title, sub) { const ov = el('div', 'zs-ov'); ov.setAttribute('role', 'status'); ov.setAttribute('aria-live', 'polite');
+    const c = el('div', 'zs-card'); const t = document.createElementNS(NS, 'svg'); t.setAttribute('class', 'zs-tick'); t.setAttribute('viewBox', '0 0 64 64'); t.setAttribute('aria-hidden', 'true'); t.innerHTML = '<circle cx="32" cy="32" r="30"/><path d="M19 33.5l9 9 17-18"/>';
+    c.appendChild(t); c.appendChild(el('p', 'zs-t', title)); if (sub) c.appendChild(el('p', 'zs-s', sub));
+    const cols = ['#02C988', '#12005A', '#4fd9aa', '#a99bdc', '#02C988'];
+    for (let i = 0; i < 18; i++) { const d = el('i', 'zs-dot'); const a = (i / 18) * Math.PI * 2 + Math.random() * .3, r = 60 + Math.random() * 50;
+      d.style.setProperty('--x', Math.cos(a) * r + 'px'); d.style.setProperty('--y', Math.sin(a) * r + 'px'); d.style.setProperty('--r', (Math.random() * 360 | 0) + 'deg'); d.style.background = cols[i % cols.length]; d.style.animationDelay = (.15 + Math.random() * .08) + 's'; c.appendChild(d); }
+    ov.appendChild(c); document.body.appendChild(ov);
+    setTimeout(() => { c.classList.add('zs-out'); setTimeout(() => ov.remove(), 260); }, 1500); }
+  // tilt: card leans toward the pointer with a soft light sheen (mouse only; off for reduced motion)
+  const canTilt = () => matchMedia('(pointer: fine)').matches && !matchMedia('(prefers-reduced-motion: reduce)').matches;
+  function tilt(card, max = 4) { if (!canTilt() || card._zt) return; card._zt = 1; card.classList.add('ztilt'); if (getComputedStyle(card).position === 'static') card.style.position = 'relative';
+    const sh = el('div', 'ztilt-sheen'); card.appendChild(sh); let raf = 0;
+    card.addEventListener('mousemove', (e) => { const r = card.getBoundingClientRect(), x = (e.clientX - r.left) / r.width, y = (e.clientY - r.top) / r.height; cancelAnimationFrame(raf);
+      raf = requestAnimationFrame(() => { card.style.transition = 'transform .08s ease-out, box-shadow .2s'; card.style.transform = 'perspective(900px) rotateX(' + ((.5 - y) * max).toFixed(2) + 'deg) rotateY(' + ((x - .5) * max).toFixed(2) + 'deg) translateY(-2px)'; card.style.setProperty('--mx', (x * 100).toFixed(1) + '%'); card.style.setProperty('--my', (y * 100).toFixed(1) + '%'); }); });
+    card.addEventListener('mouseleave', () => { cancelAnimationFrame(raf); card.style.transition = 'transform .35s ease, box-shadow .2s'; card.style.transform = ''; }); }
+  return {show, close, key, isOpen, select, auto, noFill, chevron, art, confirm, clickables, busy, theme, celebrate, tilt};
 })();

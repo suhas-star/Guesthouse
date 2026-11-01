@@ -228,7 +228,7 @@ const renderGH = (D, c) => {
     const dc = x.documents || [], bad = dc.filter((d) => d.state === 'expired').length, soon = dc.filter((d) => d.state === 'expiring').length;
     m.appendChild(h('p', 'text-[11px] ' + (bad ? 'text-rose-700 font-semibold' : soon ? 'text-amber-700 font-semibold' : 'text-zuna-500'), dc.length ? dc.length + (dc.length === 1 ? ' document' : ' documents') + (bad ? ' · ' + bad + ' expired' : '') + (soon ? ' · ' + soon + ' expiring soon' : '') : 'No documents'));
     const ed = ib('button', 'btn !py-1 !px-2.5 text-xs mt-2', 'Edit', 'pencil'); ed.onclick = () => editGH(c, x); m.appendChild(ed);
-    card.append(th, m); g.appendChild(card); });
+    card.append(th, m); g.appendChild(card); ZUI.tilt(card, 3); });
   if (!c.guesthouses.length) g.appendChild(h('div', 'card p-8 text-center text-sm text-zuna-500 md:col-span-2', 'No guest houses yet.'));
   D.appendChild(g);
 };
@@ -320,7 +320,7 @@ const editGH = (c, x) => {
   [['amenities', 'Amenities'], ['inclusions', 'Inclusions'], ['cancellation', 'Cancellation policy'], ['photos', 'Photos'], ['contacts', 'Contacts (POC)']].forEach(([k, l]) => { const e = switchEl(l, (x.show || {})[k] !== false); shows[k] = e.input; sw.appendChild(e); }); s7.appendChild(sw);
   // actions
   const actions = h('div', 'flex items-center gap-2 pt-2 border-t border-zuna-100');
-  if (x.id) { const del = ib('button', 'btn text-rose-600', 'Delete guest house', 'trash-2'); del.onclick = async () => { if (!(await ZUI.confirm({title: 'Delete ' + x.property + '?', message: ['Its room types, photos, contacts and documents are deleted too.', 'Bookings are kept.'], ok: 'Delete guest house', tone: 'danger'}))) return; try { await api('gh/delete', {id: x.id}); closeModal(); toast('Deleted'); load(true); } catch (er) { toast(er.message, true); } }; actions.appendChild(del); }
+  if (x.id) { const del = ib('button', 'btn text-rose-600', 'Delete guest house', 'trash-2'); del.onclick = async () => { if (!(await ZUI.confirm({title: 'Delete ' + x.property + '?', message: ['Its room types, photos, contacts and documents are deleted too.', 'Bookings are kept.'], ok: 'Delete guest house', tone: 'danger', hold: true}))) return; try { await api('gh/delete', {id: x.id}); closeModal(); toast('Deleted'); load(true); } catch (er) { toast(er.message, true); } }; actions.appendChild(del); }
   const save = h('button', 'ml-auto btn-primary', x.id ? 'Save changes' : 'Create guest house');
   save.onclick = async () => { save.disabled = true; try {
     const show = {}; Object.entries(shows).forEach(([k, v]) => show[k] = v.checked);
@@ -383,7 +383,7 @@ const renderBookings = (D, c) => {
   const add = ib('button', 'ml-auto btn-primary', 'Add booking', 'plus'); add.onclick = () => editBooking(c, null);
   bar.append(q, gsel, wsel, add); D.appendChild(bar);
   const info = h('p', 'text-sm text-zuna-500 mb-2'); D.appendChild(info);
-  const cancel = async (b) => { if (!(await ZUI.confirm({title: 'Cancel this stay?', message: [b.guest + ' · ' + b.property, fD(b.check_in) + ' → ' + fD(b.check_out) + '. It is removed from the client dashboard.'], ok: 'Cancel stay', cancel: 'Keep booking', tone: 'danger', icon: 'M8 2v4M16 2v4M3 10h18M5 4h14a2 2 0 0 1 2 2v14a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2V6a2 2 0 0 1 2-2zM10 14l4 4M14 14l-4 4'}))) return;
+  const cancel = async (b) => { if (!(await ZUI.confirm({title: 'Cancel this stay?', message: [b.guest + ' · ' + b.property, fD(b.check_in) + ' → ' + fD(b.check_out) + '. It is removed from the client dashboard.'], ok: 'Cancel stay', cancel: 'Keep booking', tone: 'danger', hold: true, icon: 'M8 2v4M16 2v4M3 10h18M5 4h14a2 2 0 0 1 2 2v14a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2V6a2 2 0 0 1 2-2zM10 14l4 4M14 14l-4 4'}))) return;
     try { await api('booking/delete', {client_id: c.id, guest: b.guest, check_in: b.check_in}); toast('Booking cancelled'); load(true); } catch (er) { toast(er.message, true); } };
   const nameKey = (b) => b.guest.replace(/^(mr|ms|mrs|dr)\.?\s+/i, '').toLowerCase();
   const cols = [
@@ -452,7 +452,7 @@ const editBooking = (c, b) => {
   const save = h('button', 'ml-auto btn-primary shrink-0', b ? 'Save changes' : 'Add booking'); actions.appendChild(save); f.appendChild(actions);
   save.onclick = async () => { const w = check(); if (w.length && !(await ZUI.confirm({title: 'Save with these warnings?', message: 'Please check before saving:', items: w, ok: 'Save anyway', cancel: 'Go back', tone: 'warn'}))) return; save.disabled = true;
     try { await api('booking', {client_id: c.id, original: b ? {guest: b.guest, check_in: b.check_in} : null, row: {property: gh.value, title: title.value, name: name.value, gender: sexOf(), grade: grade.get(), base: base.get(), check_in: ci.value, check_out: co.value, room: room.value, occupancy: occ.value, status: status.value, concur_tr: tr.value, note: note.value}});
-      closeModal(); toast(b ? 'Booking updated' : 'Booking added'); BF.when = co.value > TODAY ? BF.when : 'all'; load(true); } catch (er) { toast(er.message, true); } finally { save.disabled = false; } };
+      closeModal(); ZUI.celebrate(b ? 'Booking updated' : 'Booking added', ((title.value ? title.value + ' ' : '') + name.value.trim()) + ' · ' + fD(ci.value) + ' → ' + fD(co.value)); BF.when = co.value > TODAY ? BF.when : 'all'; load(true); } catch (er) { toast(er.message, true); } finally { save.disabled = false; } };
   modal(b ? 'Edit booking · ' + b.guest : 'New booking · ' + c.name, f);
 };
 
@@ -473,7 +473,7 @@ const docSection = (sec, c, x) => {
     r.appendChild(docChip(d));
     const v = ib('a', 'btn !py-1 !px-2.5 text-xs', 'View', 'external-link'); v.href = d.url; v.target = '_blank'; v.rel = 'noopener';
     const e = ib('button', 'btn !py-1 !px-2.5 text-xs', 'Edit', 'pencil'); e.type = 'button'; e.onclick = () => form(d);
-    const del = ib('button', 'btn !py-1 !px-2.5 text-xs text-rose-600', 'Delete', 'trash-2'); del.type = 'button'; del.onclick = async () => { if (!(await ZUI.confirm({title: 'Delete ' + d.title + '?', message: 'The file is removed and the client can no longer open it.', ok: 'Delete document', tone: 'danger'}))) return; try { await api('doc/delete', {id: d.id}); toast('Document deleted'); reopen(); } catch (er) { toast(er.message, true); } };
+    const del = ib('button', 'btn !py-1 !px-2.5 text-xs text-rose-600', 'Delete', 'trash-2'); del.type = 'button'; del.onclick = async () => { if (!(await ZUI.confirm({title: 'Delete ' + d.title + '?', message: 'The file is removed and the client can no longer open it.', ok: 'Delete document', tone: 'danger', hold: true}))) return; try { await api('doc/delete', {id: d.id}); toast('Document deleted'); reopen(); } catch (er) { toast(er.message, true); } };
     r.append(v, e, del); list.appendChild(r); });
   if (!(x.documents || []).length) list.appendChild(h('p', 'px-3 py-4 text-sm text-zuna-500 text-center bg-white', 'No documents yet.'));
   const box = h('div'); sec.appendChild(box);
@@ -505,7 +505,7 @@ const renderUsers = (D, c) => {
   const add = ib('button', 'ml-auto btn-primary', 'Add user', 'user-plus'); add.onclick = () => { const f = h('div', 'space-y-4'); const g = h('div', 'grid sm:grid-cols-2 gap-3'); const n = inp('', 'Full name'), e = inp('', 'name@company.com', 'email');
     const rl = sel('client', [['client', 'Viewer · can view the dashboard'], ['client_admin', 'Client admin · can also manage users']]);
     g.append(field('Name', n), field('Email (login)', e), field('Role', rl, 'sm:col-span-2')); f.appendChild(g); const go = h('button', 'btn-primary', 'Create user'); const out = h('div');
-    go.onclick = async () => { go.disabled = true; try { const r = await api('user', {client_id: c.id, name: n.value, email: e.value, role: rl.value}); if (!r.created) throw new Error('That email already has an account.'); out.replaceChildren(pwBox(e.value.trim().toLowerCase(), r.password)); go.remove(); load(true); } catch (er) { toast(er.message, true); go.disabled = false; } };
+    go.onclick = async () => { go.disabled = true; try { const r = await api('user', {client_id: c.id, name: n.value, email: e.value, role: rl.value}); if (!r.created) throw new Error('That email already has an account.'); out.replaceChildren(pwBox(e.value.trim().toLowerCase(), r.password)); go.remove(); ZUI.celebrate('User created', e.value.trim().toLowerCase()); load(true); } catch (er) { toast(er.message, true); go.disabled = false; } };
     f.append(go, out); modal('Add user · ' + c.name, f); }; bar.appendChild(add); D.appendChild(bar);
   const B = 'btn !py-1 !px-2 text-xs w-full justify-center whitespace-nowrap';
   const actions = (u) => { const me = u.email === ME.email; const grid = h('div', 'grid grid-cols-[84px_112px_84px] gap-1.5');
@@ -517,7 +517,7 @@ const renderUsers = (D, c) => {
     rb.onclick = async () => { if (!(await ZUI.confirm(to === 'client_admin' ? {title: 'Make ' + u.name + ' a client admin?', message: 'They can add users, reset passwords and disable users for ' + c.name + '.', ok: 'Make client admin'} : {title: 'Change ' + u.name + ' to Viewer?', message: 'They keep access to the dashboard but can no longer manage users.', ok: 'Make viewer'}))) return;
       try { await api('user', {email: u.email, name: u.name, active: !!u.active, role: to}); toast('Role updated'); load(true); } catch (er) { toast(er.message, true); } };
     const tg = ib('button', B + ' ' + (u.active ? 'text-rose-600' : 'text-mint-700'), u.active ? 'Disable' : 'Enable', u.active ? 'ban' : 'circle-check'); tg.setAttribute('aria-label', (u.active ? 'Disable ' : 'Enable ') + u.name); tg.title = (u.active ? 'Disable ' : 'Enable ') + u.name;
-    tg.onclick = async () => { if (u.active && !(await ZUI.confirm({title: 'Disable ' + u.name + '?', message: 'They are signed out and can no longer log in. You can enable them again at any time.', ok: 'Disable user', tone: 'danger', icon: 'M4.9 4.9l14.2 14.2M12 22a10 10 0 1 0 0-20 10 10 0 0 0 0 20z'}))) return; try { await api('user', {email: u.email, name: u.name, active: !u.active}); toast(u.active ? 'User disabled' : 'User enabled'); load(true); } catch (er) { toast(er.message, true); } };
+    tg.onclick = async () => { if (u.active && !(await ZUI.confirm({title: 'Disable ' + u.name + '?', message: 'They are signed out and can no longer log in. You can enable them again at any time.', ok: 'Disable user', tone: 'danger', hold: true, icon: 'M4.9 4.9l14.2 14.2M12 22a10 10 0 1 0 0-20 10 10 0 0 0 0 20z'}))) return; try { await api('user', {email: u.email, name: u.name, active: !u.active}); toast(u.active ? 'User disabled' : 'User enabled'); load(true); } catch (er) { toast(er.message, true); } };
     grid.append(rb, tg); return grid; };
   const cols = [
     {k: 'user', label: 'User', sort: (u) => (u.name || '').toLowerCase(), render: (u) => { const row = h('div', 'flex items-center gap-3'); row.appendChild(h('span', 'grid place-items-center w-8 h-8 rounded-full text-[11px] font-bold shrink-0 ' + (u.role === 'client_admin' ? 'bg-zuna-900 text-mint-400' : 'bg-zuna-50 text-zuna-600 ring-1 ring-zuna-100'), (u.name || u.email).split(/\s+/).map((w) => w[0]).join('').slice(0, 2).toUpperCase()));

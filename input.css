@@ -161,3 +161,17 @@ html.dark { background-color: #0b0630; }
 .chart-skel { background: linear-gradient(100deg, #f4f2fb 30%, #ebe8f8 50%, #f4f2fb 70%) 0 0 / 300% 100%; animation: zSkel 1.4s ease-in-out infinite; }
 html.dark .chart-skel { background-image: linear-gradient(100deg, #1c1252 30%, #261a66 50%, #1c1252 70%); }
 @keyframes zSkel { from { background-position: 100% 0; } to { background-position: 0 0; } }
+
+/* phones: booking / night details as a bottom sheet */
+.sheet-handle { display: none; justify-content: center; padding: 10px 0 2px; touch-action: none; cursor: grab; }
+.sheet-handle span { width: 44px; height: 5px; border-radius: 999px; background: #cdc5ec; }
+@media (max-width: 639px) {
+  #drawer { top: auto !important; bottom: 0; height: auto !important; max-height: 88vh; border-left: 0 !important; border-top: 3px solid #02C988; border-radius: 22px 22px 0 0;
+    box-shadow: 0 -24px 60px -12px rgba(18,0,90,.4); transition: transform .34s cubic-bezier(.2,.8,.2,1); }
+  #drawer.translate-x-full { transform: translateY(105%) !important; }
+  #drawer:not(.translate-x-full) { transform: translateY(var(--drag, 0px)) !important; }
+  #drawer .sheet-handle { display: flex; }
+  #drawer #dHead { padding-top: 8px; touch-action: none; }
+  #dBody { padding-bottom: calc(20px + env(safe-area-inset-bottom, 0px)); }
+}
+html.dark .sheet-handle span { background: #3a2c8a; }

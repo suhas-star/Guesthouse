@@ -804,11 +804,9 @@ const render = () => {
   $$('#rangeWrap button').forEach((b) => b.toggleAttribute('data-active', b.dataset.range === state.range));
   $('#navCount').textContent = myB().length;
   ({overview: renderOverview, rack: renderRack, calendar: renderCal, bookings: renderBookings, houses: renderHouses, users: () => renderUsersView()})[state.view]();
-  const k = [state.view, state.prop, state.range, state.cfrom, state.cto].join('|');   // cards rise in only when what is shown changes, not on every repaint
-  if (k !== render.k) { render.k = k; ZUI.stagger(document.querySelector('.view[data-view="' + state.view + '"]')); }
+  if (state.view !== render.v) { render.v = state.view; ZUI.stagger(document.querySelector('.view[data-view="' + state.view + '"]')); }   // a soft lift only when the page changes; content is never hidden
 };
-// switching range or guest house: card shapes shimmer for a moment, then the new numbers rise in
-const reRender = () => ZUI.shimmer(document.querySelector('.view[data-view="' + state.view + '"]'), 300).then(render);
+const reRender = render;   // range / guest house switches repaint instantly (the data is already here)
 const closeSide = () => { $('#side').classList.add('-translate-x-full'); $('#scrimSide').classList.add('hidden'); };
 const go = (v) => { state.view = v; try { history.replaceState(null, '', '#' + v); } catch (e) {} closeSide(); render(); window.scrollTo({top: 0, behavior: 'smooth'}); };
 $$('#nav button').forEach((b) => b.onclick = () => go(b.dataset.view));

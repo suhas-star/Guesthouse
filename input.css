@@ -64,7 +64,7 @@
 @keyframes zFadeUp { from { opacity: 0; transform: translateY(6px); } to { opacity: 1; transform: none; } }
 @keyframes zPop { from { opacity: 0; transform: translateY(10px) scale(.985); } to { opacity: 1; transform: none; } }
 .anim-in { animation: zFadeUp .28s cubic-bezier(.2,.8,.2,1) both; }
-.view { animation: zFadeOnly .22s ease-out both; }
+.view { animation: none; }
 @keyframes zFadeOnly { from { opacity: 0; } }
 #modal:not(.hidden) > div > div { animation: zPop .22s cubic-bezier(.2,.8,.2,1) both; }
 .lift { transition: transform .2s ease, box-shadow .2s ease; }
@@ -279,8 +279,8 @@ html.dark .zt { background: #2d1a9e; }
 .zg-n { position: relative; font-size: 12px; font-weight: 800; font-variant-numeric: tabular-nums; letter-spacing: -.02em; }
 html.dark .zg-t { stroke: #2a2257; }
 /* ---------- staggered entrance ---------- */
-.z-rise { animation: zRise .5s cubic-bezier(.2,.8,.2,1) backwards; animation-delay: calc(var(--zi, 0) * 40ms); }
-@keyframes zRise { from { opacity: 0; transform: translateY(14px) scale(.985); } }
+.z-rise { animation: zRise .4s cubic-bezier(.2,.8,.2,1) backwards; animation-delay: calc(var(--zi, 0) * 30ms); }
+@keyframes zRise { from { transform: translateY(8px); } }
 /* ---------- shimmer skeleton ---------- */
 .z-loading .card { position: relative; overflow: hidden; }
 .z-loading .card > * { visibility: hidden; }

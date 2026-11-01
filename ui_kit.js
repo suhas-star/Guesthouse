@@ -381,7 +381,7 @@ html.dark .zc-list{background:rgba(245,158,11,.13);color:#fcd34d;box-shadow:inse
     return w; }
   const afterSplash = (fn) => { const sp = document.getElementById('splash'); if (!sp || sp.classList.contains('sp-hide')) return fn(); const iv = setInterval(() => { const e = document.getElementById('splash'); if (!e || e.classList.contains('sp-hide')) { clearInterval(iv); fn(); } }, 40); };
   // cards rise in one after another, 40 ms apart (held until the welcome screen fades so it is seen)
-  function stagger(root, sel = '.card') { if (!root || calm()) return; if (document.getElementById('splash') && !document.getElementById('splash').classList.contains('sp-hide')) { root.style.opacity = '0'; return afterSplash(() => { root.style.opacity = ''; stagger(root, sel); }); } let i = 0;
+  function stagger(root, sel = '.card') { if (!root || calm()) return; if (document.getElementById('splash') && !document.getElementById('splash').classList.contains('sp-hide')) { return afterSplash(() => stagger(root, sel)); } let i = 0;
     root.querySelectorAll(sel).forEach((c) => { if (c.closest('.z-rise') || !c.offsetParent) return; c.style.setProperty('--zi', Math.min(i++, 14)); c.classList.remove('z-rise'); void c.offsetWidth; c.classList.add('z-rise');
       c.addEventListener('animationend', () => c.classList.remove('z-rise'), {once: true}); }); }
   // card shapes with a moving sheen while the next view is prepared

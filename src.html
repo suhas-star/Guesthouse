@@ -164,6 +164,11 @@ window.addEventListener('load',function(){setTimeout(hide,150)});setTimeout(hide
       <section data-view="houses" class="view hidden">
         <div id="houses" class="space-y-7"></div>
       </section>
+
+      <!-- USERS & ACCESS (client admins) -->
+      <section data-view="users" class="view hidden">
+        <div id="usersView"></div>
+      </section>
     </main>
   </div>
 </div>
@@ -664,19 +669,66 @@ const renderHouses = () => {
   });
 };
 
+/* ---------- users & access (client admins) ---------- */
+const mApi = async (p, body) => { let r; try { r = await fetch('/api/manage/' + p, {method: 'POST', headers: {'content-type': 'application/json'}, body: JSON.stringify(body || {}), credentials: 'same-origin'}); } catch (e) { throw new Error('Network error. Check your connection and try again.'); }
+  const j = await r.json().catch(() => ({})); if (r.status === 403) { location.reload(); throw new Error('Your session has expired.'); } if (!r.ok) throw new Error(j.error || 'Something went wrong.'); return j; };
+const reloadUsers = async () => { const j = await mApi('state'); DATA.users = (j.clients[0] || {}).users || []; if (state.view === 'users') render(); };
+const ROLE_NAME = {client: 'Viewer', client_admin: 'Client admin'};
+const pwCard = (email, pw) => { const b = h('div', 'rounded-xl bg-mint-50 ring-1 ring-mint-200 p-4 space-y-3'); b.appendChild(h('p', 'text-sm font-semibold', 'Login details for ' + email));
+  const row = h('div', 'flex items-center gap-2'); row.appendChild(h('code', 'flex-1 rounded-lg bg-white ring-1 ring-mint-200 px-3 py-2 font-bold text-base', pw));
+  const cp = h('button', 'btn'); cp.appendChild(icon('copy', 'w-3.5 h-3.5')); cp.appendChild(document.createTextNode('Copy')); cp.onclick = () => navigator.clipboard.writeText(pw).then(() => toast('Password copied')); row.appendChild(cp); b.appendChild(row);
+  b.appendChild(h('p', 'text-xs text-zuna-600', 'Shown once. Share it privately; they can change it later with "Forgot password?".')); return b; };
+const userForm = () => { const f = h('div', 'p-5 space-y-4'); const fld = (l, el) => { const w = h('label', 'block'); w.appendChild(h('span', 'block text-xs font-semibold text-zuna-500 mb-1', l)); w.appendChild(el); return w; };
+  const cls = 'w-full rounded-xl bg-white ring-1 ring-zuna-100 px-3 py-2.5 text-sm focus:outline-none focus:ring-2 focus:ring-mint-500';
+  const n = h('input', cls); n.placeholder = 'Full name'; n.autocomplete = 'off'; const e = h('input', cls); e.type = 'email'; e.placeholder = 'name@company.com'; e.autocomplete = 'off';
+  const rl = h('select', cls); [['client', 'Viewer · can view the dashboard'], ['client_admin', 'Client admin · can also manage users']].forEach(([v, t]) => { const o = h('option', null, t); o.value = v; rl.appendChild(o); });
+  f.append(fld('Name', n), fld('Email (login)', e), fld('Role', rl)); const go2 = h('button', 'btn-primary w-full justify-center !py-2.5 !text-sm'); go2.appendChild(icon('user-plus', 'w-4 h-4')); go2.appendChild(document.createTextNode('Create user')); const out = h('div');
+  go2.onclick = async () => { go2.disabled = true; try { const r = await mApi('user', {name: n.value, email: e.value, role: rl.value}); if (!r.created) throw new Error('That email already has an account.'); out.replaceChildren(pwCard(e.value.trim().toLowerCase(), r.password)); go2.remove(); reloadUsers(); } catch (er) { toast(er.message); go2.disabled = false; } };
+  f.append(go2, out); setTimeout(() => n.focus(), 80); return f; };
+const renderUsersView = () => {
+  const box = $('#usersView'); box.replaceChildren(); const us = (DATA.users || []).slice().sort((a, b) => (a.name || '').localeCompare(b.name || ''));
+  const card = h('div', 'card overflow-hidden'); const hd = h('div', 'card-h border-b border-zuna-100');
+  const t = h('div'); t.appendChild(h('h2', 'card-t', 'Users & access')); t.appendChild(h('p', 'card-s', 'Viewers can see the dashboard. Client admins can also add users, reset passwords and change access.')); hd.appendChild(t);
+  const add = h('button', 'btn-primary ml-auto'); add.appendChild(icon('user-plus', 'w-4 h-4')); add.appendChild(document.createTextNode('Add user')); add.onclick = () => openDrawer('Add user', DATA.client ? DATA.client.name : '', userForm()); hd.appendChild(add); card.appendChild(hd);
+  const sc = h('div', 'overflow-x-auto'); const tb = h('table', 'w-full text-sm'); const th = h('thead'); const hr = h('tr', 'text-left text-xs font-semibold text-zuna-500 bg-zuna-50/70');
+  ['User', 'Role', 'Last login', 'Status', ''].forEach((x) => { const c = h('th', 'px-5 py-2.5 whitespace-nowrap', x); c.scope = 'col'; if (!x) c.appendChild(h('span', 'sr-only', 'Actions')); hr.appendChild(c); }); th.appendChild(hr); tb.appendChild(th);
+  const body = h('tbody', 'divide-y divide-zuna-50'); const B = 'btn !py-1 !px-2 text-xs w-full justify-center whitespace-nowrap';
+  const ab = (txt, ic, cls) => { const b = h('button', B + ' ' + (cls || '')); b.type = 'button'; b.appendChild(icon(ic, 'w-3.5 h-3.5 shrink-0')); b.appendChild(document.createTextNode(txt)); return b; };
+  us.forEach((u) => { const me = u.email === USER.email, tr = h('tr', 'align-middle hover:bg-zuna-50/50 transition-colors');
+    const c1 = h('td', 'px-5 py-3'); const row = h('div', 'flex items-center gap-3'); row.appendChild(h('span', 'grid place-items-center w-8 h-8 rounded-full text-[11px] font-bold shrink-0 ' + (u.role === 'client_admin' ? 'bg-zuna-900 text-mint-400' : 'bg-zuna-50 text-zuna-600 ring-1 ring-zuna-100'), (u.name || u.email).split(/\s+/).map((w) => w[0]).join('').slice(0, 2).toUpperCase()));
+    const tx = h('div', 'min-w-0'); const n1 = h('p', 'font-semibold', u.name); if (me) n1.appendChild(h('span', 'ml-1.5 text-[11px] font-semibold text-zuna-500', '(you)')); tx.append(n1, h('p', 'text-xs text-zuna-500', u.email)); row.appendChild(tx); c1.appendChild(row); tr.appendChild(c1);
+    const c2 = h('td', 'px-5 py-3'); c2.appendChild(h('span', 'rounded-full px-2 py-0.5 text-[11px] font-bold whitespace-nowrap ' + (u.role === 'client_admin' ? 'bg-zuna-900 text-white' : 'bg-zuna-50 text-zuna-600 ring-1 ring-zuna-100'), ROLE_NAME[u.role] || 'Viewer')); tr.appendChild(c2);
+    tr.appendChild(h('td', 'px-5 py-3 text-zuna-500 whitespace-nowrap', u.last_login ? new Date(u.last_login).toLocaleString('en-IN', {dateStyle: 'medium', timeStyle: 'short'}) : 'Never'));
+    const c4 = h('td', 'px-5 py-3'); c4.appendChild(h('span', 'rounded-full px-2 py-0.5 text-[11px] font-bold ' + (u.active ? 'bg-mint-50 text-mint-700 ring-1 ring-mint-200' : 'bg-zuna-50 text-zuna-500 ring-1 ring-zuna-100'), u.active ? 'Active' : 'Disabled')); tr.appendChild(c4);
+    const c5 = h('td', 'px-5 py-3'); const g = h('div', 'grid grid-cols-[136px_158px_92px] gap-1.5 justify-end ml-auto w-max'); c5.appendChild(g);
+    const rs = ab('Reset password', 'key-round'); rs.onclick = async () => { if (!(await ZUI.confirm({title: 'Reset password?', message: ['A new password is created for ' + u.name + ' (' + u.email + ').', 'The old password stops working and they are signed out.'], ok: 'Reset password', tone: 'warn'}))) return;
+      try { const r = await mApi('user/reset', {email: u.email}); const w = h('div', 'p-5'); w.appendChild(pwCard(u.email, r.password)); openDrawer('New password', u.name, w); } catch (er) { toast(er.message); } };
+    g.appendChild(rs);
+    if (me) g.append(h('span'), h('span'));
+    else { const to = u.role === 'client_admin' ? 'client' : 'client_admin';
+      const rb = ab(to === 'client_admin' ? 'Make client admin' : 'Make viewer', to === 'client_admin' ? 'shield-check' : 'eye'); rb.onclick = async () => { if (!(await ZUI.confirm(to === 'client_admin' ? {title: 'Make ' + u.name + ' a client admin?', message: 'They can add users, reset passwords and disable users.', ok: 'Make client admin'} : {title: 'Change ' + u.name + ' to Viewer?', message: 'They keep access to the dashboard but can no longer manage users.', ok: 'Make viewer'}))) return;
+        try { await mApi('user', {email: u.email, name: u.name, active: !!u.active, role: to}); toast('Role updated'); reloadUsers(); } catch (er) { toast(er.message); } };
+      const tg = ab(u.active ? 'Disable' : 'Enable', u.active ? 'ban' : 'circle-check', u.active ? 'text-rose-600' : 'text-mint-700'); tg.onclick = async () => { if (u.active && !(await ZUI.confirm({title: 'Disable ' + u.name + '?', message: 'They are signed out and can no longer log in. You can enable them again at any time.', ok: 'Disable user', tone: 'danger', icon: 'M4.9 4.9l14.2 14.2M12 22a10 10 0 1 0 0-20 10 10 0 0 0 0 20z'}))) return;
+        try { await mApi('user', {email: u.email, name: u.name, active: !u.active}); toast(u.active ? 'User disabled' : 'User enabled'); reloadUsers(); } catch (er) { toast(er.message); } };
+      g.append(rb, tg); }
+    tr.appendChild(c5); body.appendChild(tr); });
+  if (!us.length) { const tr = h('tr'); const td = h('td', 'px-5 py-10 text-center text-zuna-500', 'No users yet.'); td.colSpan = 5; tr.appendChild(td); body.appendChild(tr); }
+  tb.appendChild(body); sc.appendChild(tb); card.appendChild(sc); box.appendChild(card);
+};
+
 /* ---------- routing ---------- */
-const TITLES = {overview: 'Overview', rack: 'Room rack', calendar: 'Night-wise availability', bookings: 'Booking register', houses: 'All guest houses'};
+const TITLES = {overview: 'Overview', rack: 'Room rack', calendar: 'Night-wise availability', bookings: 'Booking register', houses: 'All guest houses', users: 'Users & access'};
 const render = () => {
   $$('#nav button').forEach((b) => b.toggleAttribute('data-active', b.dataset.view === state.view));
   $$('.view').forEach((v) => v.classList.toggle('hidden', v.dataset.view !== state.view));
   $('#viewTitle').textContent = TITLES[state.view];
   const p = P();
-  $('#viewSub').textContent = state.view === 'houses' ? props.length + ' guest houses · ' + props.filter((x) => x.status === 'Live').length + ' live' : p.property + ', ' + p.city + ' · ' + (state.view === 'calendar' || state.view === 'bookings' ? fShort(period.from) + ' – ' + fLong(period.to) : rangeLabel());
+  $('#viewSub').textContent = state.view === 'users' ? (DATA.client ? DATA.client.name + ' · ' : '') + (DATA.users || []).length + ' users' : state.view === 'houses' ? props.length + ' guest houses · ' + props.filter((x) => x.status === 'Live').length + ' live' : p.property + ', ' + p.city + ' · ' + (state.view === 'calendar' || state.view === 'bookings' ? fShort(period.from) + ' – ' + fLong(period.to) : rangeLabel());
   $('#rangeWrap').classList.toggle('invisible', !(state.view === 'overview' || state.view === 'rack'));
-  $('#propWrap').classList.toggle('invisible', state.view === 'houses');
+  $('#propWrap').classList.toggle('invisible', state.view === 'houses' || state.view === 'users');
   $$('#rangeWrap button').forEach((b) => b.toggleAttribute('data-active', b.dataset.range === state.range));
   $('#navCount').textContent = myB().length;
-  ({overview: renderOverview, rack: renderRack, calendar: renderCal, bookings: renderBookings, houses: renderHouses})[state.view]();
+  ({overview: renderOverview, rack: renderRack, calendar: renderCal, bookings: renderBookings, houses: renderHouses, users: () => renderUsersView()})[state.view]();
 };
 const closeSide = () => { $('#side').classList.add('-translate-x-full'); $('#scrimSide').classList.add('hidden'); };
 const go = (v) => { state.view = v; try { history.replaceState(null, '', '#' + v); } catch (e) {} closeSide(); render(); window.scrollTo({top: 0, behavior: 'smooth'}); };
@@ -693,7 +745,7 @@ ZUI.auto(document.body);
 (() => {   // client branding + Zuna admin tools
   const cl = DATA.client;
   if (cl) { $$('#side img[alt="LTM"]').forEach((im) => { im.alt = cl.name; if (cl.logo) im.src = cl.logo; else { const t = h('span', 'text-sm font-black text-zuna-900 px-1', cl.name); im.replaceWith(t); } }); }
-  if (USER.manager && !USER.admin) { const nav = $('#nav'); const a = h('a', 'navbtn'); a.href = '/manage'; a.appendChild(icon('users', 'w-[18px] h-[18px] shrink-0')); a.appendChild(h('span', 'sb-label', 'Users & access')); nav.appendChild(a); }
+  if (USER.manager && !USER.admin) { const nav = $('#nav'); const b = h('button', 'navbtn'); b.dataset.view = 'users'; b.title = 'Users & access'; b.appendChild(icon('users', 'w-[18px] h-[18px] shrink-0')); b.appendChild(h('span', 'sb-label', 'Users & access')); b.onclick = () => go('users'); nav.appendChild(b); }
   if (USER.admin) {
     const nav = $('#nav'); const a = h('a', 'navbtn'); a.href = '/admin'; a.appendChild(icon('shield-check', 'w-[18px] h-[18px] shrink-0')); a.appendChild(h('span', 'sb-label', 'Admin panel')); nav.appendChild(a);
     if ((DATA.clients || []).length > 1) { const w = h('div', 'px-5 mt-3 sb-full'); const s = h('select', 'w-full rounded-lg bg-white/10 text-white text-xs font-semibold px-2 py-1.5 ring-1 ring-white/15');
@@ -714,7 +766,7 @@ ZUI.auto(document.body);
 })();
 
 hydrateIcons();
-const hs = location.hash.slice(1); if (TITLES[hs]) state.view = hs;
+const hs = location.hash.slice(1); if (TITLES[hs] && (hs !== 'users' || (USER.manager && !USER.admin))) state.view = hs;
 /* auto-refresh: reload data every 10 minutes while the tab is open (quietly, keeps the current page) */
 const LOADED = Date.now();
 setInterval(() => {

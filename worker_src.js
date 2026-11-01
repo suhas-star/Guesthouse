@@ -741,6 +741,7 @@ async function dashboard(env, user, url) {
     data.bookings = (data.bookings || []).filter((b) => names.has(b.property));
     data.client = {id: client.id, name: client.name, logo: client.logo_file ? "/files/" + client.logo_file : ""};
     if (user.admin) data.clients = clients.map((c) => ({id: c.id, name: c.name}));
+    if (user.manager && !user.admin) data.users = await clientUsers(env, client.id);   // Users & access view, shown without a page load
   }
   const payload = JSON.stringify(data).replace(/</g, "\\u003c");
   const userJs = JSON.stringify({name: user.name || "", email: user.email, admin: !!user.admin, manager: !!user.manager}).replace(/</g, "\\u003c");
@@ -813,10 +814,7 @@ async function handle(request, env) {
       const u = await currentUser(request, env);
       if (!u) return signIn(request);
       if (u.admin) return redirect("/admin");
-      if (!u.manager) return redirect("/");
-      const safe = (o) => JSON.stringify(o).replace(/</g, "\\u003c").replace(/\u2028|\u2029/g, "");
-      const st = await manageState(env, u);
-      return html(ADMIN.replace("__ME__", () => safe({name: u.name || "", email: u.email, mode: "client"})).replace("__STATE__", () => safe(st)), {"content-security-policy": ADMIN_CSP});
+      return redirect(u.manager ? "/#users" : "/");   // Users & access lives inside the dashboard
     }
     const fm = path.match(/^\/files\/(\d+)$/);
     if (fm) { const u = await currentUser(request, env); return u ? serveFile(env, u, +fm[1]) : new Response("Not found", {status: 404, headers: SEC}); }

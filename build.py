@@ -13,7 +13,7 @@ open('page.html','w').write(app)
 rows=lambda f:list(csv.DictReader(open(SCR+f)))
 data={'bookings':rows('ltm_gh_bookings.csv'),'properties':rows('ltm_gh_properties.csv'),'period':json.load(open(SCR+'ltm_gh_period.json'))}
 open('preview.html','w').write(app.replace('__USER__',json.dumps({'name':'Suhas','email':'suhas@zuna.ai'})).replace('__DATA__',json.dumps(data).replace('</','<\\/')))
-lg=open('login.html').read().replace('/*__CSS__*/',css).replace('__ZUNA__',logos[0]).replace('__LTM__',ltm).replace('__DOTS__',open('dots.json').read())
+lg=open('login.html').read().replace('</body>',open('cursor_ring.html').read()+'</body>',1).replace('/*__CSS__*/',css).replace('__ZUNA__',logos[0]).replace('__LTM__',ltm).replace('__DOTS__',open('dots.json').read())
 open('login_page.html','w').write(lg)
 w=open('worker_src.js').read()
 adm=open('admin.html').read().replace('/*__UIKIT__*/',open('ui_kit.js').read()).replace('__ICONS__',icons).replace('/*__CSS__*/',css).replace('__ZUNA__',logos[0])

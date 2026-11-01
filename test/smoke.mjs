@@ -181,7 +181,10 @@ check('old host redirects to PRIMARY_HOST', r.status === 301 && r.headers.get('l
   check('client admin cannot reset a Zuna admin', (await M('user/reset', {email: 'boss@zuna.example'})).status === 400);
   check('viewer cannot use the manage API', (await call('/api/manage/state', {method: 'POST', body: {}, cookie: asha})).status === 403);
   check('client admin cannot use the Zuna admin API', (await call('/api/admin/state', {method: 'POST', body: {}, cookie: meera})).status === 403);
-  check('/manage page served to client admin', (await (await call('/manage', {cookie: meera})).text()).includes('"mode":"client"'));
+  { const rr = await call('/manage', {cookie: meera}); check('/manage opens Users & access inside the dashboard', rr.status === 302 && rr.headers.get('location').endsWith('/#users')); }
+  { const pg = await (await call('/', {cookie: meera})).text(); const dd = JSON.parse(pg.match(/window\.__LTMGH_DATA = (.*?);\nconst REPORT_DATE/s)[1]);
+    check('client admin dashboard carries its users (no extra load)', Array.isArray(dd.users) && dd.users.some((u) => u.email === 'kiran@acme.example'));
+    const vp = await (await call('/', {cookie: asha})).text(); check('viewer dashboard carries no user list', !JSON.parse(vp.match(/window\.__LTMGH_DATA = (.*?);\nconst REPORT_DATE/s)[1]).users); }
   // documents
   const pdf = 'data:application/pdf;base64,' + Buffer.from('%PDF-1.4\n1 0 obj<<>>endobj\ntrailer<<>>\n%%EOF').toString('base64');
   const soon = new Date(Date.now() + 5.5 * 3600e3 + 30 * 864e5).toISOString().slice(0, 10);

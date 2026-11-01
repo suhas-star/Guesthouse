@@ -1,0 +1,32 @@
+<!-- Zuna pointer for the sign-in page: green dot + trailing ring (mouse / trackpad only; off for reduced motion) -->
+<style>
+html.zr, html.zr a, html.zr button, html.zr label, html.zr [role=button] { cursor: none; }
+html.zr input, html.zr textarea { cursor: text; }
+#zrDot, #zrRing { position: fixed; left: 0; top: 0; z-index: 10000; pointer-events: none; border-radius: 50%; opacity: 0; will-change: transform; }
+#zrDot { width: 8px; height: 8px; margin: -4px 0 0 -4px; background: #02C988; box-shadow: 0 0 0 2px rgba(255,255,255,.85); transition: opacity .2s, width .15s, height .15s, margin .15s; }
+#zrRing { width: 34px; height: 34px; margin: -17px 0 0 -17px; border: 2px solid rgba(2,201,136,.75); transition: opacity .2s, width .2s ease, height .2s ease, margin .2s ease, background-color .2s, border-color .2s; }
+html.zr-on #zrDot, html.zr-on #zrRing { opacity: 1; }
+html.zr-hot #zrRing { width: 52px; height: 52px; margin: -26px 0 0 -26px; background: rgba(2,201,136,.14); border-color: #02C988; }
+html.zr-text #zrDot { opacity: 0; }
+html.zr-text #zrRing { width: 22px; height: 22px; margin: -11px 0 0 -11px; border-color: rgba(2,201,136,.45); }
+html.zr-down #zrRing { width: 26px; height: 26px; margin: -13px 0 0 -13px; }
+</style>
+<div id="zrDot" aria-hidden="true"></div><div id="zrRing" aria-hidden="true"></div>
+<script>
+(function () {
+  if (!window.matchMedia || !matchMedia('(pointer: fine)').matches || matchMedia('(prefers-reduced-motion: reduce)').matches) { var a = document.getElementById('zrDot'), b = document.getElementById('zrRing'); a && a.remove(); b && b.remove(); return; }
+  var R = document.documentElement, dot = document.getElementById('zrDot'), ring = document.getElementById('zrRing'), x = -100, y = -100, rx = -100, ry = -100;
+  R.classList.add('zr');
+  (function loop() { rx += (x - rx) * 0.2; ry += (y - ry) * 0.2; ring.style.transform = 'translate(' + rx + 'px,' + ry + 'px)'; requestAnimationFrame(loop); })();
+  document.addEventListener('mousemove', function (e) {
+    x = e.clientX; y = e.clientY; dot.style.transform = 'translate(' + x + 'px,' + y + 'px)';
+    if (!R.classList.contains('zr-on')) { rx = x; ry = y; R.classList.add('zr-on'); }
+    var t = e.target;
+    R.classList.toggle('zr-text', !!(t.closest && t.closest('input, textarea')));
+    R.classList.toggle('zr-hot', !!(t.closest && t.closest('a, button, label, [role=button]')) && !R.classList.contains('zr-text'));
+  }, {passive: true});
+  document.addEventListener('mouseleave', function () { R.classList.remove('zr-on'); });
+  document.addEventListener('mousedown', function () { R.classList.add('zr-down'); });
+  document.addEventListener('mouseup', function () { R.classList.remove('zr-down'); });
+})();
+</script>

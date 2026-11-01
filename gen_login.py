@@ -1,5 +1,5 @@
 L=open('login_form.html').read().split('\n')
-head='\n'.join(L[:43])
+_T='\n'.join(L); head=_T[:_T.index('</head>')+len('</head>')]   # everything up to and including </head>
 T='\n'.join(L); fa=T.index('  <section class="flex flex-col px-6'); fb=T.index('</section>',fa)+len('</section>')
 form=T[fa:fb].replace('<section class="flex flex-col px-6','<section class="flex flex-col items-center px-6',1).replace('<p class="a-in text-xs text-zuna-400" style="--d:560ms">','<p class="a-in w-full max-w-sm text-xs text-zuna-400" style="--d:560ms">',1)
 sa=T.index('<script>'); sb=T.index('</script>',sa)+len('</script>')
@@ -10,7 +10,16 @@ EXTRA='''<style>
 @keyframes tick{0%,22%{transform:translateY(0)}25%,47%{transform:translateY(-25%)}50%,72%{transform:translateY(-50%)}75%,97%{transform:translateY(-75%)}100%{transform:translateY(0)}}
 .ticker{animation:tick 10s cubic-bezier(.7,0,.3,1) infinite}
 #globe{cursor:grab;touch-action:pan-y}
-@media (min-width:1024px){main.lgfit{height:100vh;height:100dvh;overflow:hidden}main.lgfit>section:last-child{overflow-y:auto}}
+@media (min-width:1024px){main.lgfit{height:100vh;height:100dvh;min-height:0;overflow:hidden;grid-template-rows:minmax(0,1fr)}main.lgfit>section{min-height:0}main.lgfit>section:last-child{overflow-y:auto}}
+@media (min-width:2200px) and (min-height:1200px){html{font-size:20px}}
+@media (min-width:1024px) and (max-height:680px){
+.gl-cap{margin:auto 1.25rem 1.25rem;padding:1rem 1.5rem}.gl-cap h2{font-size:22px;margin-top:.4rem}
+#f img.h-14{height:2.5rem}
+#f>p.mt-12{margin-top:.9rem}
+#f .mt-7{margin-top:.9rem}
+#f .space-y-4>*+*{margin-top:.75rem}
+main.lgfit>section:last-child>p:last-child{display:none}
+}
 @media (min-width:1024px) and (max-height:780px){
 main.lgfit>section:last-child{padding-top:1rem;padding-bottom:1rem}
 main.lgfit>section:last-child>.h-9{height:0}
@@ -25,7 +34,7 @@ main.lgfit>section:last-child>.h-9{height:0}
 .gl-foot{padding-left:2.5rem;padding-right:2.5rem;padding-bottom:1.25rem}
 }
 </style>'''
-head=head.replace('</head>',EXTRA+'\n</head>')
+assert head.endswith('</head>'); head=head.replace('</head>',EXTRA+'\n</head>')
 import os
 VARIANT=os.environ.get('LOGIN_VARIANT','C')
 BG='''<div class="absolute inset-0 gridpan"></div>
@@ -62,7 +71,7 @@ PANELS={
 'C':'''<section class="hidden lg:flex relative overflow-hidden m-3 rounded-3xl bg-zuna-900 flex-col">
     '''+BG+'''
     <canvas id="globe" data-r=".46" data-cy=".44" class="absolute inset-0 w-full h-full" aria-hidden="true"></canvas>
-    <div class="relative mt-auto m-8 rounded-2xl bg-white/[.06] ring-1 ring-white/10 backdrop-blur-md px-7 py-6 pointer-events-none">
+    <div class="gl-cap relative mt-auto m-8 rounded-2xl bg-white/[.06] ring-1 ring-white/10 backdrop-blur-md px-7 py-6 pointer-events-none">
       <div class="flex items-center gap-2 text-xs font-bold tracking-[.14em] uppercase text-mint-400"><span class="w-2 h-2 rounded-full bg-mint-500 shadow-[0_0_10px_#02C988]"></span>Zuna Guest House Management</div>
       <h2 class="mt-2.5 text-[28px] font-bold text-white leading-tight tracking-tight">Every guest house. <span class="text-mint-400">One live view.</span></h2>
     </div>

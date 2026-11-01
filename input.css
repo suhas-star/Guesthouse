@@ -31,8 +31,7 @@
   #side { transition: width .32s cubic-bezier(.2,.8,.2,1), transform .3s ease !important; overflow-x: hidden; }
   #side .navbtn { padding-left: 15px; padding-right: 15px; white-space: nowrap; }
   #side .sb-full, #side .sb-label { white-space: nowrap; }
-  html:not(.sb-c) #side .sb-full, html:not(.sb-c) #side .sb-label { animation: sbIn .24s .14s cubic-bezier(.2,.8,.2,1) both; }
-  html.sb-c #side .sb-mini { animation: sbIn .2s .08s ease both; }
+  /* one motion: labels are simply revealed (clipped) as the sidebar widens; no separate slide-in */
   html.sb-boot #side .sb-full, html.sb-boot #side .sb-label, html.sb-boot #side .sb-mini, html.sb-boot #app, html.sb-boot #side { animation: none !important; transition: none !important; }
 }
 

@@ -846,6 +846,7 @@ ZUI.auto(document.body); ZUI.clickables(document.body);
   // charts then resize quietly, without replaying their grow-in animation
   const fitCharts = () => Object.values(charts).forEach((c) => { try { c && c.updateOptions && c.updateOptions({chart: {animations: {enabled: false}}}, false, false); } catch (e) {} });
   const setCol = (v) => { const R = document.documentElement, mw = $('#mainWrap');
+    if (R.classList.contains('sb-anim') || R.classList.contains('sb-c') === v) return;   // ignore a second click while it is still moving
     try { sessionStorage.setItem('ltmgh.sb', v ? 'closed' : 'open'); } catch (e) {}
     if (!matchMedia('(min-width: 1024px)').matches || matchMedia('(prefers-reduced-motion: reduce)').matches) { R.classList.toggle('sb-c', v); setTimeout(fitCharts, 50); return; }
     const x0 = mw.getBoundingClientRect().left; R.classList.add('sb-anim'); R.classList.toggle('sb-c', v);

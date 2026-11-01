@@ -3,7 +3,7 @@
 <head>
 <script>try{if(localStorage.getItem('zp.theme')==='dark')document.documentElement.classList.add('dark')}catch(e){}
 /* sidebar starts closed (icons only) before the first paint; opening it lasts for this visit only */
-try{if(sessionStorage.getItem('zp.hi'))sessionStorage.removeItem('ltmgh.sb');if(sessionStorage.getItem('ltmgh.sb')!=='open')document.documentElement.classList.add('sb-c')}catch(e){document.documentElement.classList.add('sb-c')}</script>
+document.documentElement.classList.add('sb-boot');setTimeout(function(){document.documentElement.classList.remove('sb-boot')},400);try{if(sessionStorage.getItem('zp.hi'))sessionStorage.removeItem('ltmgh.sb');if(sessionStorage.getItem('ltmgh.sb')!=='open')document.documentElement.classList.add('sb-c')}catch(e){document.documentElement.classList.add('sb-c')}</script>
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width,initial-scale=1">
 <meta name="robots" content="noindex,nofollow">

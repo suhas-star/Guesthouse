@@ -21,13 +21,19 @@
 .apexcharts-tooltip { border-radius: 12px !important; border: 1px solid #e6e2f6 !important; box-shadow: 0 12px 32px rgba(18,0,90,.14) !important; }
 .apexcharts-bar-area { cursor: pointer; }
 @media (min-width: 1024px) {
-  html.sb-c #app { grid-template-columns: 76px minmax(0,1fr); }
-  html.sb-c #side { width: 76px; }
+  /* smooth open / close: width glides, icons never move, labels fade in once there is room */
+  html.sb-c #app { grid-template-columns: 72px minmax(0,1fr); }
+  html.sb-c #side { width: 72px; }
   html.sb-c #side .sb-full, html.sb-c #side .sb-label { display: none !important; }
   html.sb-c #side .sb-mini { display: flex !important; }
-  html.sb-c #side .navbtn { justify-content: center; padding-left: 0; padding-right: 0; }
   html.sb-c #side .sb-user { flex-direction: column; gap: .5rem; }
-  #app { transition: grid-template-columns .3s ease; }
+  #app { transition: grid-template-columns .32s cubic-bezier(.2,.8,.2,1); }
+  #side { transition: width .32s cubic-bezier(.2,.8,.2,1), transform .3s ease !important; overflow-x: hidden; }
+  #side .navbtn { padding-left: 15px; padding-right: 15px; white-space: nowrap; }
+  #side .sb-full, #side .sb-label { white-space: nowrap; }
+  html:not(.sb-c) #side .sb-full, html:not(.sb-c) #side .sb-label { animation: sbIn .24s .14s cubic-bezier(.2,.8,.2,1) both; }
+  html.sb-c #side .sb-mini { animation: sbIn .2s .08s ease both; }
+  html.sb-boot #side .sb-full, html.sb-boot #side .sb-label, html.sb-boot #side .sb-mini, html.sb-boot #app, html.sb-boot #side { animation: none !important; transition: none !important; }
 }
 
 /* ---------- Zuna-branded scrollbars (page, tables, room rack, drawer, sidebar, login) ---------- */
@@ -66,6 +72,7 @@ tbody tr { transition: background-color .15s ease; }
 .navbtn svg { transition: transform .18s ease; }
 .navbtn:hover svg { transform: translateX(2px); }
 ::placeholder { color: #716b9b; opacity: 1; }
+@keyframes sbIn { from { opacity: 0; transform: translateX(-6px); } to { opacity: 1; transform: none; } }
 @media (prefers-reduced-motion: reduce) {
   *, *::before, *::after { animation-duration: .01ms !important; animation-iteration-count: 1 !important; transition-duration: .01ms !important; scroll-behavior: auto !important; }
 }

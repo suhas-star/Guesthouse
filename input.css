@@ -152,3 +152,5 @@ html.dark .apexcharts-gridline, html.dark .apexcharts-xaxis line, html.dark .ape
 html.dark .logo-box, html.dark .logo-box * { color: #12005A; }
 html.dark .divide-zuna-50 > :not([hidden]) ~ :not([hidden]), html.dark .divide-zuna-100 > :not([hidden]) ~ :not([hidden]) { border-color: #2a2066; }
 html.dark .divide-amber-100 > :not([hidden]) ~ :not([hidden]) { border-color: rgba(245,158,11,.25); }
+html.dark .avatar { background-image: linear-gradient(135deg, #0d6b55, #3a24b8); color: #ffffff; box-shadow: 0 0 0 1px rgba(255,255,255,.08); }
+html.dark .bar-fill { background-color: rgba(2,201,136,.38); box-shadow: inset 0 0 0 1px rgba(2,201,136,.45); }

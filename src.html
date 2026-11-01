@@ -277,7 +277,7 @@ const occTag = (o) => { const t = h('span', 'inline-flex items-center gap-1 roun
 const warnIcon = (title, cls = 'w-4 h-4') => { const s = h('span', 'inline-grid place-items-center text-rose-600 shrink-0'); s.appendChild(icon('triangle-alert', cls)); s.title = title; s.setAttribute('role', 'img'); s.setAttribute('aria-label', title); return s; };
 const warnBox = (title, text) => { const b = h('div', 'flex gap-3 rounded-xl bg-rose-50 ring-1 ring-rose-200 p-3.5 text-sm text-rose-800'); b.appendChild(warnIcon(title, 'w-5 h-5')); const m = h('div', 'space-y-0.5'); m.appendChild(h('p', 'font-semibold', title)); m.appendChild(h('p', 'text-rose-700', text)); b.appendChild(m); return b; };
 const gradeTag = (g) => h('span', 'inline-flex items-center rounded-md px-2 py-0.5 text-xs font-bold ring-1 ring-zuna-100 bg-white text-zuna-700', g);
-const avatar = (n, size = 'w-9 h-9 text-xs') => h('span', 'grid place-items-center shrink-0 rounded-full bg-gradient-to-br from-mint-100 to-zuna-100 text-zuna-800 font-bold ' + size, initials(n));
+const avatar = (n, size = 'w-9 h-9 text-xs') => h('span', 'avatar grid place-items-center shrink-0 rounded-full bg-gradient-to-br from-mint-100 to-zuna-100 text-zuna-800 font-bold ' + size, initials(n));
 const stat3 = (items) => { const g = h('div', 'grid grid-cols-3 gap-2'); items.forEach(([v, l]) => { const c = h('div', 'rounded-xl bg-zuna-50 ring-1 ring-zuna-100 p-3 text-center'); c.appendChild(h('div', 'text-xl font-bold tabular-nums', String(v))); c.appendChild(h('div', 'text-xs text-zuna-500 mt-0.5', l)); g.appendChild(c); }); return g; };
 const kv = (pairs) => { const dl = h('dl', 'grid grid-cols-[120px_1fr] gap-x-4 gap-y-2.5 text-sm'); pairs.forEach(([k, v]) => { dl.appendChild(h('dt', 'text-zuna-500 font-medium', k)); dl.appendChild(h('dd', 'font-medium', v || '—')); }); return dl; };
 
@@ -419,7 +419,7 @@ const barList = (el, rows, key) => {
   items.forEach(([k, v]) => {
     const r = h('div', 'flex items-center gap-3');
     const bar = h('div', 'relative flex-1 h-8 rounded-lg bg-zuna-50 overflow-hidden');
-    const f = h('div', 'absolute inset-y-0 left-0 rounded-lg bg-mint-100 transition-[width] duration-700'); f.style.width = '0%'; bar.appendChild(f);
+    const f = h('div', 'bar-fill absolute inset-y-0 left-0 rounded-lg bg-mint-100 transition-[width] duration-700'); f.style.width = '0%'; bar.appendChild(f);
     bar.appendChild(h('span', 'relative z-10 px-3 leading-8 text-sm font-medium', k));
     r.appendChild(bar); r.appendChild(h('span', 'w-8 text-right text-sm font-bold tabular-nums', String(v)));
     el.appendChild(r); requestAnimationFrame(() => requestAnimationFrame(() => { f.style.width = (v / max * 100) + '%'; }));

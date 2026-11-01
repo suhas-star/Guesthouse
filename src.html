@@ -630,6 +630,14 @@ const renderHouses = () => {
       const tags = (label, arr, cls) => { if (!arr || !arr.length) return; const w = h('div'); w.appendChild(h('p', 'text-xs font-semibold text-zuna-500 mb-1.5', label)); const t = h('div', 'flex flex-wrap gap-1.5'); arr.forEach((v) => t.appendChild(h('span', 'inline-flex rounded-md px-2 py-0.5 text-xs font-semibold ' + cls, v))); w.appendChild(t); extra.appendChild(w); };
       tags('Inclusions', p.inclusions, 'bg-mint-50 text-mint-700 ring-1 ring-mint-200'); tags('Amenities', p.amenities, 'bg-white text-zuna-700 ring-1 ring-zuna-100');
       if (p.cancellation) { const w = h('div', 'rounded-xl bg-amber-50/60 ring-1 ring-amber-200 px-3 py-2'); w.appendChild(h('p', 'text-xs font-semibold text-amber-800', 'Cancellation policy')); w.appendChild(h('p', 'text-sm text-zuna-700 whitespace-pre-line', p.cancellation)); extra.appendChild(w); }
+      if ((p.documents || []).length) { const w = h('div'); w.appendChild(h('p', 'text-xs font-semibold text-zuna-500 mb-1.5', 'Documents')); const l = h('div', 'rounded-xl ring-1 ring-zuna-100 divide-y divide-zuna-50');
+        const fd = (d) => new Date(d + 'T00:00:00').toLocaleDateString('en-IN', {day: '2-digit', month: 'short', year: 'numeric'});
+        p.documents.forEach((d) => { const r = h('a', 'flex items-center gap-3 px-3 py-2 hover:bg-zuna-50/60 transition-colors'); r.href = d.url; r.target = '_blank'; r.rel = 'noopener';
+          r.appendChild(h('span', 'grid place-items-center w-8 h-8 rounded-lg shrink-0 text-[10px] font-bold ' + (d.mime === 'application/pdf' ? 'bg-rose-50 text-rose-700' : 'bg-zuna-50 text-zuna-600'), d.mime === 'application/pdf' ? 'PDF' : 'IMG'));
+          const m = h('div', 'min-w-0 flex-1'); m.appendChild(h('p', 'text-sm font-semibold truncate', d.title)); const sub = [d.type !== d.title ? d.type : '', d.number ? 'No. ' + d.number : ''].filter(Boolean).join(' · '); if (sub) m.appendChild(h('p', 'text-xs text-zuna-500 truncate', sub)); r.appendChild(m);
+          const n = d.days_left, [t, cl] = d.state === 'expired' ? ['Expired ' + fd(d.expires), 'bg-rose-50 text-rose-700 ring-rose-200'] : d.state === 'expiring' ? [n === 0 ? 'Expires today' : 'Expires in ' + n + (n === 1 ? ' day' : ' days'), 'bg-amber-50 text-amber-800 ring-amber-200'] : d.state === 'valid' ? ['Valid till ' + fd(d.expires), 'bg-mint-50 text-mint-700 ring-mint-200'] : ['No expiry', 'bg-zuna-50 text-zuna-500 ring-zuna-100'];
+          r.appendChild(h('span', 'shrink-0 inline-flex rounded-md px-2 py-0.5 text-[11px] font-semibold ring-1 whitespace-nowrap ' + cl, t)); r.appendChild(icon('external-link', 'w-3.5 h-3.5 text-zuna-400 shrink-0')); l.appendChild(r); });
+        w.appendChild(l); extra.appendChild(w); }
       if (extra.children.length) c.appendChild(extra);
       // contacts (toggle)
       const ct = h('div', 'hidden px-5 pb-4 space-y-2');
@@ -683,6 +691,7 @@ ZUI.auto(document.body);
 (() => {   // client branding + Zuna admin tools
   const cl = DATA.client;
   if (cl) { $$('#side img[alt="LTM"]').forEach((im) => { im.alt = cl.name; if (cl.logo) im.src = cl.logo; else { const t = h('span', 'text-sm font-black text-zuna-900 px-1', cl.name); im.replaceWith(t); } }); }
+  if (USER.manager && !USER.admin) { const nav = $('#nav'); const a = h('a', 'navbtn'); a.href = '/manage'; a.appendChild(icon('users', 'w-[18px] h-[18px] shrink-0')); a.appendChild(h('span', 'sb-label', 'Users & access')); nav.appendChild(a); }
   if (USER.admin) {
     const nav = $('#nav'); const a = h('a', 'navbtn'); a.href = '/admin'; a.appendChild(icon('shield-check', 'w-[18px] h-[18px] shrink-0')); a.appendChild(h('span', 'sb-label', 'Admin panel')); nav.appendChild(a);
     if ((DATA.clients || []).length > 1) { const w = h('div', 'px-5 mt-3 sb-full'); const s = h('select', 'w-full rounded-lg bg-white/10 text-white text-xs font-semibold px-2 py-1.5 ring-1 ring-white/15');

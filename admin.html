@@ -21,9 +21,9 @@ input:checked+.sw{background:#02C988}input:checked+.sw::after{transform:translat
 <body class="bg-zuna-50/60 text-zuna-900 antialiased font-sans min-h-screen">
 <header class="sticky top-0 z-30 bg-zuna-900 text-white border-t-4 border-mint-500">
   <div class="max-w-7xl mx-auto px-4 sm:px-6 h-14 flex items-center gap-3">
-    <a href="/" title="Go to dashboard" class="bg-white rounded-lg px-2 py-1 inline-flex transition hover:ring-2 hover:ring-mint-500 focus-visible:ring-2 focus-visible:ring-mint-500"><img src="__ZUNA__" alt="Zuna · go to dashboard" class="h-5"></a>
+    <a id="hdLogo" href="/" title="Go to dashboard" class="bg-white rounded-lg px-2 py-1 inline-flex transition hover:ring-2 hover:ring-mint-500 focus-visible:ring-2 focus-visible:ring-mint-500"><img src="__ZUNA__" alt="Zuna · go to dashboard" class="h-5"></a>
     <span class="hidden sm:block w-px h-6 bg-white/15"></span>
-    <div class="leading-tight"><p class="font-bold text-[15px]">Admin console</p><p class="hidden sm:block text-[11px] text-zuna-200">Guest House Management</p></div>
+    <div class="leading-tight"><p id="hdTitle" class="font-bold text-[15px]">Admin console</p><p id="hdSub" class="hidden sm:block text-[11px] text-zuna-200">Guest House Management</p></div>
     <div class="ml-auto flex items-center gap-2 text-sm">
       <a href="/" class="hidden sm:inline-flex items-center gap-2 h-9 rounded-xl px-3.5 font-semibold text-white bg-white/10 ring-1 ring-white/15 transition hover:bg-white/15 hover:ring-mint-500/60 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-mint-500">
         <svg class="w-4 h-4 text-mint-400" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><rect x="3" y="3" width="7" height="9" rx="1.5"/><rect x="14" y="3" width="7" height="5" rx="1.5"/><rect x="14" y="12" width="7" height="9" rx="1.5"/><rect x="3" y="16" width="7" height="5" rx="1.5"/></svg>
@@ -37,7 +37,7 @@ input:checked+.sw{background:#02C988}input:checked+.sw::after{transform:translat
         <div id="acctMenu" role="menu" class="hidden absolute right-0 mt-2 w-64 rounded-2xl bg-white text-zuna-900 p-1.5 shadow-[0_18px_40px_-12px_rgba(18,0,90,.35)] ring-1 ring-zuna-100 z-50">
           <div class="px-3 py-2.5 border-b border-zuna-100 mb-1">
             <p id="meName2" class="text-sm font-semibold truncate"></p><p id="me2" class="text-xs text-zuna-500 truncate"></p>
-            <span class="mt-1.5 inline-flex rounded-full px-2 py-0.5 text-[10px] font-bold uppercase tracking-wide bg-mint-50 text-mint-700 ring-1 ring-mint-200">Administrator</span>
+            <span class="mt-1.5 inline-flex rounded-full px-2 py-0.5 text-[10px] font-bold uppercase tracking-wide bg-mint-50 text-mint-700 ring-1 ring-mint-200" id="meRole">Administrator</span>
           </div>
           <a role="menuitem" href="/" class="flex items-center gap-2.5 rounded-xl px-3 py-2 text-sm font-medium hover:bg-zuna-50"><svg class="w-4 h-4 text-zuna-400" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><rect x="3" y="3" width="7" height="9" rx="1.5"/><rect x="14" y="3" width="7" height="5" rx="1.5"/><rect x="14" y="12" width="7" height="9" rx="1.5"/><rect x="3" y="16" width="7" height="5" rx="1.5"/></svg>Open dashboard</a>
           <a role="menuitem" href="/logout" class="flex items-center gap-2.5 rounded-xl px-3 py-2 text-sm font-medium text-rose-600 hover:bg-rose-50"><svg class="w-4 h-4" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M9 21H5a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h4"/><path d="m16 17 5-5-5-5"/><path d="M21 12H9"/></svg>Log out</a>
@@ -47,9 +47,9 @@ input:checked+.sw{background:#02C988}input:checked+.sw::after{transform:translat
   </div>
 </header>
 
-<div class="max-w-7xl mx-auto px-4 sm:px-6 py-6 grid gap-6 lg:grid-cols-[260px_minmax(0,1fr)]">
+<div id="layout" class="max-w-7xl mx-auto px-4 sm:px-6 py-6 grid gap-6 lg:grid-cols-[260px_minmax(0,1fr)]">
   <!-- clients -->
-  <aside class="space-y-3">
+  <aside id="aside" class="space-y-3">
     <div class="flex items-center justify-between"><h2 class="text-sm font-bold">Clients</h2><button id="newClient" class="btn-primary !py-1.5 !px-3 text-xs">+ New client</button></div>
     <div id="clients" class="space-y-2"></div>
   </aside>
@@ -78,13 +78,17 @@ const ME = __ME__;
 const $ = (s, r = document) => r.querySelector(s), $$ = (s, r = document) => [...r.querySelectorAll(s)];
 const h = (tag, cls, text) => { const e = document.createElement(tag); if (cls) e.className = cls; if (text != null) e.textContent = text; return e; };
 let S = {clients: []}, cur = null, tab = 'gh';
+// client admins get the same page with only their own users (/manage)
+const CLIENT_MODE = ME.mode === 'client', API = CLIENT_MODE ? '/api/manage/' : '/api/admin/';
+if (CLIENT_MODE) { tab = 'users'; document.title = 'Users & access · Guest House Management'; $('#aside').remove(); $('#layout').classList.remove('lg:grid-cols-[260px_minmax(0,1fr)]'); $('#layout').classList.replace('max-w-7xl', 'max-w-5xl');
+  $('#hdTitle').textContent = 'Users & access'; $('#meRole').textContent = 'Client admin'; }
 { const nm = (ME.name || ME.email.split('@')[0]).trim(); $('#me').textContent = $('#me2').textContent = ME.email; $('#meName').textContent = $('#meName2').textContent = nm;
   $('#meAv').textContent = nm.split(/\s+/).map((w) => w[0]).join('').slice(0, 2).toUpperCase();
   const btn = $('#acct'), menu = $('#acctMenu'), set = (o) => { menu.classList.toggle('hidden', !o); btn.setAttribute('aria-expanded', o ? 'true' : 'false'); };
   btn.onclick = (e) => { e.stopPropagation(); set(menu.classList.contains('hidden')); };
   document.addEventListener('click', (e) => { if (!menu.contains(e.target)) set(false); }); document.addEventListener('keydown', (e) => { if (e.key === 'Escape') set(false); }); }
 const toast = (m, bad) => { const t = $('#toast'); t.textContent = m; t.style.background = bad ? '#be123c' : '#12005A'; t.classList.remove('opacity-0', 'translate-y-3'); clearTimeout(toast.t); toast.t = setTimeout(() => t.classList.add('opacity-0', 'translate-y-3'), 2600); };
-const api = async (p, body) => { const r = await fetch('/api/admin/' + p, {method: 'POST', headers: {'content-type': 'application/json'}, body: JSON.stringify(body || {}), credentials: 'same-origin'}); const j = await r.json().catch(() => ({})); if (!r.ok) throw new Error(j.error || 'Request failed (' + r.status + ')'); return j; };
+const api = async (p, body) => { const r = await fetch(API + p, {method: 'POST', headers: {'content-type': 'application/json'}, body: JSON.stringify(body || {}), credentials: 'same-origin'}); const j = await r.json().catch(() => ({})); if (!r.ok) throw new Error(j.error || 'Request failed (' + r.status + ')'); return j; };
 const load = async (keep) => { S = await api('state'); if (!keep || !S.clients.find((c) => c.id === cur)) cur = (S.clients[0] || {}).id || null; render(); };
 const C = () => S.clients.find((c) => c.id === cur);
 const modal = (title, body) => { $('#mTitle').textContent = title; $('#mBody').replaceChildren(body); $('#modal').classList.remove('hidden'); document.body.style.overflow = 'hidden'; };
@@ -144,7 +148,9 @@ const photon = async (q, extra) => { if (q.length < 3) return []; const r = awai
 
 // ---------- render ----------
 const render = () => {
-  const L = $('#clients'); L.replaceChildren();
+  if (CLIENT_MODE) { const c = S.clients[0]; if (c) { $('#hdSub').textContent = c.name + ' · Guest House Management'; const a = $('#hdLogo');
+      if (c.logo && !a.dataset.client) { a.dataset.client = '1'; const im = a.querySelector('img'); im.src = c.logo; im.alt = c.name + ' · go to dashboard'; im.className = 'h-6 max-w-[120px] object-contain'; } } }
+  const L = $('#clients') || h('div'); L.replaceChildren();
   if (!S.clients.length) L.appendChild(h('p', 'text-sm text-zuna-500', 'No clients yet.'));
   S.clients.forEach((c) => { const b = h('button', 'w-full card p-3 flex items-center gap-3 text-left transition-all hover:shadow-md ' + (c.id === cur ? '!ring-2 !ring-mint-500' : ''));
     const lg = h('span', 'w-12 h-9 rounded-lg bg-white ring-1 ring-zuna-100 grid place-items-center overflow-hidden shrink-0'); if (c.logo) { const i = h('img', 'max-h-6 max-w-10 object-contain'); i.src = c.logo; lg.appendChild(i); } else lg.appendChild(h('span', 'text-xs font-bold text-zuna-400', c.name.slice(0, 3).toUpperCase()));
@@ -155,14 +161,18 @@ const render = () => {
   const top = h('div', 'flex flex-wrap items-center gap-3 mb-4');
   top.appendChild(h('h1', 'text-xl font-bold', c.name));
   const tabs = h('div', 'ml-auto flex gap-1 rounded-xl bg-white ring-1 ring-zuna-100 p-1');
-  [['gh', 'Guest houses'], ['bookings', 'Bookings'], ['users', 'Users'], ['settings', 'Client settings']].forEach(([k, l]) => { const b = h('button', 'tab rounded-lg px-3 py-1.5 text-xs font-semibold text-zuna-600', l); if (tab === k) b.dataset.on = ''; b.onclick = () => { tab = k; render(); }; tabs.appendChild(b); });
-  top.appendChild(tabs); D.appendChild(top);
+  (CLIENT_MODE ? [] : [['gh', 'Guest houses'], ['bookings', 'Bookings'], ['users', 'Users'], ['settings', 'Client settings']]).forEach(([k, l]) => { const b = h('button', 'tab rounded-lg px-3 py-1.5 text-xs font-semibold text-zuna-600', l); if (tab === k) b.dataset.on = ''; b.onclick = () => { tab = k; render(); }; tabs.appendChild(b); });
+  if (!CLIENT_MODE) top.appendChild(tabs); D.appendChild(top);
   ({gh: renderGH, bookings: renderBookings, users: renderUsers, settings: renderSettings})[tab](D, c);
 };
 
 const renderGH = (D, c) => {
   const bar = h('div', 'flex items-center gap-2 mb-3'); bar.appendChild(h('p', 'text-sm text-zuna-500', c.guesthouses.length + ' guest houses · ' + c.guesthouses.filter((g) => g.status === 'Live').length + ' live'));
   const add = h('button', 'ml-auto btn-primary', '+ Add guest house'); add.onclick = () => editGH(c, null); bar.appendChild(add); D.appendChild(bar);
+  const due = c.guesthouses.flatMap((g) => (g.documents || []).filter((d) => d.state === 'expired' || d.state === 'expiring').map((d) => ({g, d}))).sort((a, b) => a.d.days_left - b.d.days_left);
+  if (due.length) { const w = h('div', 'card p-4 mb-3 ring-1 !ring-amber-200 bg-amber-50/40'); w.appendChild(h('p', 'text-sm font-bold mb-2', '⚠ Documents needing renewal'));
+    due.forEach(({g, d}) => { const r = h('button', 'w-full flex flex-wrap items-center gap-2 rounded-lg px-2 py-1.5 text-left text-sm hover:bg-white'); r.appendChild(h('span', 'font-semibold', d.title)); r.appendChild(h('span', 'text-zuna-500', '· ' + g.property)); const ch = docChip(d); ch.classList.add('ml-auto'); r.appendChild(ch); r.onclick = () => editGH(c, g); w.appendChild(r); });
+    D.appendChild(w); }
   const g = h('div', 'grid gap-3 md:grid-cols-2');
   c.guesthouses.forEach((x) => { const card = h('div', 'card p-4 flex gap-3');
     const th = h('div', 'w-20 h-20 rounded-xl bg-zuna-50 ring-1 ring-zuna-100 overflow-hidden shrink-0 grid place-items-center text-zuna-300 text-xs'); const i = h('img', 'w-full h-full object-cover'); i.src = x.photos && x.photos[0] ? x.photos[0].url : ZUI.art.gh; i.alt = ''; th.appendChild(i);
@@ -171,6 +181,8 @@ const renderGH = (D, c) => {
     m.appendChild(h('p', 'text-xs text-zuna-500 mt-0.5', [x.city, x.rooms + ' rooms', (x.room_types || []).length + ' room types'].filter(Boolean).join(' · ')));
     m.appendChild(h('p', 'text-xs text-zuna-500 truncate', 'Eligible: ' + (x.eligible || '—')));
     const hidden = Object.entries(x.show || {}).filter(([, v]) => !v).map(([k]) => k); m.appendChild(h('p', 'text-[11px] mt-1 ' + (hidden.length ? 'text-amber-700' : 'text-mint-700'), hidden.length ? 'Hidden from client: ' + hidden.join(', ') : 'All details visible to client'));
+    const dc = x.documents || [], bad = dc.filter((d) => d.state === 'expired').length, soon = dc.filter((d) => d.state === 'expiring').length;
+    m.appendChild(h('p', 'text-[11px] ' + (bad ? 'text-rose-700 font-semibold' : soon ? 'text-amber-700 font-semibold' : 'text-zuna-500'), dc.length ? dc.length + (dc.length === 1 ? ' document' : ' documents') + (bad ? ' · ' + bad + ' expired' : '') + (soon ? ' · ' + soon + ' expiring soon' : '') : 'No documents'));
     const ed = h('button', 'btn !py-1 !px-2.5 text-xs mt-2', 'Edit'); ed.onclick = () => editGH(c, x); m.appendChild(ed);
     card.append(th, m); g.appendChild(card); });
   if (!c.guesthouses.length) g.appendChild(h('div', 'card p-8 text-center text-sm text-zuna-500 md:col-span-2', 'No guest houses yet.'));
@@ -250,6 +262,9 @@ const editGH = (c, x) => {
     fi.onchange = async () => { const files = [...fi.files]; for (const [n, file] of files.entries()) { try { toast('Uploading ' + (n + 1) + ' of ' + files.length + '…'); await api('photo', {gh_id: x.id, data_url: await toDataUrl(file, 1600, false)}); } catch (er) { toast(er.message, true); } }
       toast('Photos added'); await load(true); editGH(C(), C().guesthouses.find((g) => g.id === x.id)); };
     grid.appendChild(up); s6.appendChild(grid); }
+  // documents
+  const sD = sec('Documents', x.id ? 'Agreements, licences and certificates. Reminders are e-mailed before the expiry date.' : 'Save the guest house first, then add documents.');
+  if (x.id) docSection(sD, c, x);
   // visibility
   const s7 = sec('Show to client', 'Switch off anything the client should not see on their dashboard.'); const sw = h('div', 'grid sm:grid-cols-3 gap-3'); const shows = {};
   [['amenities', 'Amenities'], ['inclusions', 'Inclusions'], ['cancellation', 'Cancellation policy'], ['photos', 'Photos'], ['contacts', 'Contacts (POC)']].forEach(([k, l]) => { const e = switchEl(l, (x.show || {})[k] !== false); shows[k] = e.input; sw.appendChild(e); }); s7.appendChild(sw);
@@ -356,23 +371,74 @@ const editBooking = (c, b) => {
   modal(b ? 'Edit booking · ' + b.guest : 'New booking · ' + c.name, f);
 };
 
+// ---------- guest house documents ----------
+const DOC_TYPES = ['Lease agreement', 'Service agreement', 'Trade licence', 'Fire NOC', 'Police verification', 'FSSAI licence', 'GST registration', 'Insurance', 'Property tax receipt', 'Other'];
+const docChip = (d) => { const n = d.days_left;
+  if (d.state === 'none') return badge('No expiry', 'bg-zuna-50 text-zuna-500 ring-1 ring-zuna-100');
+  if (d.state === 'expired') return badge('Expired ' + fD(d.expires), 'bg-rose-50 text-rose-700 ring-1 ring-rose-200');
+  if (d.state === 'expiring') return badge(n === 0 ? 'Expires today' : 'Expires in ' + n + (n === 1 ? ' day' : ' days'), 'bg-amber-50 text-amber-800 ring-1 ring-amber-200');
+  return badge('Valid till ' + fD(d.expires), 'bg-mint-50 text-mint-700 ring-1 ring-mint-200'); };
+const readFile = (file) => new Promise((res, rej) => { if (file.type === 'application/pdf') { const fr = new FileReader(); fr.onerror = rej; fr.onload = () => res(fr.result); fr.readAsDataURL(file); } else toDataUrl(file, 2000, false).then(res, rej); });
+const docSection = (sec, c, x) => {
+  const list = h('div', 'rounded-xl ring-1 ring-zuna-100 divide-y divide-zuna-50 overflow-hidden'); sec.appendChild(list);
+  const reopen = async () => { await load(true); editGH(C(), C().guesthouses.find((g) => g.id === x.id)); setTimeout(() => { const el = [...$$('#mBody h4')].find((e) => e.textContent === 'Documents'); el && el.scrollIntoView({block: 'start'}); }, 50); };
+  (x.documents || []).forEach((d) => { const r = h('div', 'flex flex-wrap items-center gap-3 px-3 py-2.5 bg-white');
+    const ic = h('span', 'grid place-items-center w-9 h-9 rounded-lg shrink-0 text-[10px] font-bold ' + (d.mime === 'application/pdf' ? 'bg-rose-50 text-rose-700' : 'bg-zuna-50 text-zuna-600'), d.mime === 'application/pdf' ? 'PDF' : 'IMG'); r.appendChild(ic);
+    const m = h('div', 'min-w-0 flex-1'); m.appendChild(h('p', 'text-sm font-semibold truncate', d.title)); m.appendChild(h('p', 'text-xs text-zuna-500 truncate', [d.type !== d.title ? d.type : '', d.number ? 'No. ' + d.number : '', d.issued ? 'Issued ' + fD(d.issued) : '', d.visible ? 'Visible to client' : 'Hidden from client'].filter(Boolean).join(' · '))); r.appendChild(m);
+    r.appendChild(docChip(d));
+    const v = h('a', 'btn !py-1 !px-2.5 text-xs', 'View'); v.href = d.url; v.target = '_blank'; v.rel = 'noopener';
+    const e = h('button', 'btn !py-1 !px-2.5 text-xs', 'Edit'); e.type = 'button'; e.onclick = () => form(d);
+    const del = h('button', 'btn !py-1 !px-2.5 text-xs text-rose-600', 'Delete'); del.type = 'button'; del.onclick = async () => { if (!confirm('Delete ' + d.title + '?')) return; try { await api('doc/delete', {id: d.id}); toast('Document deleted'); reopen(); } catch (er) { toast(er.message, true); } };
+    r.append(v, e, del); list.appendChild(r); });
+  if (!(x.documents || []).length) list.appendChild(h('p', 'px-3 py-4 text-sm text-zuna-500 text-center bg-white', 'No documents yet.'));
+  const box = h('div'); sec.appendChild(box);
+  const addB = h('button', 'btn text-xs', '+ Add document'); addB.type = 'button'; addB.onclick = () => form(null); sec.appendChild(addB);
+  const form = (d) => { addB.classList.add('hidden'); const f = h('div', 'rounded-xl bg-zuna-50/60 ring-1 ring-zuna-100 p-4 space-y-3'); const g = h('div', 'grid sm:grid-cols-2 gap-3');
+    const ty = sel(d ? d.type : 'Lease agreement', DOC_TYPES), ti = inp(d ? d.title : '', 'e.g. Lease agreement 2026–27'), no = inp(d ? d.number : '', 'Licence / agreement number');
+    const is = inp(d ? d.issued : '', '', 'date'), ex = inp(d ? d.expires : '', '', 'date'), rd = sel(String(d ? d.remind_days : 30), [['15', '15 days before expiry'], ['30', '30 days before expiry'], ['45', '45 days before expiry'], ['60', '60 days before expiry'], ['90', '90 days before expiry']]);
+    const vis = switchEl('Visible to client', d ? d.visible : true);
+    const fileL = h('label', 'flex items-center gap-3 rounded-xl bg-white ring-1 ring-dashed ring-zuna-200 px-4 py-3 cursor-pointer hover:ring-mint-500'); const fi = h('input', 'hidden'); fi.type = 'file'; fi.accept = 'application/pdf,image/png,image/jpeg,image/webp';
+    const fn = h('span', 'text-sm text-zuna-600', d ? 'Replace file (optional) · PDF, JPG or PNG, max 1.4 MB' : 'Choose file · PDF, JPG or PNG, max 1.4 MB'); fileL.append(h('span', 'grid place-items-center w-9 h-9 rounded-lg bg-mint-50 text-mint-700 font-bold', '↑'), fn, fi);
+    fi.onchange = () => { const F = fi.files[0]; if (!F) return; if (F.type === 'application/pdf' && F.size > 1.4 * 1024 * 1024) { toast('PDF is larger than 1.4 MB. Please compress it.', true); fi.value = ''; return; } fn.textContent = F.name + ' · ' + Math.round(F.size / 1024) + ' KB'; if (!ti.value) ti.value = ty.value; };
+    g.append(field('Document type', ty), field('Title', ti), field('Number', no), field('Remind', rd), field('Issue date', is), field('Expiry date', ex)); f.appendChild(g); f.appendChild(fileL); f.appendChild(vis);
+    const act = h('div', 'flex gap-2'); const cancel = h('button', 'btn text-xs', 'Cancel'); cancel.type = 'button'; cancel.onclick = () => { f.remove(); addB.classList.remove('hidden'); };
+    const sv = h('button', 'btn-primary text-xs', d ? 'Save document' : 'Upload document'); sv.type = 'button';
+    sv.onclick = async () => { sv.disabled = true; try { const F = fi.files[0]; if (!d && !F) throw new Error('Choose the document file.');
+        toast(F ? 'Uploading…' : 'Saving…');
+        await api('doc', {id: d ? d.id : undefined, gh_id: x.id, doc_type: ty.value, title: ti.value, number: no.value, issued: is.value, expires: ex.value, remind_days: +rd.value, visible: vis.input.checked, data_url: F ? await readFile(F) : undefined, file_name: F ? F.name : undefined});
+        toast('Document saved'); reopen(); } catch (er) { toast(er.message, true); sv.disabled = false; } };
+    act.append(sv, cancel); f.appendChild(act); box.replaceChildren(f); f.scrollIntoView({block: 'nearest', behavior: 'smooth'}); };
+};
+
 const pwBox = (email, pw) => { const b = h('div', 'rounded-xl bg-mint-50 ring-1 ring-mint-200 p-4 space-y-2'); b.appendChild(h('p', 'text-sm font-semibold', 'Login details for ' + email));
   const row = h('div', 'flex items-center gap-2'); row.appendChild(h('code', 'flex-1 rounded-lg bg-white ring-1 ring-mint-200 px-3 py-2 font-bold text-base', pw)); const cp = h('button', 'btn', 'Copy'); cp.onclick = () => { navigator.clipboard.writeText(pw).then(() => toast('Copied')); }; row.appendChild(cp); b.appendChild(row);
   b.appendChild(h('p', 'text-xs text-zuna-600', 'Shown once. Share it privately with the user; they can change it with "Forgot password?".')); return b; };
+const ROLE = {client: 'Viewer', client_admin: 'Client admin'};
 const renderUsers = (D, c) => {
-  const bar = h('div', 'flex items-center gap-2 mb-3'); bar.appendChild(h('p', 'text-sm text-zuna-500', c.users.length + ' users · view-only access to ' + c.name + ' guest houses'));
-  const add = h('button', 'ml-auto btn-primary', '+ Add user'); add.onclick = () => { const f = h('div', 'space-y-3'); const n = inp('', 'Full name'), e = inp('', 'name@company.com', 'email');
-    f.append(field('Name', n), field('Email (login)', e)); const go = h('button', 'btn-primary', 'Create user'); const out = h('div');
-    go.onclick = async () => { go.disabled = true; try { const r = await api('user', {client_id: c.id, name: n.value, email: e.value}); if (!r.created) throw new Error('That email already has an account.'); out.replaceChildren(pwBox(e.value.trim().toLowerCase(), r.password)); go.remove(); load(true); } catch (er) { toast(er.message, true); go.disabled = false; } };
+  const bar = h('div', 'flex items-center gap-2 mb-3'); bar.appendChild(h('p', 'text-sm text-zuna-500', c.users.length + ' users · Viewers see the ' + c.name + ' dashboard; client admins can also manage users'));
+  const add = h('button', 'ml-auto btn-primary', '+ Add user'); add.onclick = () => { const f = h('div', 'space-y-4'); const g = h('div', 'grid sm:grid-cols-2 gap-3'); const n = inp('', 'Full name'), e = inp('', 'name@company.com', 'email');
+    const rl = sel('client', [['client', 'Viewer · can view the dashboard'], ['client_admin', 'Client admin · can also manage users']]);
+    g.append(field('Name', n), field('Email (login)', e), field('Role', rl, 'sm:col-span-2')); f.appendChild(g); const go = h('button', 'btn-primary', 'Create user'); const out = h('div');
+    go.onclick = async () => { go.disabled = true; try { const r = await api('user', {client_id: c.id, name: n.value, email: e.value, role: rl.value}); if (!r.created) throw new Error('That email already has an account.'); out.replaceChildren(pwBox(e.value.trim().toLowerCase(), r.password)); go.remove(); load(true); } catch (er) { toast(er.message, true); go.disabled = false; } };
     f.append(go, out); modal('Add user · ' + c.name, f); }; bar.appendChild(add); D.appendChild(bar);
-  const t = h('div', 'card overflow-x-auto'); const tb = h('table', 'w-full text-sm'); const hd = h('thead'); const hr = h('tr', 'text-left text-xs font-semibold text-zuna-500 bg-zuna-50/70'); ['Name', 'Login', 'Last login', 'Status', ''].forEach((x) => hr.appendChild(h('th', 'px-4 py-2.5', x))); hd.appendChild(hr); tb.appendChild(hd);
+  const t = h('div', 'card overflow-x-auto'); const tb = h('table', 'w-full text-sm'); const hd = h('thead'); const hr = h('tr', 'text-left text-xs font-semibold text-zuna-500 bg-zuna-50/70'); ['User', 'Role', 'Last login', 'Status', ''].forEach((x) => hr.appendChild(h('th', 'px-4 py-2.5', x))); hd.appendChild(hr); tb.appendChild(hd);
   const body = h('tbody', 'divide-y divide-zuna-50');
-  c.users.forEach((u) => { const tr = h('tr'); tr.appendChild(h('td', 'px-4 py-3 font-semibold', u.name)); tr.appendChild(h('td', 'px-4 py-3 text-zuna-600', u.email)); tr.appendChild(h('td', 'px-4 py-3 text-zuna-500 whitespace-nowrap', u.last_login ? new Date(u.last_login).toLocaleString('en-IN', {dateStyle: 'medium', timeStyle: 'short'}) : 'Never'));
+  c.users.forEach((u) => { const tr = h('tr', 'align-middle'); const me = u.email === ME.email;
+    const nm = h('td', 'px-4 py-3'); const row = h('div', 'flex items-center gap-3'); row.appendChild(h('span', 'grid place-items-center w-8 h-8 rounded-full text-[11px] font-bold shrink-0 ' + (u.role === 'client_admin' ? 'bg-zuna-900 text-mint-400' : 'bg-zuna-50 text-zuna-600 ring-1 ring-zuna-100'), (u.name || u.email).split(/\s+/).map((w) => w[0]).join('').slice(0, 2).toUpperCase()));
+    const tx = h('div', 'min-w-0'); const n1 = h('p', 'font-semibold'); n1.textContent = u.name; if (me) n1.appendChild(h('span', 'ml-1.5 text-[11px] font-semibold text-zuna-400', '(you)')); tx.append(n1, h('p', 'text-xs text-zuna-500', u.email)); row.appendChild(tx); nm.appendChild(row); tr.appendChild(nm);
+    const rc = h('td', 'px-4 py-3'); rc.appendChild(h('span', 'rounded-full px-2 py-0.5 text-[11px] font-bold whitespace-nowrap ' + (u.role === 'client_admin' ? 'bg-zuna-900 text-white' : 'bg-zuna-50 text-zuna-600 ring-1 ring-zuna-100'), ROLE[u.role] || 'Viewer')); tr.appendChild(rc);
+    tr.appendChild(h('td', 'px-4 py-3 text-zuna-500 whitespace-nowrap', u.last_login ? new Date(u.last_login).toLocaleString('en-IN', {dateStyle: 'medium', timeStyle: 'short'}) : 'Never'));
     const st = h('td', 'px-4 py-3'); st.appendChild(h('span', 'rounded-full px-2 py-0.5 text-[11px] font-bold ' + (u.active ? 'bg-mint-50 text-mint-700 ring-1 ring-mint-200' : 'bg-zuna-50 text-zuna-500 ring-1 ring-zuna-100'), u.active ? 'Active' : 'Disabled')); tr.appendChild(st);
-    const ac = h('td', 'px-4 py-3 text-right whitespace-nowrap space-x-2');
+    const ac = h('td', 'px-4 py-3 text-right whitespace-nowrap space-x-1.5');
     const rs = h('button', 'btn !py-1 !px-2.5 text-xs', 'Reset password'); rs.onclick = async () => { if (!confirm('Create a new password for ' + u.email + '? The old one stops working.')) return; try { const r = await api('user/reset', {email: u.email}); modal('New password', pwBox(u.email, r.password)); } catch (er) { toast(er.message, true); } };
-    const tg = h('button', 'btn !py-1 !px-2.5 text-xs ' + (u.active ? 'text-rose-600' : 'text-mint-700'), u.active ? 'Disable' : 'Enable'); tg.onclick = async () => { try { await api('user', {email: u.email, name: u.name, active: !u.active}); toast(u.active ? 'User disabled' : 'User enabled'); load(true); } catch (er) { toast(er.message, true); } };
-    ac.append(rs, tg); tr.appendChild(ac); body.appendChild(tr); });
+    ac.appendChild(rs);
+    if (!me) {
+      const to = u.role === 'client_admin' ? 'client' : 'client_admin';
+      const rb = h('button', 'btn !py-1 !px-2.5 text-xs', to === 'client_admin' ? 'Make client admin' : 'Make viewer'); rb.onclick = async () => { if (!confirm((to === 'client_admin' ? 'Let ' + u.name + ' manage ' + c.name + ' users?' : 'Change ' + u.name + ' to view-only?'))) return;
+        try { await api('user', {email: u.email, name: u.name, active: !!u.active, role: to}); toast('Role updated'); load(true); } catch (er) { toast(er.message, true); } };
+      const tg = h('button', 'btn !py-1 !px-2.5 text-xs ' + (u.active ? 'text-rose-600' : 'text-mint-700'), u.active ? 'Disable' : 'Enable'); tg.onclick = async () => { try { await api('user', {email: u.email, name: u.name, active: !u.active}); toast(u.active ? 'User disabled' : 'User enabled'); load(true); } catch (er) { toast(er.message, true); } };
+      ac.append(rb, tg); }
+    tr.appendChild(ac); body.appendChild(tr); });
   if (!c.users.length) { const tr = h('tr'); const td = h('td', 'px-4 py-8 text-center text-zuna-500', 'No users yet.'); td.colSpan = 5; tr.appendChild(td); body.appendChild(tr); }
   tb.appendChild(body); t.appendChild(tb); D.appendChild(t);
 };
@@ -390,7 +456,7 @@ const renderSettings = (D, c) => {
   card.appendChild(save); D.appendChild(card);
 };
 
-$('#newClient').onclick = () => { const f = h('div', 'space-y-3'); const n = inp('', 'e.g. LTM'); f.appendChild(field('Client name', n)); f.appendChild(h('p', 'text-xs text-zuna-500', 'You can add the logo, guest houses and users next.'));
+if ($('#newClient')) $('#newClient').onclick = () => { const f = h('div', 'space-y-3'); const n = inp('', 'e.g. LTM'); f.appendChild(field('Client name', n)); f.appendChild(h('p', 'text-xs text-zuna-500', 'You can add the logo, guest houses and users next.'));
   const go = h('button', 'btn-primary', 'Create client'); go.onclick = async () => { try { const r = await api('client', {name: n.value}); cur = r.id; tab = 'settings'; closeModal(); toast('Client created'); load(true); } catch (er) { toast(er.message, true); } }; f.appendChild(go); modal('New client', f); };
 
 const INIT = __STATE__;

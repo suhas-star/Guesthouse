@@ -59,6 +59,9 @@ jobs:
           keep_vars = true
           routes = [{ pattern = "$DOMAIN", custom_domain = true }]
 
+          [triggers]
+          crons = ["30 2 * * *"]
+
           [[d1_databases]]
           binding = "DB"
           database_name = "ltmgh"

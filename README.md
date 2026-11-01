@@ -198,6 +198,12 @@ Self-hosted: load CSV/JSON files with `npm run admin -- load-data <bookings.csv>
   cancellation policy, photos, contacts (name, designation, email, phone), and per-section **show to client**
   switches (amenities, inclusions, cancellation policy, photos, contacts).
 * **Users** per client: create (a password is generated and shown once), reset password, disable / enable.
+* **Documents** per guest house: agreements, licences, NOCs etc. (PDF or image, max 1.4 MB) with number, issue and
+  expiry dates, a reminder window and a "visible to client" switch. A daily job (Cloudflare cron `30 2 * * *`, or every
+  6 hours on the self-hosted server) e-mails Zuna admins and the client's admins when a document reaches its reminder
+  window, 7 days, 1 day and the expiry date, then weekly for four weeks after expiry (needs `RESEND_API_KEY`).
+* **Roles**: client users are *Viewers* or *Client admins*. Client admins get **Users & access** (`/manage`) in their
+  dashboard, where they add users, reset passwords, disable users and change roles for their own client only.
 * **Bookings** per client: add, edit and cancel stays (guest, title/gender, grade, base, dates, room, occupancy,
   status, travel request, note), with warnings for room clashes and mixed-gender sharing. Saves update the
   `bookings` dataset at once and are also kept in the `manual` dataset, which any external feed should apply last;

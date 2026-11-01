@@ -4,6 +4,10 @@ name = "ltmgh"
 main = "worker.js"
 compatibility_date = "2026-10-01"
 
+# Daily document-expiry reminders (08:00 IST)
+[triggers]
+crons = ["30 2 * * *"]
+
 [[d1_databases]]
 binding = "DB"
 database_name = "ltmgh"

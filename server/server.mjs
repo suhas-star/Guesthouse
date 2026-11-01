@@ -50,5 +50,8 @@ const server = http.createServer(async (req, res) => {
     res.end('Server error');
   }
 });
+// document-expiry reminders: checked every 6 hours; each document is e-mailed at most once a day
+const reminders = () => worker.scheduled && worker.scheduled({}, env, {waitUntil: (p) => p.catch((e) => console.error('reminders', e))});
+setTimeout(reminders, 60000); setInterval(reminders, 6 * 3600 * 1000).unref();
 server.listen(+(E.PORT || 8080), E.HOST || '0.0.0.0', () => console.log('Guest house portal listening on', (E.HOST || '0.0.0.0') + ':' + (E.PORT || 8080)));
 for (const s of ['SIGINT', 'SIGTERM']) process.on(s, () => server.close(() => process.exit(0)));

@@ -169,6 +169,39 @@ check('old host redirects to PRIMARY_HOST', r.status === 301 && r.headers.get('l
   x = await A('booking/delete', {client_id: acme, guest: 'Neha Iyer', check_in: '2026-11-04'});
   brow = JSON.parse(DB.raw.prepare("SELECT json FROM datasets WHERE id = 'bookings'").get().json); mrow = JSON.parse(DB.raw.prepare("SELECT json FROM datasets WHERE id = 'manual'").get().json);
   check('cancel removes the booking and records the cancellation', x.status === 200 && !brow.some((b) => /Neha Iyer/.test(b.guest)) && mrow.filter((m) => /Neha Iyer/.test(m.guest)).every((m) => m.status === 'Cancelled'));
+  // client admins
+  x = await A('user', {client_id: acme, name: 'Meera Nair', email: 'meera@acme.example', role: 'client_admin'});
+  const meera = (await call('/api/login', {method: 'POST', body: {email: 'meera@acme.example', password: x.j.password}})).headers.get('set-cookie').split(';')[0];
+  const M = async (p, body) => { const y = await call('/api/manage/' + p, {method: 'POST', body, cookie: meera}); return {status: y.status, j: await y.json()}; };
+  x = await M('state', {}); check('client admin sees own users only', x.status === 200 && x.j.clients.length === 1 && x.j.clients[0].users.some((u) => u.email === 'asha@acme.example') && !JSON.stringify(x.j).includes('Other House'));
+  x = await M('user', {name: 'Kiran Das', email: 'kiran@acme.example'}); check('client admin creates a viewer', x.status === 200 && x.j.created && /^Kiran@/.test(x.j.password));
+  check('client admin cannot disable own account', (await M('user', {email: 'meera@acme.example', name: 'Meera', active: false})).status === 400);
+  await A('user', {client_id: other, name: 'Zed', email: 'zed@other.example'});
+  check("client admin cannot touch another client's user", (await M('user', {email: 'zed@other.example', name: 'Zed', active: false})).status === 400 && (await M('user/reset', {email: 'zed@other.example'})).status === 400);
+  check('client admin cannot reset a Zuna admin', (await M('user/reset', {email: 'boss@zuna.example'})).status === 400);
+  check('viewer cannot use the manage API', (await call('/api/manage/state', {method: 'POST', body: {}, cookie: asha})).status === 403);
+  check('client admin cannot use the Zuna admin API', (await call('/api/admin/state', {method: 'POST', body: {}, cookie: meera})).status === 403);
+  check('/manage page served to client admin', (await (await call('/manage', {cookie: meera})).text()).includes('"mode":"client"'));
+  // documents
+  const pdf = 'data:application/pdf;base64,' + Buffer.from('%PDF-1.4\n1 0 obj<<>>endobj\ntrailer<<>>\n%%EOF').toString('base64');
+  const soon = new Date(Date.now() + 5.5 * 3600e3 + 30 * 864e5).toISOString().slice(0, 10);
+  x = await A('doc', {gh_id: gh, doc_type: 'Trade licence', title: 'Trade licence', number: 'TL-1', issued: '2026-01-01', expires: soon, remind_days: 30, data_url: pdf, file_name: 'tl.pdf'});
+  check('admin uploads a PDF document', x.status === 200 && !!x.j.id);
+  x = await A('doc', {gh_id: gh, doc_type: 'Lease agreement', title: 'Lease (internal)', expires: '2027-03-31', visible: false, data_url: pdf});
+  check('admin uploads a hidden document', x.status === 200);
+  check('non-PDF data refused', (await A('doc', {gh_id: gh, title: 'x', data_url: 'data:application/pdf;base64,' + Buffer.from('hello world').toString('base64')})).status === 400);
+  const cpage = await (await call('/', {cookie: meera})).text(); const cdata = JSON.parse(cpage.match(/window\.__LTMGH_DATA = (.*?);\nconst REPORT_DATE/s)[1]);
+  const docs = cdata.properties[0].documents;
+  check('client sees visible documents with expiry state', docs.length === 1 && docs[0].title === 'Trade licence' && docs[0].state === 'expiring' && docs[0].days_left === 30);
+  const pr = await call(docs[0].url, {cookie: meera}); check('client opens the PDF', pr.status === 200 && pr.headers.get('content-type') === 'application/pdf' && /inline; filename="tl.pdf"/.test(pr.headers.get('content-disposition')));
+  const hid = (await A('state', {})).j.clients.find((c) => c.id === acme).guesthouses[0].documents.find((d) => !d.visible);
+  check("client can't open a hidden document's file", (await call(hid.url, {cookie: meera})).status === 404);
+  env.RESEND_API_KEY = 'test';
+  const before = mails.length; await worker.scheduled({}, env, {waitUntil: (p) => p}); await new Promise((r) => setTimeout(r, 50));
+  const rm = mails.slice(before);
+  check('expiry reminder e-mailed to Zuna admin and client admin', rm.length === 2 && rm.some((m) => m.to[0] === 'meera@acme.example') && rm.every((m) => /Trade licence/.test(m.text) && /Expires in 30 days/.test(m.text)));
+  await worker.scheduled({}, env, {waitUntil: (p) => p}); await new Promise((r) => setTimeout(r, 50));
+  check('reminder not repeated the same day', mails.length === before + 2);
   x = await A('user', {email: 'asha@acme.example', name: 'Asha Rao', active: false});
   check('disabled user is signed out', (await (await call('/', {cookie: asha})).text()).includes('id="f"'));
 }

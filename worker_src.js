@@ -43,7 +43,7 @@ async function currentUser(req, env) {
   await ensureSchema(env);
   const row = await env.DB.prepare("SELECT s.email, s.expires, u.name, u.active, u.role, u.client_id FROM sessions s JOIN users u ON u.email = s.email WHERE s.token_hash = ?").bind(await sha256(tok)).first();
   if (!row || !row.active || row.expires < new Date().toISOString()) return null;
-  return {email: row.email, name: row.name, role: row.role || "client", client_id: row.client_id, admin: row.role === "admin"};
+  return {email: row.email, name: row.name, role: row.role || "client", client_id: row.client_id, admin: row.role === "admin", manager: row.role === "client_admin" && !!row.client_id};
 }
 
 async function login(req, env) {
@@ -387,6 +387,7 @@ const SCHEMA = [
   "CREATE TABLE IF NOT EXISTS room_types (id INTEGER PRIMARY KEY AUTOINCREMENT, gh_id INTEGER NOT NULL, name TEXT, rooms INTEGER, room_nos TEXT, occupancy TEXT, grades TEXT, sort INTEGER DEFAULT 0)",
   "CREATE TABLE IF NOT EXISTS contacts (id INTEGER PRIMARY KEY AUTOINCREMENT, gh_id INTEGER NOT NULL, name TEXT, designation TEXT, email TEXT, phone TEXT, sort INTEGER DEFAULT 0)",
   "CREATE TABLE IF NOT EXISTS photos (id INTEGER PRIMARY KEY AUTOINCREMENT, gh_id INTEGER NOT NULL, file_id INTEGER NOT NULL, caption TEXT, sort INTEGER DEFAULT 0)",
+  "CREATE TABLE IF NOT EXISTS documents (id INTEGER PRIMARY KEY AUTOINCREMENT, gh_id INTEGER NOT NULL, file_id INTEGER, doc_type TEXT, title TEXT, number TEXT, issued TEXT, expires TEXT, remind_days INTEGER DEFAULT 30, visible INTEGER DEFAULT 1, file_name TEXT, updated TEXT, last_notice TEXT)",
   "CREATE TABLE IF NOT EXISTS files (id INTEGER PRIMARY KEY AUTOINCREMENT, client_id INTEGER, mime TEXT NOT NULL, data TEXT NOT NULL, created TEXT)",
 ];
 let schemaReady = false;
@@ -426,25 +427,105 @@ async function adminState(env, user) {
   const {results: clients} = await env.DB.prepare("SELECT id, name, logo_file, grades, active FROM clients ORDER BY id").all();
   const [bk, mn] = await Promise.all([readSet(env, "bookings"), readSet(env, "manual")]), manualKeys = new Set(mn.rows.filter((x) => x.status !== "Cancelled").map(guestKey));
   const out = await Promise.all(clients.map(async (c) => {
-    const [{results: users}, guesthouses] = await Promise.all([env.DB.prepare("SELECT email, name, active, last_login, locked_until FROM users WHERE client_id = ? ORDER BY name").bind(c.id).all(), clientGuestHouses(env, c, true)]);
+    const [users, guesthouses] = await Promise.all([clientUsers(env, c.id), clientGuestHouses(env, c, true)]);
     const names = new Set(guesthouses.map((g) => g.property));
     return {id: c.id, name: c.name, active: !!c.active, logo: c.logo_file ? "/files/" + c.logo_file : "", grades: (c.grades || DEFAULT_GRADES).split(",").filter(Boolean), users, guesthouses,
       bookings: bk.rows.filter((x) => names.has(x.property) && x.status !== "Cancelled").map((x) => Object.assign({}, x, {manual: manualKeys.has(guestKey(x))}))}; }));
   return {clients: out, me: user.email};
 }
+// ---- guest house documents (agreements, licences…) ----
+const DOC_TYPES = ["Lease agreement", "Service agreement", "Trade licence", "Fire NOC", "Police verification", "FSSAI licence", "GST registration", "Insurance", "Property tax receipt", "Other"];
+const daysLeft = (d) => d ? Math.round((Date.parse(d) - Date.parse(istToday())) / 864e5) : null;
+const docOut = (d) => { const left = daysLeft(d.expires);
+  return {id: d.id, type: d.doc_type || "Other", title: d.title || d.doc_type || "Document", number: d.number || "", issued: d.issued || "", expires: d.expires || "", remind_days: d.remind_days || 30,
+    visible: !!d.visible, url: d.file_id ? "/files/" + d.file_id : "", mime: d.mime || "", file_name: d.file_name || "", days_left: left,
+    state: left == null ? "none" : left < 0 ? "expired" : left <= (d.remind_days || 30) ? "expiring" : "valid"}; };
+async function docReminders(env) {
+  await ensureSchema(env);
+  if (!env.RESEND_API_KEY) return {sent: 0, reason: "no mail key"};
+  const today = istToday();
+  const {results} = await env.DB.prepare("SELECT d.*, g.name AS gh, g.city, g.client_id, c.name AS client FROM documents d JOIN guesthouses g ON g.id = d.gh_id JOIN clients c ON c.id = g.client_id WHERE d.expires IS NOT NULL AND d.expires <> '' AND c.active = 1").all();
+  const due = results.filter((d) => { const n = daysLeft(d.expires), r = d.remind_days || 30; return d.last_notice !== today && (n === r || n === 7 || n === 1 || n === 0 || (n < 0 && n >= -28 && n % 7 === 0)); });
+  if (!due.length) return {sent: 0};
+  const {results: admins} = await env.DB.prepare("SELECT email, name FROM users WHERE role = 'admin' AND active = 1").all();
+  let sent = 0;
+  for (const cid of [...new Set(due.map((d) => d.client_id))]) {
+    const list = due.filter((d) => d.client_id === cid);
+    const {results: mgrs} = await env.DB.prepare("SELECT email, name FROM users WHERE role = 'client_admin' AND active = 1 AND client_id = ?").bind(cid).all();
+    const to = [...new Set(admins.concat(list.some((d) => d.visible) ? mgrs : []).map((u) => u.email).filter((e) => e.includes("@")))];
+    const body = docMail(list[0].client, list);
+    for (const e of to) if (await sendMail(env, e, "Guest house documents due for renewal · " + list[0].client, body)) sent++;
+    await env.DB.batch(list.map((d) => env.DB.prepare("UPDATE documents SET last_notice = ? WHERE id = ?").bind(today, d.id)));
+  }
+  return {sent};
+}
+function docMail(client, list) {
+  const esc = (t) => String(t || "").replace(/[<>&"]/g, (c) => ({"<": "&lt;", ">": "&gt;", "&": "&amp;", '"': "&quot;"})[c]);
+  const fd = (d) => new Date(d + "T00:00:00Z").toLocaleDateString("en-IN", {day: "2-digit", month: "short", year: "numeric", timeZone: "UTC"});
+  const when = (n) => n < 0 ? "Expired " + -n + (n === -1 ? " day" : " days") + " ago" : n === 0 ? "Expires today" : "Expires in " + n + (n === 1 ? " day" : " days");
+  const rows = list.map((d) => { const n = daysLeft(d.expires);
+    return '<tr><td style="padding:10px 12px;border-top:1px solid #eeeaf9"><b>' + esc(d.title || d.doc_type) + '</b><br><span style="color:#7a74a3;font-size:12px">' + esc(d.gh) + (d.city ? ", " + esc(d.city) : "") + (d.number ? " · No. " + esc(d.number) : "") + '</span></td>'
+      + '<td style="padding:10px 12px;border-top:1px solid #eeeaf9;white-space:nowrap">' + fd(d.expires) + '<br><span style="font-size:12px;font-weight:600;color:' + (n < 0 ? "#be123c" : "#b45309") + '">' + when(n) + '</span></td></tr>'; }).join("");
+  const text = "Guest house documents for " + client + " that need renewal:\n\n" + list.map((d) => "- " + (d.title || d.doc_type) + " (" + d.gh + "): " + when(daysLeft(d.expires)) + ", " + fd(d.expires)).join("\n") + "\n\nOpen https://gh.zuna.ai to view them.\n\nZuna Hotel Desk";
+  const html = '<!doctype html><html><body style="margin:0;background:#f4f2fb;font-family:Segoe UI,Roboto,Helvetica,Arial,sans-serif;color:#12005A">'
+    + '<table role="presentation" width="100%" cellpadding="0" cellspacing="0" style="background:#f4f2fb;padding:32px 12px"><tr><td align="center">'
+    + '<table role="presentation" width="100%" cellpadding="0" cellspacing="0" style="max-width:560px;background:#ffffff;border-radius:16px;overflow:hidden">'
+    + '<tr><td style="background:#12005A;padding:22px 28px;color:#ffffff;font-size:20px;font-weight:700">zuna <span style="color:#02C988;font-size:13px;font-weight:600">Guest House Management</span></td></tr>'
+    + '<tr><td style="padding:24px 28px 8px"><p style="margin:0 0 6px;font-size:16px;font-weight:700">Documents due for renewal</p><p style="margin:0 0 16px;font-size:14px;color:#5d5887">' + esc(client) + ' guest houses</p>'
+    + '<table role="presentation" width="100%" cellpadding="0" cellspacing="0" style="font-size:14px;border:1px solid #eeeaf9;border-radius:12px;border-collapse:separate">' + rows + '</table>'
+    + '<p style="margin:20px 0 4px"><a href="https://gh.zuna.ai" style="display:inline-block;background:#12005A;color:#fff;text-decoration:none;font-weight:600;font-size:14px;padding:10px 18px;border-radius:10px">Open the portal</a></p></td></tr>'
+    + '<tr><td style="padding:16px 28px;border-top:1px solid #e6e2f6;font-size:12px;color:#7d68c6">Zuna Hotel Desk · Zuna Travel Solutions</td></tr></table></td></tr></table></body></html>';
+  return {text, html};
+}
+
+// ---- users of one client (Zuna admins, and the client's own client admins) ----
+async function clientUsers(env, cid) { const {results} = await env.DB.prepare("SELECT email, name, active, last_login, locked_until, role FROM users WHERE client_id = ? AND (role IS NULL OR role <> 'admin') ORDER BY name").bind(cid).all(); return results.map((u) => Object.assign(u, {role: u.role === "client_admin" ? "client_admin" : "client"})); }
+async function userAction(env, cid, b, actor, action) {
+  const email = clean(b.email, 200).toLowerCase(), name = clean(b.name, 120), role = b.role === "client_admin" ? "client_admin" : "client";
+  if (!email) return json({error: "Enter an email address or user ID."}, 400);
+  const ex = await env.DB.prepare("SELECT email, name, role, client_id FROM users WHERE email = ?").bind(email).first();
+  if (ex && (ex.role === "admin" || ex.client_id !== cid)) return json({error: ex.role === "admin" ? "That account is a Zuna admin." : "That email already has an account."}, 400);
+  if (action === "reset") { if (!ex) return json({error: "No such user."}, 404); const pw = makePassword(ex.name); await setPassword(env, email, pw); await env.DB.prepare("DELETE FROM sessions WHERE email = ?").bind(email).run(); return json({ok: true, password: pw}); }
+  if (!ex) {
+    const pw = makePassword(name || email);
+    await env.DB.prepare("INSERT INTO users (email, name, salt, hash, active, failed, role, client_id) VALUES (?, ?, '', '', 1, 0, ?, ?)").bind(email, name || email, role, cid).run();
+    await setPassword(env, email, pw);
+    return json({ok: true, created: true, password: pw});
+  }
+  if (actor && email === actor.email && (b.active === false || role !== ex.role)) return json({error: "You can't disable your own account or change your own role."}, 400);
+  await env.DB.prepare("UPDATE users SET name = ?, active = ?, role = ? WHERE email = ?").bind(name || ex.name || email, b.active === false ? 0 : 1, b.role ? role : ex.role, email).run();
+  if (b.active === false) await env.DB.prepare("DELETE FROM sessions WHERE email = ?").bind(email).run();
+  return json({ok: true});
+}
+async function manageState(env, user) {
+  const c = await env.DB.prepare("SELECT id, name, logo_file, grades, active FROM clients WHERE id = ?").bind(user.client_id).first();
+  if (!c) return {clients: []};
+  return {clients: [{id: c.id, name: c.name, active: !!c.active, logo: c.logo_file ? "/files/" + c.logo_file : "", grades: [], users: await clientUsers(env, c.id), guesthouses: [], bookings: []}], me: user.email};
+}
+async function manageApi(req, env, user, path) {
+  let b; try { b = await req.json(); } catch (e) { return json({error: "Bad request."}, 400); }
+  try {
+    if (path === "/api/manage/state") return json(await manageState(env, user));
+    if (path === "/api/manage/user") return userAction(env, user.client_id, b, user, "save");
+    if (path === "/api/manage/user/reset") return userAction(env, user.client_id, b, user, "reset");
+  } catch (e) { return json({error: e.message || "Something went wrong."}, 400); }
+  return json({error: "Not found."}, 404);
+}
+
 async function clientGuestHouses(env, client, forAdmin) {
   const all = (client.grades || DEFAULT_GRADES).split(",").map((g) => g.trim()).filter(Boolean);
   const {results: ghs} = await env.DB.prepare("SELECT * FROM guesthouses WHERE client_id = ? ORDER BY sort, id").bind(client.id).all();
   const out = [];
   // one query per table for the whole client, not per guest house
   const sub = "(SELECT id FROM guesthouses WHERE client_id = ?)";
-  const [R, K, F] = await Promise.all([
+  const [R, K, F, D] = await Promise.all([
     env.DB.prepare("SELECT * FROM room_types WHERE gh_id IN " + sub + " ORDER BY sort, id").bind(client.id).all(),
     env.DB.prepare("SELECT * FROM contacts WHERE gh_id IN " + sub + " ORDER BY sort, id").bind(client.id).all(),
-    env.DB.prepare("SELECT id, gh_id, file_id, caption FROM photos WHERE gh_id IN " + sub + " ORDER BY sort, id").bind(client.id).all()]);
+    env.DB.prepare("SELECT id, gh_id, file_id, caption FROM photos WHERE gh_id IN " + sub + " ORDER BY sort, id").bind(client.id).all(),
+    env.DB.prepare("SELECT d.*, f.mime FROM documents d LEFT JOIN files f ON f.id = d.file_id WHERE d.gh_id IN " + sub + " ORDER BY d.expires IS NULL, d.expires, d.id").bind(client.id).all()]);
   const by = (rows, id) => (rows.results || []).filter((r) => r.gh_id === id);
   for (const g of ghs) {
-    const rts = by(R, g.id), cts = by(K, g.id), phs = by(F, g.id);
+    const rts = by(R, g.id), cts = by(K, g.id), phs = by(F, g.id), dcs = by(D, g.id).filter((d) => forAdmin || d.visible);
     const show = Object.assign({}, SHOW_DEFAULT, jparse(g.show_json, {})), multi = rts.length > 1;
     const types = rts.map((r) => ({id: r.id, name: r.name || "", rooms: r.rooms || 0, room_nos: r.room_nos || "", occupancy: r.occupancy || "Single", bed_type: r.bed_type || "", grades: list(r.grades), eligible: gradeText(list(r.grades), all)}));
     const contacts = cts.map((c) => ({id: c.id, name: c.name || "", designation: c.designation || "", email: c.email || "", phone: c.phone || ""}));
@@ -463,24 +544,33 @@ async function clientGuestHouses(env, client, forAdmin) {
     if (forAdmin || show.amenities) gh.amenities = list(g.amenities);
     if (forAdmin || show.cancellation) gh.cancellation = g.cancellation || "";
     if (forAdmin || show.photos) gh.photos = phs.map((p) => ({id: p.id, url: "/files/" + p.file_id, caption: p.caption || ""}));
+    gh.documents = dcs.map(docOut);
     if (forAdmin) gh.show = show;
     out.push(gh);
   }
   return out;
 }
-const DATA_URL = /^data:(image\/(?:png|jpeg|webp));base64,([A-Za-z0-9+/=]+)$/;
-async function saveFile(env, clientId, dataUrl) {
+const DATA_URL = /^data:(image\/(?:png|jpeg|webp)|application\/pdf);base64,([A-Za-z0-9+/=]+)$/;
+async function saveFile(env, clientId, dataUrl, allowPdf) {
   const m = String(dataUrl || "").match(DATA_URL);
-  if (!m) throw new Error("Upload a PNG, JPG or WEBP image.");
-  if (m[2].length > 2900000) throw new Error("Image is too large (max about 2 MB after resizing).");
+  if (!m || (m[1] === "application/pdf" && !allowPdf)) throw new Error(allowPdf ? "Upload a PDF, PNG, JPG or WEBP file." : "Upload a PNG, JPG or WEBP image.");
+  if (m[2].length > 1900000) throw new Error(m[1] === "application/pdf" ? "PDF is too large (max 1.4 MB). Please compress it and try again." : "Image is too large (max about 1.4 MB after resizing).");
+  if (m[1] === "application/pdf" && !atob(m[2].slice(0, 8)).startsWith("%PDF")) throw new Error("That file is not a valid PDF.");
   const r = await env.DB.prepare("INSERT INTO files (client_id, mime, data, created) VALUES (?, ?, ?, ?)").bind(clientId, m[1], m[2], new Date().toISOString()).run();
   return r.meta ? r.meta.last_row_id : r.lastInsertRowid;
 }
 async function serveFile(env, user, id) {
   const f = await env.DB.prepare("SELECT client_id, mime, data FROM files WHERE id = ?").bind(id).first();
   if (!f || (!user.admin && f.client_id !== user.client_id)) return new Response("Not found", {status: 404, headers: SEC});
+  const doc = await env.DB.prepare("SELECT title, doc_type, file_name, visible FROM documents WHERE file_id = ?").bind(id).first();
+  if (doc && !doc.visible && !user.admin) return new Response("Not found", {status: 404, headers: SEC});
   const bin = atob(f.data), u8 = new Uint8Array(bin.length); for (let i = 0; i < bin.length; i++) u8[i] = bin.charCodeAt(i);
-  return new Response(u8, {headers: {...SEC, "content-type": f.mime, "cache-control": "private, max-age=86400", "content-security-policy": "default-src 'none'; sandbox"}});
+  const h = {...SEC, "content-type": f.mime, "cache-control": "private, max-age=3600"};
+  if (f.mime === "application/pdf") {   // the browser's PDF viewer does not run in a sandboxed page
+    h["content-security-policy"] = "default-src 'none'; frame-ancestors 'self'";
+    h["content-disposition"] = 'inline; filename="' + String((doc && (doc.file_name || doc.title)) || "document").replace(/[^\w .()-]/g, "_").replace(/(\.pdf)?$/i, ".pdf") + '"';
+  } else h["content-security-policy"] = "default-src 'none'; sandbox";
+  return new Response(u8, {headers: h});
 }
 const PW_DIGITS = "23456789";
 const makePassword = (name) => (String(name || "User").trim().split(/\s+/)[0].replace(/[^A-Za-z]/g, "") || "User").replace(/^./, (c) => c.toUpperCase()) + "@" + Array.from(crypto.getRandomValues(new Uint8Array(4)), (b) => PW_DIGITS[b % 8]).join("");
@@ -576,9 +666,9 @@ async function adminApi(req, env, user, path) {
         return json({ok: true, id});
       }
       case "/api/admin/gh/delete": {
-        const id = +b.id; const {results: ph} = await env.DB.prepare("SELECT file_id FROM photos WHERE gh_id = ?").bind(id).all();
+        const id = +b.id; const {results: ph} = await env.DB.prepare("SELECT file_id FROM photos WHERE gh_id = ? UNION ALL SELECT file_id FROM documents WHERE gh_id = ? AND file_id IS NOT NULL").bind(id, id).all();
         await env.DB.batch([...ph.map((p) => env.DB.prepare("DELETE FROM files WHERE id = ?").bind(p.file_id)),
-          ...["photos", "room_types", "contacts"].map((t) => env.DB.prepare("DELETE FROM " + t + " WHERE gh_id = ?").bind(id)), env.DB.prepare("DELETE FROM guesthouses WHERE id = ?").bind(id)]);
+          ...["photos", "room_types", "contacts", "documents"].map((t) => env.DB.prepare("DELETE FROM " + t + " WHERE gh_id = ?").bind(id)), env.DB.prepare("DELETE FROM guesthouses WHERE id = ?").bind(id)]);
         return json({ok: true});
       }
       case "/api/admin/photo": {
@@ -594,31 +684,42 @@ async function adminApi(req, env, user, path) {
         return json({ok: true});
       }
       case "/api/admin/user": {
-        const email = clean(b.email, 200).toLowerCase(), name = clean(b.name, 120);
-        if (!email) return json({error: "Enter an email address or user ID."}, 400);
-        const ex = await env.DB.prepare("SELECT email, role FROM users WHERE email = ?").bind(email).first();
-        if (ex && ex.role === "admin") return json({error: "That account is a Zuna admin."}, 400);
-        if (!ex) {
-          const c = await env.DB.prepare("SELECT id FROM clients WHERE id = ?").bind(+b.client_id).first(); if (!c) return json({error: "No such client."}, 404);
-          const pw = makePassword(name || email);
-          await env.DB.prepare("INSERT INTO users (email, name, salt, hash, active, failed, role, client_id) VALUES (?, ?, '', '', 1, 0, 'client', ?)").bind(email, name || email, c.id).run();
-          await setPassword(env, email, pw);
-          return json({ok: true, created: true, password: pw});
-        }
-        await env.DB.prepare("UPDATE users SET name = ?, active = ? WHERE email = ?").bind(name || email, b.active === false ? 0 : 1, email).run();
-        if (b.active === false) await env.DB.prepare("DELETE FROM sessions WHERE email = ?").bind(email).run();
+        const email = clean(b.email, 200).toLowerCase();
+        const ex = email && await env.DB.prepare("SELECT client_id FROM users WHERE email = ?").bind(email).first();
+        const cid = ex && ex.client_id ? ex.client_id : +b.client_id;
+        if (!(await env.DB.prepare("SELECT id FROM clients WHERE id = ?").bind(cid).first())) return json({error: "No such client."}, 404);
+        return userAction(env, cid, b, user, "save");
+      }
+      case "/api/admin/doc": {
+        const g = await env.DB.prepare("SELECT id, client_id FROM guesthouses WHERE id = ?").bind(+b.gh_id).first(); if (!g) return json({error: "No such guest house."}, 404);
+        const iso = (d) => /^\d{4}-\d{2}-\d{2}$/.test(d || "") ? d : "";
+        const type = DOC_TYPES.includes(b.doc_type) ? b.doc_type : "Other", title = clean(b.title, 120) || type;
+        if (iso(b.issued) && iso(b.expires) && b.expires < b.issued) return json({error: "Expiry date is before the issue date."}, 400);
+        const ex = b.id ? await env.DB.prepare("SELECT id, file_id FROM documents WHERE id = ? AND gh_id = ?").bind(+b.id, g.id).first() : null;
+        if (b.id && !ex) return json({error: "No such document."}, 404);
+        if (!ex && !b.data_url) return json({error: "Attach the document file (PDF or image)."}, 400);
+        const fid = b.data_url ? await saveFile(env, g.client_id, b.data_url, true) : ex.file_id;
+        const vals = [type, title, clean(b.number, 80), iso(b.issued), iso(b.expires), [15, 30, 45, 60, 90].includes(+b.remind_days) ? +b.remind_days : 30, b.visible === false ? 0 : 1, clean(b.file_name, 120) || (ex ? null : ""), now, fid];
+        if (ex) { await env.DB.prepare("UPDATE documents SET doc_type = ?, title = ?, number = ?, issued = ?, expires = ?, remind_days = ?, visible = ?, file_name = COALESCE(NULLIF(?, ''), file_name), updated = ?, file_id = ?, last_notice = NULL WHERE id = ?").bind(...vals, ex.id).run();
+          if (b.data_url && ex.file_id) await env.DB.prepare("DELETE FROM files WHERE id = ?").bind(ex.file_id).run(); return json({ok: true, id: ex.id}); }
+        const r = await env.DB.prepare("INSERT INTO documents (doc_type, title, number, issued, expires, remind_days, visible, file_name, updated, file_id, gh_id) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)").bind(...vals, g.id).run();
+        return json({ok: true, id: r.meta ? r.meta.last_row_id : r.lastInsertRowid});
+      }
+      case "/api/admin/doc/delete": {
+        const d = await env.DB.prepare("SELECT id, file_id FROM documents WHERE id = ?").bind(+b.id).first(); if (!d) return json({ok: true});
+        await env.DB.batch([env.DB.prepare("DELETE FROM documents WHERE id = ?").bind(d.id), env.DB.prepare("DELETE FROM files WHERE id = ?").bind(d.file_id || 0)]);
         return json({ok: true});
       }
+      case "/api/admin/reminders": return json(await docReminders(env));
       case "/api/admin/booking":
       case "/api/admin/booking/delete": {
         const c = await env.DB.prepare("SELECT id, name, grades FROM clients WHERE id = ?").bind(+b.client_id).first(); if (!c) return json({error: "No such client."}, 404);
         return path.endsWith("/delete") ? cancelBooking(env, c, b) : saveBooking(env, c, b);
       }
       case "/api/admin/user/reset": {
-        const u = await env.DB.prepare("SELECT email, name, role FROM users WHERE email = ?").bind(clean(b.email, 200).toLowerCase()).first();
-        if (!u || u.role === "admin") return json({error: "No such client user."}, 404);
-        const pw = makePassword(u.name); await setPassword(env, u.email, pw);
-        return json({ok: true, password: pw});
+        const u = await env.DB.prepare("SELECT client_id, role FROM users WHERE email = ?").bind(clean(b.email, 200).toLowerCase()).first();
+        if (!u || u.role === "admin" || !u.client_id) return json({error: "No such client user."}, 404);
+        return userAction(env, u.client_id, b, user, "reset");
       }
     }
   } catch (e) { return json({error: e.message || "Something went wrong."}, 400); }
@@ -642,13 +743,15 @@ async function dashboard(env, user, url) {
     if (user.admin) data.clients = clients.map((c) => ({id: c.id, name: c.name}));
   }
   const payload = JSON.stringify(data).replace(/</g, "\\u003c");
-  const userJs = JSON.stringify({name: user.name || "", email: user.email, admin: !!user.admin}).replace(/</g, "\\u003c");
+  const userJs = JSON.stringify({name: user.name || "", email: user.email, admin: !!user.admin, manager: !!user.manager}).replace(/</g, "\\u003c");
   let page = TEMPLATE.replace("__DATA__", () => payload).replace("__USER__", () => userJs);
   if (updated) page = page.replace(/REPORT_DATE = '\d{4}-\d{2}-\d{2}'/, "REPORT_DATE = '" + updated.slice(0, 10) + "'");
   return html(page);
 }
 
 export default {
+  // daily (Cloudflare cron trigger): e-mail reminders for guest house documents nearing expiry
+  async scheduled(event, env, ctx) { ctx.waitUntil(docReminders(env)); },
   async fetch(request, env) {
     const url = new URL(request.url);
     if (env.PRIMARY_HOST && url.hostname !== env.PRIMARY_HOST && url.hostname.endsWith("zuna.ai") && (request.method === "GET" || request.method === "HEAD"))
@@ -674,6 +777,23 @@ export default {
       const u = await currentUser(request, env);
       if (!u || !u.admin) return json({error: "Not allowed."}, 403);
       return adminApi(request, env, u, path);
+    }
+    if (path.startsWith("/api/manage/") && request.method === "POST") {
+      const origin = request.headers.get("origin");
+      if (origin && origin !== url.origin) return json({error: "Bad origin."}, 403);
+      if (!(request.headers.get("content-type") || "").toLowerCase().startsWith("application/json")) return json({error: "Bad request."}, 415);
+      const u = await currentUser(request, env);
+      if (!u || !u.manager) return json({error: "Not allowed."}, 403);
+      return manageApi(request, env, u, path);
+    }
+    if (path === "/manage") {
+      const u = await currentUser(request, env);
+      if (!u) return html(LOGIN);
+      if (u.admin) return redirect("/admin");
+      if (!u.manager) return redirect("/");
+      const safe = (o) => JSON.stringify(o).replace(/</g, "\\u003c").replace(/\u2028|\u2029/g, "");
+      const st = await manageState(env, u);
+      return html(ADMIN.replace("__ME__", () => safe({name: u.name || "", email: u.email, mode: "client"})).replace("__STATE__", () => safe(st)), {"content-security-policy": ADMIN_CSP});
     }
     const fm = path.match(/^\/files\/(\d+)$/);
     if (fm) { const u = await currentUser(request, env); return u ? serveFile(env, u, +fm[1]) : new Response("Not found", {status: 404, headers: SEC}); }

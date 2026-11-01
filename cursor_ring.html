@@ -21,7 +21,7 @@ html.zr-down #zrRing { width: 26px; height: 26px; margin: -13px 0 0 -13px; }
     if (!vis()) { dot.remove(); ring.remove(); return; }
     var iv = setInterval(function () { if (!vis()) { clearInterval(iv); R.classList.remove('zr', 'zr-on', 'zr-hot', 'zr-text', 'zr-down'); dot.remove(); ring.remove(); } }, 150); }
   R.classList.add('zr');
-  (function loop() { rx += (x - rx) * 0.2; ry += (y - ry) * 0.2; ring.style.transform = 'translate(' + rx + 'px,' + ry + 'px)'; requestAnimationFrame(loop); })();
+  (function loop() { rx += (x - rx) * 0.35; ry += (y - ry) * 0.35; ring.style.transform = 'translate(' + rx + 'px,' + ry + 'px)'; requestAnimationFrame(loop); })();
   document.addEventListener('mousemove', function (e) {
     x = e.clientX; y = e.clientY; dot.style.transform = 'translate(' + x + 'px,' + y + 'px)';
     if (!R.classList.contains('zr-on')) { rx = x; ry = y; R.classList.add('zr-on'); }

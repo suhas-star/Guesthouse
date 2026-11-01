@@ -3,12 +3,16 @@
   const ctx = cv.getContext('2d');
   const D = window.__DOTS || [];
   const P = []; for (let i = 0; i < D.length; i += 2) P.push([D[i] / 10 * Math.PI / 180, D[i + 1] / 10 * Math.PI / 180]);
+  // precomputed trig for the land dots (the per-frame projection is then a few multiplications)
+  const N = P.length, cLat = new Float32Array(N), sLat = new Float32Array(N), cLon = new Float32Array(N), sLon = new Float32Array(N);
+  P.forEach(([lo, la], i) => { cLat[i] = Math.cos(la); sLat[i] = Math.sin(la); cLon[i] = Math.cos(lo); sLon[i] = Math.sin(lo); });
+  let lastDraw = -1e9;
   const CITIES = [[78.49,17.39],[77.59,12.97],[72.88,19.08],[77.21,28.61],[80.27,13.08],[88.36,22.57],[55.27,25.2],[51.53,25.29],[103.82,1.35],[114.17,22.32],[139.69,35.69],[126.98,37.57],[121.47,31.23],[151.21,-33.87],[144.96,-37.81],[174.76,-36.85],[106.85,-6.21],[100.5,13.75],[-0.13,51.51],[2.35,48.86],[8.68,50.11],[4.9,52.37],[-3.7,40.42],[12.5,41.9],[37.62,55.75],[31.24,30.04],[36.82,-1.29],[28.05,-26.2],[3.38,6.52],[-74.0,40.71],[-79.38,43.65],[-87.63,41.88],[-122.42,37.77],[-118.24,34.05],[-99.13,19.43],[-46.63,-23.55],[-58.38,-34.6],[-70.67,-33.45],[-77.04,-12.05],[-43.17,-22.9]].map(([lo, la]) => [lo * Math.PI / 180, la * Math.PI / 180]);
   const live = []; let nextSpawn = 0;
   const rad = (d) => d * Math.PI / 180;
   const reduce = matchMedia('(prefers-reduced-motion: reduce)').matches;
   let W = 0, H = 0, R = 0, cx = 0, cy = 0, dpr = 1;
-  const size = () => { const r = cv.getBoundingClientRect(); dpr = Math.min(2, window.devicePixelRatio || 1); W = r.width; H = r.height; cv.width = W * dpr; cv.height = H * dpr; const ds = cv.dataset; R = (ds.rbase === 'w' ? W : Math.min(W, H)) * (+ds.r || 0.44); cx = W * (ds.cx ? +ds.cx : 0.5); cy = ds.top ? H * +ds.top + R : H * (ds.cy ? +ds.cy : 0.5); };
+  const size = () => { const r = cv.getBoundingClientRect(); dpr = Math.min(1.5, window.devicePixelRatio || 1); W = r.width; H = r.height; cv.width = W * dpr; cv.height = H * dpr; const ds = cv.dataset; R = (ds.rbase === 'w' ? W : Math.min(W, H)) * (+ds.r || 0.44); cx = W * (ds.cx ? +ds.cx : 0.5); cy = ds.top ? H * +ds.top + R : H * (ds.cy ? +ds.cy : 0.5); };
   size(); addEventListener('resize', size);
   let lon0 = rad(80), lat0 = rad(cv.dataset.lat ? +cv.dataset.lat : 18), drag = null, userOff = 0, t0 = performance.now(), intro = 0;
   const proj = (lon, lat, lift = 1) => {
@@ -27,6 +31,8 @@
   cv.addEventListener('pointermove', (e) => { if (drag) userOff = drag.off + (e.clientX - drag.x) / R; });
   const up = () => { drag = null; cv.style.cursor = 'grab'; }; cv.addEventListener('pointerup', up); cv.addEventListener('pointercancel', up);
   const frame = (now) => {
+    if (now - lastDraw < 31 && !drag) { requestAnimationFrame(frame); return; }   // ~30 fps is plenty for a slow spin; leaves room for the pointer and typing
+    lastDraw = now;
     const t = (now - t0) / 1000; intro = Math.min(1, t / 1.6); const ease = 1 - Math.pow(1 - intro, 3);
     if (!drag) userOff *= 0.985;
     lon0 = rad(80) + (reduce ? 0 : -(t * 2 * Math.PI / 60)) - userOff - (1 - ease) * rad(70);
@@ -42,9 +48,13 @@
     for (let la = -60; la <= 60; la += 30) { ctx.beginPath(); let f = true; for (let lo = -180; lo <= 180; lo += 4) { const [x, y, z] = proj(rad(lo), rad(la)); if (z < 0) { f = true; continue; } f ? ctx.moveTo(x, y) : ctx.lineTo(x, y); f = false; } ctx.stroke(); }
     // land dots
     const dot = 1.7 * Math.min(1.35, Math.max(1, R / 300));
-    for (const [lo, la] of P) { const [x, y, z] = proj(lo, la); if (z <= 0) continue;
-            ctx.fillStyle = 'rgba(141,120,214,' + (0.22 + 0.55 * z) + ')';
-      ctx.beginPath(); ctx.arc(x, y, dot * 0.55 * (0.6 + 0.4 * z), 0, 7); ctx.fill(); }
+    // batched: dots grouped into 6 brightness bands and filled once per band (a few draw calls instead of thousands)
+    const NB = 6, bands = Array.from({length: NB}, () => new Path2D());
+    const c0 = Math.cos(lon0), s0 = Math.sin(lon0), cA = Math.cos(lat0), sA = Math.sin(lat0);
+    for (let i = 0; i < N; i++) { const sd = sLon[i] * c0 - cLon[i] * s0, cd = cLon[i] * c0 + sLon[i] * s0, xx = cLat[i] * sd, yy = sLat[i], zz = cLat[i] * cd;
+      const z = yy * sA + zz * cA; if (z <= 0) continue; const x = cx + xx * R, y = cy - (yy * cA - zz * sA) * R;
+      const r = dot * 0.55 * (0.6 + 0.4 * z), pb = bands[Math.min(NB - 1, (z * NB) | 0)]; pb.moveTo(x + r, y); pb.arc(x, y, r, 0, 6.2832); }
+    for (let b = 0; b < NB; b++) { ctx.fillStyle = 'rgba(141,120,214,' + (0.22 + 0.55 * (b + 0.5) / NB).toFixed(3) + ')'; ctx.fill(bands[b]); }
     ctx.globalAlpha = 1;
     // arcs between cities
     if (t > 1 && t > nextSpawn && live.length < 14) {

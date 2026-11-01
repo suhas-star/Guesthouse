@@ -193,11 +193,15 @@ Self-hosted: load CSV/JSON files with `npm run admin -- load-data <bookings.csv>
 `/admin` is available to users with `role = 'admin'` (Zuna staff). It manages:
 
 * **Clients**: name, logo (PNG/JPG/WEBP, resized in the browser), grade list, active flag.
-* **Guest houses** per client: name, city, address, Google Maps link, operator, Live / Coming soon,
-  room types (rooms, room numbers, occupancy Single / Double, eligible grades), inclusions, amenities,
+* **Guest houses** per client: name, country, state, city, address (with address lookup), Google Maps link, operator, Live / Coming soon,
+  room types (rooms, room numbers, bed type, occupancy Single / Double, eligible grades), inclusions, amenities,
   cancellation policy, photos, contacts (name, designation, email, phone), and per-section **show to client**
   switches (amenities, inclusions, cancellation policy, photos, contacts).
 * **Users** per client: create (a password is generated and shown once), reset password, disable / enable.
+* **Bookings** per client: add, edit and cancel stays (guest, title/gender, grade, base, dates, room, occupancy,
+  status, travel request, note), with warnings for room clashes and mixed-gender sharing. Saves update the
+  `bookings` dataset at once and are also kept in the `manual` dataset, which any external feed should apply last;
+  a `manual` row with status `Cancelled` means that stay (same guest + check-in) is removed.
 
 Client users (`role = 'client'`, `client_id` set) see only their client's guest houses and bookings, with their logo.
 Images are stored in table `files` (base64) and served at `/files/<id>` only to the owning client's users and admins.

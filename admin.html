@@ -135,9 +135,9 @@ const render = () => {
   const top = h('div', 'flex flex-wrap items-center gap-3 mb-4');
   top.appendChild(h('h1', 'text-xl font-bold', c.name));
   const tabs = h('div', 'ml-auto flex gap-1 rounded-xl bg-white ring-1 ring-zuna-100 p-1');
-  [['gh', 'Guest houses'], ['users', 'Users'], ['settings', 'Client settings']].forEach(([k, l]) => { const b = h('button', 'tab rounded-lg px-3 py-1.5 text-xs font-semibold text-zuna-600', l); if (tab === k) b.dataset.on = ''; b.onclick = () => { tab = k; render(); }; tabs.appendChild(b); });
+  [['gh', 'Guest houses'], ['bookings', 'Bookings'], ['users', 'Users'], ['settings', 'Client settings']].forEach(([k, l]) => { const b = h('button', 'tab rounded-lg px-3 py-1.5 text-xs font-semibold text-zuna-600', l); if (tab === k) b.dataset.on = ''; b.onclick = () => { tab = k; render(); }; tabs.appendChild(b); });
   top.appendChild(tabs); D.appendChild(top);
-  ({gh: renderGH, users: renderUsers, settings: renderSettings})[tab](D, c);
+  ({gh: renderGH, bookings: renderBookings, users: renderUsers, settings: renderSettings})[tab](D, c);
 };
 
 const renderGH = (D, c) => {
@@ -243,6 +243,97 @@ const editGH = (c, x) => {
     toast('Saved'); await load(true); const fresh = C().guesthouses.find((g) => g.id === r.id); if (!x.id) editGH(C(), fresh); else closeModal(); } catch (er) { toast(er.message, true); } finally { save.disabled = false; } };
   actions.appendChild(save); f.appendChild(actions);
   modal(x.id ? 'Edit ' + x.property : 'New guest house · ' + c.name, f);
+};
+
+// ---------- bookings ----------
+const BF = {q: '', gh: '', when: 'upcoming'};
+const TODAY = new Date(Date.now() + 5.5 * 3600e3).toISOString().slice(0, 10);
+const fD = (d) => d ? new Date(d + 'T00:00:00').toLocaleDateString('en-IN', {day: '2-digit', month: 'short', year: 'numeric'}) : '—';
+const nightsBetween = (a, b) => a && b ? Math.round((Date.parse(b) - Date.parse(a)) / 864e5) : 0;
+const badge = (t, cls) => h('span', 'inline-flex items-center rounded-full px-2 py-0.5 text-[11px] font-bold whitespace-nowrap ' + cls, t);
+const renderBookings = (D, c) => {
+  const bar = h('div', 'flex flex-wrap items-center gap-2 mb-3');
+  const q = inp(BF.q, 'Search guest, room or TR'); q.classList.add('!w-60'); q.type = 'search';
+  const gsel = sel(BF.gh, [['', 'All guest houses']].concat(c.guesthouses.map((g) => [g.property, g.property]))); gsel.classList.add('!w-52');
+  const wsel = sel(BF.when, [['upcoming', 'Upcoming & in-house'], ['past', 'Past stays'], ['all', 'All stays']]); wsel.classList.add('!w-48');
+  const add = h('button', 'ml-auto btn-primary', '+ Add booking'); add.onclick = () => editBooking(c, null);
+  bar.append(q, gsel, wsel, add); D.appendChild(bar);
+  const info = h('p', 'text-sm text-zuna-500 mb-2'); D.appendChild(info);
+  const t = h('div', 'card overflow-x-auto'); D.appendChild(t);
+  const draw = () => {
+    const qq = BF.q.trim().toLowerCase();
+    const list = c.bookings.filter((b) => (!BF.gh || b.property === BF.gh) && (BF.when === 'all' || (BF.when === 'upcoming' ? b.check_out > TODAY : b.check_out <= TODAY))
+      && (!qq || [b.guest, b.room, b.concur_tr, b.grade, b.base, b.note].join(' ').toLowerCase().includes(qq)))
+      .sort((a, b) => BF.when === 'past' ? b.check_in.localeCompare(a.check_in) : a.check_in.localeCompare(b.check_in));
+    info.textContent = list.length + ' of ' + c.bookings.length + ' bookings' + (c.bookings.some((b) => b.manual) ? ' · ' + c.bookings.filter((b) => b.manual).length + ' added or edited by Zuna' : '');
+    const tb = h('table', 'w-full text-sm'); const hr = h('tr', 'text-left text-xs font-semibold text-zuna-500 bg-zuna-50/70');
+    ['Guest', 'Guest house · Room', 'Stay', 'Occupancy', 'Status', ''].forEach((x) => hr.appendChild(h('th', 'px-4 py-2.5 whitespace-nowrap', x))); const th = h('thead'); th.appendChild(hr); tb.appendChild(th);
+    const body = h('tbody', 'divide-y divide-zuna-50');
+    list.forEach((b) => { const tr = h('tr', 'align-middle hover:bg-zuna-50/40');
+      const g = h('td', 'px-4 py-3'); g.appendChild(h('p', 'font-semibold whitespace-nowrap', b.guest));
+      const sub = h('p', 'text-xs text-zuna-500 mt-0.5 flex items-center gap-1.5 whitespace-nowrap'); sub.appendChild(document.createTextNode(['Grade ' + (b.grade || '—'), b.base, b.concur_tr].filter((x) => x && x !== 'Not stated').join(' · ')));
+      if (b.manual) sub.appendChild(badge('Zuna entry', '!px-1.5 !py-0 bg-zuna-50 text-zuna-600 ring-1 ring-zuna-100')); g.appendChild(sub); tr.appendChild(g);
+      const p = h('td', 'px-4 py-3'); p.appendChild(h('p', 'font-medium whitespace-nowrap', b.property)); p.appendChild(h('p', 'text-xs ' + (b.room === 'Not assigned' ? 'text-amber-700' : 'text-zuna-500'), b.status === 'Confirmed' ? 'Room ' + b.room : '—')); tr.appendChild(p);
+      const st = h('td', 'px-4 py-3 whitespace-nowrap'); st.appendChild(h('p', 'font-medium', fD(b.check_in) + ' → ' + fD(b.check_out))); st.appendChild(h('p', 'text-xs text-zuna-500', b.nights + (b.nights === '1' ? ' night' : ' nights') + (b.check_in <= TODAY && b.check_out > TODAY ? ' · in house' : ''))); tr.appendChild(st);
+      const oc = h('td', 'px-4 py-3'); oc.appendChild(h('p', null, b.occupancy || '—')); oc.appendChild(h('p', 'text-xs text-zuna-500', b.gender && b.gender !== 'Not stated' ? b.gender : '')); tr.appendChild(oc);
+      const ss = h('td', 'px-4 py-3'); ss.appendChild(b.status === 'Confirmed' ? badge('Confirmed', 'bg-mint-50 text-mint-700 ring-1 ring-mint-200') : badge(b.status, 'bg-amber-50 text-amber-800 ring-1 ring-amber-200')); tr.appendChild(ss);
+      const ac = h('td', 'px-4 py-3 text-right whitespace-nowrap space-x-2');
+      const ed = h('button', 'btn !py-1 !px-2.5 text-xs', 'Edit'); ed.onclick = () => editBooking(c, b);
+      const cx = h('button', 'btn !py-1 !px-2.5 text-xs text-rose-600', 'Cancel'); cx.onclick = async () => { if (!confirm('Cancel the stay of ' + b.guest + ' (' + fD(b.check_in) + ')? It is removed from the client dashboard.')) return;
+        try { await api('booking/delete', {client_id: c.id, guest: b.guest, check_in: b.check_in}); toast('Booking cancelled'); load(true); } catch (er) { toast(er.message, true); } };
+      ac.append(ed, cx); tr.appendChild(ac); body.appendChild(tr); });
+    if (!list.length) { const tr = h('tr'); const td = h('td', 'px-4 py-10 text-center text-zuna-500', c.bookings.length ? 'No bookings match these filters.' : 'No bookings yet.'); td.colSpan = 6; tr.appendChild(td); body.appendChild(tr); }
+    tb.appendChild(body); t.replaceChildren(tb); };
+  q.oninput = () => { BF.q = q.value; draw(); }; gsel.onchange = () => { BF.gh = gsel.value; draw(); }; wsel.onchange = () => { BF.when = wsel.value; draw(); };
+  draw();
+};
+const CITY_LIST = [...new Set(Object.values(IN_STATES).flatMap((v) => v.split(',')))].sort();
+const editBooking = (c, b) => {
+  const live = c.guesthouses.filter((g) => g.status === 'Live'), g0 = b ? b.property : (live[0] || c.guesthouses[0] || {}).property;
+  if (!g0) { toast('Add a guest house first.', true); return; }
+  const m = /^\s*(Mr|Ms|Mrs|Dr)\.?\s+(.*)$/i.exec(b ? b.guest : ''), T = m ? m[1][0].toUpperCase() + m[1].slice(1).toLowerCase() + '.' : '';
+  const f = h('div', 'space-y-5'); const g = h('div', 'grid sm:grid-cols-6 gap-3'); f.appendChild(g);
+  const gh = sel(g0, c.guesthouses.map((x) => [x.property, x.property + (x.status === 'Live' ? '' : ' (coming soon)')]));
+  const title = sel(T, [['', 'Title'], 'Mr.', 'Ms.', 'Mrs.', 'Dr.']), name = inp(m ? m[2] : (b ? b.guest : ''), 'Full name');
+  const gender = sel(b && b.gender !== 'Not stated' ? b.gender : '', [['', 'Not stated'], 'Male', 'Female']);
+  const grade = combo(b && b.grade !== 'Not stated' ? b.grade : '', c.grades, 'Pick or type'), base = combo(b && b.base !== 'Not stated' ? b.base : '', CITY_LIST, 'Pick or type');
+  const ci = inp(b ? b.check_in : '', '', 'date'), co = inp(b ? b.check_out : '', '', 'date'), nightsL = h('p', 'text-xs text-zuna-500 mt-1 h-4');
+  const room = sel('', [['Not assigned', 'Not assigned']]), occ = sel(b ? b.occupancy : 'Single', ['Single', 'Double']), status = sel(b ? b.status : 'Confirmed', ['Confirmed', 'Not available']);
+  const tr = inp(b ? b.concur_tr : '', 'e.g. 4F2A9'), note = h('textarea', 'inp'); note.rows = 2; note.value = b ? b.note : ''; note.placeholder = 'e.g. Confirmed on WhatsApp';
+  const coWrap = h('div'); coWrap.append(co, nightsL);
+  g.append(field('Guest house', gh, 'sm:col-span-6'), field('Title', title, 'sm:col-span-1'), field('Guest name', name, 'sm:col-span-3'), field('Gender', gender, 'sm:col-span-2'),
+    field('Grade', grade, 'sm:col-span-2'), field('Base location', base, 'sm:col-span-2'), field('Concur TR', tr, 'sm:col-span-2'),
+    field('Check-in', ci, 'sm:col-span-2'), field('Check-out', coWrap, 'sm:col-span-2'), field('Status', status, 'sm:col-span-2'),
+    field('Room', room, 'sm:col-span-3'), field('Occupancy', occ, 'sm:col-span-3'), field('Note', note, 'sm:col-span-6'));
+  const warn = h('div', 'hidden rounded-xl bg-amber-50 ring-1 ring-amber-200 px-4 py-3 text-sm text-amber-900 space-y-1'); f.appendChild(warn);
+  const fillRooms = (keep) => { const G = c.guesthouses.find((x) => x.property === gh.value) || {}; const v = keep || room.value;
+    room.replaceChildren(); [['Not assigned', 'Not assigned']].concat((G.rooms_list || []).map((r) => [r, r])).forEach(([val, l]) => { const o = h('option', null, l); o.value = val; room.appendChild(o); });
+    room.value = (G.rooms_list || []).includes(v) ? v : 'Not assigned'; };
+  fillRooms(b ? b.room : '');
+  const sexOf = () => title.value === 'Mr.' ? 'Male' : (title.value === 'Ms.' || title.value === 'Mrs.') ? 'Female' : gender.value;
+  const check = () => { const n = nightsBetween(ci.value, co.value); nightsL.textContent = n > 0 ? n + (n === 1 ? ' night' : ' nights') : (ci.value && co.value ? 'Check-out must be after check-in' : '');
+    nightsL.className = 'text-xs mt-1 h-4 ' + (n > 0 || !(ci.value && co.value) ? 'text-zuna-500' : 'text-rose-600');
+    if (title.value === 'Mr.' || title.value === 'Ms.' || title.value === 'Mrs.') { gender.value = sexOf(); gender.disabled = true; } else gender.disabled = false;
+    room.disabled = status.value !== 'Confirmed';
+    const msgs = [];
+    if (status.value === 'Confirmed' && room.value !== 'Not assigned' && n > 0) {
+      const others = c.bookings.filter((o) => o !== b && o.status === 'Confirmed' && o.property === gh.value && o.room === room.value && o.check_in < co.value && o.check_out > ci.value);
+      if (others.length >= 2) msgs.push('Room ' + room.value + ' already has two guests on some of these nights.');
+      others.forEach((o) => { const nm2 = o.guest + ' (' + fD(o.check_in) + ' → ' + fD(o.check_out) + ')';
+        if (occ.value === 'Single' || o.occupancy === 'Single') msgs.push('Room ' + room.value + ' is booked for ' + nm2 + '. Choose another room or set both to Double occupancy.');
+        else if (o.gender && sexOf() && o.gender !== 'Not stated' && o.gender !== sexOf()) msgs.push('Double occupancy is allowed only for two male or two female guests. ' + nm2 + ' is ' + o.gender.toLowerCase() + '.'); });
+    }
+    warn.replaceChildren(...msgs.map((x) => h('p', null, '⚠ ' + x))); warn.classList.toggle('hidden', !msgs.length); return msgs; };
+  [title, gender, ci, co, room, occ, status].forEach((e) => e.addEventListener('change', check)); [ci, co].forEach((e) => e.addEventListener('input', check));
+  gh.addEventListener('change', () => { fillRooms(); check(); });
+  check();
+  const actions = h('div', 'flex items-center gap-2 pt-3 border-t border-zuna-100');
+  actions.appendChild(h('p', 'text-xs text-zuna-500', 'Saved bookings show on the client dashboard right away and are kept when bookings are next updated from e-mails and vouchers.'));
+  const save = h('button', 'ml-auto btn-primary shrink-0', b ? 'Save changes' : 'Add booking'); actions.appendChild(save); f.appendChild(actions);
+  save.onclick = async () => { const w = check(); if (w.length && !confirm(w.join('\n') + '\n\nSave anyway?')) return; save.disabled = true;
+    try { await api('booking', {client_id: c.id, original: b ? {guest: b.guest, check_in: b.check_in} : null, row: {property: gh.value, title: title.value, name: name.value, gender: sexOf(), grade: grade.get(), base: base.get(), check_in: ci.value, check_out: co.value, room: room.value, occupancy: occ.value, status: status.value, concur_tr: tr.value, note: note.value}});
+      closeModal(); toast(b ? 'Booking updated' : 'Booking added'); BF.when = co.value > TODAY ? BF.when : 'all'; load(true); } catch (er) { toast(er.message, true); } finally { save.disabled = false; } };
+  modal(b ? 'Edit booking · ' + b.guest : 'New booking · ' + c.name, f);
 };
 
 const pwBox = (email, pw) => { const b = h('div', 'rounded-xl bg-mint-50 ring-1 ring-mint-200 p-4 space-y-2'); b.appendChild(h('p', 'text-sm font-semibold', 'Login details for ' + email));

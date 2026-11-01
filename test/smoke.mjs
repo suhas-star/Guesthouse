@@ -153,6 +153,22 @@ check('old host redirects to PRIMARY_HOST', r.status === 301 && r.headers.get('l
   const otherLogo = await A('client/logo', {client_id: other, data_url: png});
   check("client user cannot load another client's files", (await call(otherLogo.j.logo, {cookie: asha})).status === 404);
   check('admin page served to admin', /Admin/.test(await (await call('/admin', {cookie: admin})).text()));
+  // bookings from the admin panel
+  x = await A('booking', {client_id: acme, row: {property: 'Acme House', title: 'Ms.', name: 'Neha Iyer', grade: 'E2', base: 'Pune', check_in: '2026-11-03', check_out: '2026-11-05', room: 'A1', occupancy: 'Single', status: 'Confirmed'}});
+  check('admin adds a booking', x.status === 200 && x.j.row.guest === 'Ms. Neha Iyer' && x.j.row.gender === 'Female' && x.j.row.nights === '2' && x.j.row.room === 'A1');
+  x = await A('booking', {client_id: acme, row: {property: 'Other House', name: 'X', check_in: '2026-11-03', check_out: '2026-11-04'}});
+  check("booking can't go to another client's guest house", x.status === 400);
+  x = await A('booking', {client_id: acme, row: {property: 'Acme House', name: 'Y', check_in: '2026-11-05', check_out: '2026-11-03'}});
+  check('booking with check-out before check-in refused', x.status === 400);
+  x = await A('booking', {client_id: acme, original: {guest: 'Ms. Neha Iyer', check_in: '2026-11-03'}, row: {property: 'Acme House', title: 'Ms.', name: 'Neha Iyer', check_in: '2026-11-04', check_out: '2026-11-06', room: 'Z9', status: 'Confirmed'}});
+  let mrow = JSON.parse(DB.raw.prepare("SELECT json FROM datasets WHERE id = 'manual'").get().json);
+  let brow = JSON.parse(DB.raw.prepare("SELECT json FROM datasets WHERE id = 'bookings'").get().json);
+  check('edited booking replaces the old one; unknown room -> Not assigned; old stay marked cancelled for the updater',
+    brow.filter((b) => /Neha Iyer/.test(b.guest)).length === 1 && brow.find((b) => /Neha Iyer/.test(b.guest)).room === 'Not assigned' && mrow.some((m) => m.check_in === '2026-11-03' && m.status === 'Cancelled') && mrow.some((m) => m.check_in === '2026-11-04' && m.status === 'Confirmed'));
+  x = await A('state', {}); check('admin state lists the booking as a Zuna entry', x.j.clients.find((c) => c.id === acme).bookings.some((b) => b.manual && b.check_in === '2026-11-04'));
+  x = await A('booking/delete', {client_id: acme, guest: 'Neha Iyer', check_in: '2026-11-04'});
+  brow = JSON.parse(DB.raw.prepare("SELECT json FROM datasets WHERE id = 'bookings'").get().json); mrow = JSON.parse(DB.raw.prepare("SELECT json FROM datasets WHERE id = 'manual'").get().json);
+  check('cancel removes the booking and records the cancellation', x.status === 200 && !brow.some((b) => /Neha Iyer/.test(b.guest)) && mrow.filter((m) => /Neha Iyer/.test(m.guest)).every((m) => m.status === 'Cancelled'));
   x = await A('user', {email: 'asha@acme.example', name: 'Asha Rao', active: false});
   check('disabled user is signed out', (await (await call('/', {cookie: asha})).text()).includes('id="f"'));
 }

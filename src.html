@@ -19,7 +19,7 @@ if(q||!n){s.remove();return}
 s.classList.add('sp-cont');h.textContent=n==='-'?'Welcome':'Welcome, '+n;
 function hide(){if(done)return;done=true;setTimeout(function(){s.classList.add('sp-hide');setTimeout(function(){s.remove()},600)},Math.max(0,(n?700:250)-(Date.now()-t0)))}
 window.addEventListener('load',function(){setTimeout(hide,150)});setTimeout(hide,10000)})();</script>
-<script src="https://cdn.jsdelivr.net/npm/apexcharts@3.54.1/dist/apexcharts.min.js"></script>
+<script defer src="https://cdn.jsdelivr.net/npm/apexcharts@3.54.1/dist/apexcharts.min.js"></script>
 <div id="app" class="min-h-screen lg:grid lg:grid-cols-[256px_minmax(0,1fr)]">
 
   <!-- Sidebar -->
@@ -334,7 +334,9 @@ const charts = {};
 const killChart = (k) => { if (charts[k]) { try { charts[k].destroy(); } catch (e) {} delete charts[k]; } };
 const hasApex = () => typeof window.ApexCharts === 'function';
 const DK = () => document.documentElement.classList.contains('dark');
-const noChart = (el) => { el.replaceChildren(h('p', 'p-8 text-center text-sm text-zuna-400', 'Chart unavailable — check your internet connection.')); };
+// charts load in the background; until then show a placeholder, and only say "unavailable" if loading really failed
+const noChart = (el) => { if (document.readyState !== 'complete') { const sk = h('div', 'chart-skel h-full min-h-[200px] rounded-xl'); sk.setAttribute('aria-label', 'Loading chart'); el.replaceChildren(sk); return; }
+  el.replaceChildren(h('p', 'p-8 text-center text-sm text-zuna-400', 'Chart unavailable — check your internet connection.')); };
 const sparkline = (el, data, color) => {
   if (!hasApex()) return;
   const c = new ApexCharts(el, {chart: {type: 'area', height: 38, sparkline: {enabled: true}, animations: {enabled: true, speed: 600}}, series: [{data}], stroke: {curve: 'smooth', width: 2}, colors: [color],
@@ -766,7 +768,6 @@ ZUI.auto(document.body); ZUI.clickables(document.body);
   const setCol = (v) => { document.documentElement.classList.toggle('sb-c', v); try { sessionStorage.setItem('ltmgh.sb', v ? 'closed' : 'open'); } catch (e) {} setTimeout(() => window.dispatchEvent(new Event('resize')), 320); };
   $('#sbClose').onclick = () => setCol(true); $('#sbOpen').onclick = () => setCol(false);
   $('#sbCloseM').onclick = () => closeSide();
-  $('#logoutBtn').addEventListener('click', (e) => { e.preventDefault(); document.body.classList.add('opacity-0', 'transition-opacity', 'duration-300'); setTimeout(() => { location.href = '/logout'; }, 280); });
 })();
 
 hydrateIcons();
@@ -783,7 +784,7 @@ setInterval(() => {
 }, 30000);
 document.addEventListener('visibilitychange', () => { if (document.visibilityState === 'visible' && Date.now() - LOADED > 10 * 60000 && $('#drawer').getAttribute('aria-hidden') !== 'false') { try { sessionStorage.setItem('zp.quiet', '1'); } catch (e) {} location.reload(); } });
 render();
-window.addEventListener('load', () => { if (state.view === 'overview' && hasApex() && !charts.main) render(); });
+window.addEventListener('load', () => { if (state.view === 'overview' && !charts.main) render(); });
 
 window.__ltm = {P, myB, nightsAll, period, stateOf, fDay, fShort, fLong, toast, today};
 })();

@@ -101,28 +101,47 @@ const ZUI = (() => {
   // ---- default artwork ----
   const enc = (s) => 'data:image/svg+xml;charset=utf-8,' + encodeURIComponent(s);
   const win = (x0, y0, cols, rows, w, hh, gx, gy, lit) => { let o = ''; for (let r = 0; r < rows; r++) for (let c = 0; c < cols; c++) o += `<rect x="${x0 + c * gx}" y="${y0 + r * gy}" width="${w}" height="${hh}" rx="2" fill="${lit.includes(r * cols + c) ? '#02C988' : '#d9d3f2'}"/>`; return o; };
+  const lines = (n, f) => Array.from({length: n}, (_, k) => f(k)).join('');
   const ghArt = enc(`<svg xmlns="http://www.w3.org/2000/svg" viewBox="-160 0 800 300" preserveAspectRatio="xMidYMid slice">
-<defs><linearGradient id="s" x1="0" y1="0" x2="0" y2="1"><stop offset="0" stop-color="#2d1888"/><stop offset="1" stop-color="#12005A"/></linearGradient>
-<radialGradient id="g" cx=".74" cy=".24" r=".55"><stop offset="0" stop-color="#02C988" stop-opacity=".38"/><stop offset="1" stop-color="#02C988" stop-opacity="0"/></radialGradient>
-<linearGradient id="b" x1="0" y1="0" x2="1" y2="0"><stop offset="0" stop-color="#ffffff"/><stop offset="1" stop-color="#eeeaf9"/></linearGradient></defs>
-<rect x="-160" width="800" height="300" fill="url(#s)"/><rect x="-160" width="800" height="300" fill="url(#g)"/>
-<g fill="#fff" opacity=".45"><circle cx="-120" cy="40" r="1.2"/><circle cx="-60" cy="70" r="1"/><circle cx="520" cy="50" r="1.3"/><circle cx="600" cy="30" r="1"/></g>
-<g fill="#33208f"><rect x="-156" y="176" width="52" height="124" rx="3"/><rect x="-98" y="140" width="38" height="160" rx="3"/><rect x="-54" y="196" width="48" height="104" rx="3"/><rect x="488" y="160" width="46" height="140" rx="3"/><rect x="540" y="126" width="40" height="174" rx="3"/><rect x="586" y="186" width="52" height="114" rx="3"/></g>
-<g fill="#4c38a6" opacity=".85">${win(-148, 188, 3, 5, 9, 7, 15, 20, [6])}${win(-90, 152, 2, 7, 10, 8, 16, 20, [9])}${win(496, 172, 2, 6, 10, 8, 18, 20, [2])}${win(548, 138, 2, 8, 10, 8, 16, 20, [5, 11])}</g>
-<g fill="#02C988"><circle cx="-30" cy="270" r="18"/><circle cx="520" cy="272" r="18"/></g>
-<g fill="#fff" opacity=".5"><circle cx="58" cy="44" r="1.4"/><circle cx="132" cy="28" r="1"/><circle cx="210" cy="52" r="1.2"/><circle cx="420" cy="36" r="1"/><circle cx="452" cy="88" r="1.3"/><circle cx="96" cy="96" r="1"/></g>
-<circle cx="356" cy="72" r="20" fill="#02C988"/><circle cx="364" cy="66" r="20" fill="#2a1784" opacity=".55"/>
-<g fill="#3a2696"><rect x="0" y="150" width="56" height="150" rx="3"/><rect x="62" y="118" width="40" height="182" rx="3"/><rect x="384" y="132" width="42" height="168" rx="3"/><rect x="432" y="104" width="48" height="196" rx="3"/></g>
-<g fill="#4c38a6" opacity=".9">${win(8, 162, 3, 6, 10, 8, 16, 20, [4, 9])}${win(70, 130, 2, 8, 10, 8, 16, 20, [3])}${win(392, 144, 2, 7, 10, 8, 16, 20, [8])}${win(440, 116, 2, 9, 12, 8, 18, 20, [1, 12])}</g>
-<rect x="112" y="186" width="44" height="114" rx="3" fill="#e2ddf5"/><rect x="324" y="176" width="44" height="124" rx="3" fill="#e2ddf5"/>
-${win(120, 198, 2, 4, 10, 10, 18, 24, [5])}${win(332, 188, 2, 4, 10, 10, 18, 24, [2])}
-<rect x="156" y="84" width="168" height="216" rx="6" fill="url(#b)"/><rect x="148" y="74" width="184" height="16" rx="5" fill="#cdc5ec"/>
-<rect x="216" y="56" width="48" height="22" rx="4" fill="#12005A"/><rect x="226" y="62" width="28" height="10" rx="2" fill="#02C988"/>
-${win(174, 104, 4, 5, 22, 18, 36, 30, [2, 5, 11, 14, 16])}
-<rect x="214" y="250" width="52" height="50" rx="6" fill="#12005A"/><rect x="238" y="250" width="4" height="50" fill="#2d1888"/><rect x="204" y="242" width="72" height="10" rx="5" fill="#02C988"/>
-<g fill="#02C988"><circle cx="96" cy="262" r="22"/><circle cx="76" cy="276" r="16"/><circle cx="392" cy="260" r="24"/><circle cx="414" cy="278" r="16"/></g>
-<g fill="#019b69"><circle cx="104" cy="270" r="12"/><circle cx="384" cy="270" r="13"/></g>
-<rect x="-160" y="292" width="800" height="8" fill="#0b003a"/></svg>`);
+<defs>
+<linearGradient id="sky" x1="0" y1="0" x2="0" y2="1"><stop offset="0" stop-color="#12005A"/><stop offset=".55" stop-color="#3a2795"/><stop offset="1" stop-color="#9c90da"/></linearGradient>
+<radialGradient id="hz" cx=".5" cy="1" r=".6"><stop offset="0" stop-color="#02C988" stop-opacity=".28"/><stop offset="1" stop-color="#02C988" stop-opacity="0"/></radialGradient>
+<linearGradient id="gl" x1="0" y1="0" x2="1" y2="1"><stop offset="0" stop-color="#f3f1fd"/><stop offset=".45" stop-color="#b9b0e8"/><stop offset="1" stop-color="#4a37a8"/></linearGradient>
+<linearGradient id="gl2" x1="0" y1="0" x2="1" y2="1"><stop offset="0" stop-color="#cfc8f1"/><stop offset="1" stop-color="#2f1d8c"/></linearGradient>
+<linearGradient id="gl3" x1="1" y1="0" x2="0" y2="1"><stop offset="0" stop-color="#d9d3f5"/><stop offset="1" stop-color="#3b2898"/></linearGradient>
+<linearGradient id="lobby" x1="0" y1="0" x2="0" y2="1"><stop offset="0" stop-color="#e6fff5"/><stop offset="1" stop-color="#7fe8c3"/></linearGradient>
+<linearGradient id="pl" x1="0" y1="0" x2="0" y2="1"><stop offset="0" stop-color="#2a1784"/><stop offset="1" stop-color="#12005A"/></linearGradient>
+<radialGradient id="glow" cx=".5" cy=".5" r=".5"><stop offset="0" stop-color="#b8f5df" stop-opacity=".9"/><stop offset="1" stop-color="#02C988" stop-opacity="0"/></radialGradient>
+<clipPath id="ct"><rect x="160" y="34" width="160" height="206"/></clipPath>
+</defs>
+<rect x="-160" width="800" height="300" fill="url(#sky)"/><rect x="-160" width="800" height="300" fill="url(#hz)"/>
+<g fill="#fff"><circle cx="-110" cy="30" r="1.1" opacity=".7"/><circle cx="-30" cy="58" r=".9" opacity=".5"/><circle cx="60" cy="22" r="1.2" opacity=".6"/><circle cx="410" cy="26" r="1" opacity=".6"/><circle cx="520" cy="54" r="1.2" opacity=".7"/><circle cx="600" cy="20" r=".9" opacity=".5"/></g>
+<g fill="#2a1784" opacity=".55"><rect x="-150" y="150" width="50" height="150"/><rect x="-92" y="118" width="36" height="182"/><rect x="-48" y="168" width="58" height="132"/><rect x="470" y="140" width="44" height="160"/><rect x="520" y="104" width="34" height="196"/><rect x="560" y="160" width="70" height="140"/></g>
+<g fill="#cfc8f1" opacity=".35">${lines(6, (k) => `<rect x="-86" y="${130 + k * 22}" width="24" height="3"/>`)}${lines(7, (k) => `<rect x="526" y="${118 + k * 22}" width="22" height="3"/>`)}</g>
+<rect x="84" y="96" width="84" height="150" fill="url(#gl2)"/><g fill="#fff" opacity=".4"><rect x="98" y="123" width="14" height="15"/><rect x="126" y="153" width="14" height="15"/><rect x="140" y="108" width="14" height="15"/><rect x="112" y="198" width="14" height="15"/></g><g stroke="#fff" stroke-opacity=".22">${lines(9, (k) => `<line x1="84" x2="168" y1="${108 + k * 15}" y2="${108 + k * 15}"/>`)}${lines(5, (k) => `<line x1="${98 + k * 14}" x2="${98 + k * 14}" y1="96" y2="246"/>`)}</g>
+<rect x="312" y="118" width="88" height="128" fill="url(#gl3)"/><g fill="#fff" opacity=".4"><rect x="326" y="145" width="14" height="15"/><rect x="354" y="175" width="14" height="15"/><rect x="368" y="130" width="14" height="15"/><rect x="340" y="205" width="14" height="15"/></g><g stroke="#fff" stroke-opacity=".22">${lines(8, (k) => `<line x1="312" x2="400" y1="${130 + k * 15}" y2="${130 + k * 15}"/>`)}${lines(5, (k) => `<line x1="${326 + k * 14}" x2="${326 + k * 14}" y1="118" y2="246"/>`)}</g>
+<rect x="160" y="34" width="160" height="206" fill="url(#gl)"/>
+<g clip-path="url(#ct)">
+<g stroke="#12005A" stroke-opacity=".18">${lines(8, (k) => `<line x1="${180 + k * 20}" x2="${180 + k * 20}" y1="34" y2="240"/>`)}</g>
+<g stroke="#fff" stroke-opacity=".45">${lines(13, (k) => `<line x1="160" x2="320" y1="${50 + k * 15}" y2="${50 + k * 15}"/>`)}</g>
+<g fill="#fff" opacity=".55">${[[180,50],[260,50],[200,80],[300,80],[160,110],[240,110],[280,125],[180,155],[220,170],[300,170],[260,200],[160,215],[240,215]].map(([x, y]) => `<rect x="${x}" y="${y}" width="20" height="15"/>`).join('')}</g>
+<g fill="#02C988" opacity=".32"><rect x="180" y="95" width="40" height="15"/><rect x="240" y="140" width="60" height="15"/><rect x="200" y="185" width="20" height="15"/><rect x="280" y="65" width="20" height="15"/></g>
+<polygon points="160,120 240,34 290,34 160,176" fill="#fff" opacity=".22"/><polygon points="160,196 320,60 320,84 160,224" fill="#fff" opacity=".12"/>
+</g>
+<rect x="156" y="26" width="168" height="10" fill="#12005A"/><rect x="156" y="35" width="168" height="2" fill="#02C988"/>
+<rect x="232" y="12" width="16" height="16" fill="#12005A"/><circle cx="240" cy="10" r="2.4" fill="#02C988"/>
+<rect x="40" y="236" width="400" height="56" fill="#f6f4fd"/><rect x="40" y="236" width="400" height="4" fill="#d9d3f2"/>
+<rect x="56" y="248" width="120" height="30" rx="2" fill="url(#lobby)" opacity=".9"/><rect x="304" y="248" width="120" height="30" rx="2" fill="url(#lobby)" opacity=".9"/>
+<g stroke="#f6f4fd" stroke-width="3">${lines(5, (k) => `<line x1="${80 + k * 24}" x2="${80 + k * 24}" y1="248" y2="278"/><line x1="${328 + k * 24}" x2="${328 + k * 24}" y1="248" y2="278"/>`)}</g>
+<rect x="206" y="252" width="68" height="40" fill="url(#lobby)"/><rect x="238" y="252" width="4" height="40" fill="#f6f4fd"/>
+<path d="M188 240h104l8 12H180z" fill="#12005A"/><rect x="180" y="251" width="120" height="2" fill="#02C988"/>
+<g fill="#02C988"><rect x="191" y="253" width="2" height="39" opacity=".0"/></g>
+<ellipse cx="240" cy="270" rx="90" ry="34" fill="url(#glow)" opacity=".55"/>
+<g>${[120, 360].map((x) => `<rect x="${x - 1.5}" y="250" width="3" height="42" fill="#12005A"/><rect x="${x - 6}" y="244" width="12" height="7" rx="2" fill="#12005A"/><circle cx="${x}" cy="252" r="12" fill="url(#glow)"/><rect x="${x - 4}" y="250" width="8" height="2" fill="#b8f5df"/>`).join('')}</g>
+<g><rect x="186" y="276" width="12" height="16" fill="#cfc8f1"/><circle cx="192" cy="270" r="9" fill="#02C988"/><rect x="282" y="276" width="12" height="16" fill="#cfc8f1"/><circle cx="288" cy="270" r="9" fill="#02C988"/></g>
+<g fill="#02C988"><circle cx="20" cy="274" r="16"/><circle cx="4" cy="282" r="12"/><circle cx="460" cy="274" r="16"/><circle cx="476" cy="282" r="12"/></g>
+<rect x="-160" y="292" width="800" height="8" fill="url(#pl)"/>
+</svg>`);
   const roomArt = enc(`<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 480 300" preserveAspectRatio="xMidYMid slice">
 <defs><linearGradient id="w" x1="0" y1="0" x2="0" y2="1"><stop offset="0" stop-color="#f6f4fd"/><stop offset="1" stop-color="#ece8f9"/></linearGradient>
 <linearGradient id="sky" x1="0" y1="0" x2="0" y2="1"><stop offset="0" stop-color="#d4f7ea"/><stop offset="1" stop-color="#f1fcf7"/></linearGradient></defs>

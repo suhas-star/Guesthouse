@@ -587,7 +587,7 @@ const renderHouses = () => {
       const ic = h('span', 'grid place-items-center w-10 h-10 rounded-xl shrink-0 ' + (live ? 'bg-zuna-900 text-mint-400' : 'bg-zuna-50 text-zuna-400')); ic.appendChild(icon('building-2', 'w-5 h-5')); top.appendChild(ic);
       const m = h('div', 'min-w-0 flex-1'); m.appendChild(h('p', 'text-base font-bold leading-tight', p.property));
       const meta = h('p', 'mt-1 flex flex-wrap items-center gap-x-2 gap-y-0.5 text-xs text-zuna-500'); meta.appendChild(icon('bed', 'w-3.5 h-3.5'));
-      meta.appendChild(document.createTextNode(p.rooms + ' rooms · ' + p.operator)); m.appendChild(meta); top.appendChild(m);
+      meta.appendChild(document.createTextNode([p.rooms + ' rooms', p.operator].filter(Boolean).join(' · '))); m.appendChild(meta); top.appendChild(m);
       const pill = h('span', 'shrink-0 inline-flex items-center gap-1.5 rounded-full px-2.5 py-1 text-xs font-bold ' + (live ? 'bg-mint-50 text-mint-700 ring-1 ring-mint-200' : 'bg-white text-zuna-500 ring-1 ring-zuna-100'));
       if (live) { const dot = h('span', 'relative flex w-2 h-2'); dot.appendChild(h('span', 'absolute inset-0 rounded-full bg-mint-500 animate-ping opacity-60')); dot.appendChild(h('span', 'relative w-2 h-2 rounded-full bg-mint-500')); pill.appendChild(dot); }
       pill.appendChild(document.createTextNode(live ? 'Live' : 'Coming soon')); top.appendChild(pill);
@@ -608,18 +608,25 @@ const renderHouses = () => {
       const dl = h('dl', 'px-5 pt-4 pb-4 grid grid-cols-[72px_1fr] gap-x-3 gap-y-2.5 text-sm');
       const row = (k, node) => { dl.appendChild(h('dt', 'text-zuna-500 font-medium text-xs pt-0.5', k)); const dd = h('dd', 'font-medium min-w-0'); dd.appendChild(typeof node === 'string' ? document.createTextNode(node) : node); dl.appendChild(dd); };
       const addr = h('span', 'flex items-start gap-1.5'); addr.appendChild(icon('map-pin', 'w-3.5 h-3.5 mt-0.5 shrink-0 text-zuna-400')); addr.appendChild(h('span', null, p.address)); row('Address', addr);
-      row('Rooms', p.room_nos || '—');
-      const chips = h('span', 'flex flex-wrap gap-1.5'); String(p.eligible || '—').split(/;\s*/).forEach((e) => chips.appendChild(h('span', 'inline-flex rounded-md px-2 py-0.5 text-xs font-semibold bg-zuna-50 text-zuna-700 ring-1 ring-zuna-100', e))); row('Eligible', chips);
+      const hasRT = (p.room_types || []).length;   // room types table below carries rooms + eligibility
+      if (!hasRT) row('Rooms', p.room_nos || '—');
+      const chips = h('span', 'flex flex-wrap gap-1.5'); String(p.eligible || '—').split(/;\s*/).forEach((e) => chips.appendChild(h('span', 'inline-flex rounded-md px-2 py-0.5 text-xs font-semibold bg-zuna-50 text-zuna-700 ring-1 ring-zuna-100', e))); if (!hasRT) row('Eligible', chips);
       c.appendChild(dl);
       if (p.map_url) { const mp = h('a', 'mx-5 -mt-2 mb-3 inline-flex items-center gap-1 text-xs font-semibold text-mint-700 hover:underline', 'Open in Google Maps'); mp.href = p.map_url; mp.target = '_blank'; mp.rel = 'noopener'; c.appendChild(mp); }
       if (!(p.photos && p.photos.length)) { const cv = h('div', 'mx-5 mb-4 relative h-40 rounded-xl overflow-hidden ring-1 ring-zuna-100'); const im = h('img', 'w-full h-full object-cover'); im.src = ZUI.art.gh; im.alt = ''; cv.appendChild(im);
-        cv.appendChild(h('span', 'absolute left-2.5 bottom-2.5 rounded-md bg-white/90 px-2 py-0.5 text-[11px] font-semibold text-zuna-700 shadow-sm', 'Photos coming soon')); c.insertBefore(cv, c.children[1]); }
+        cv.appendChild(h('span', 'absolute right-2.5 top-2.5 rounded-md bg-white/90 px-2 py-0.5 text-[11px] font-semibold text-zuna-700 shadow-sm', 'Photos coming soon')); c.insertBefore(cv, c.children[1]); }
       if (p.photos && p.photos.length) { const gl = h('div', 'px-5 pb-4 flex gap-2 overflow-x-auto'); p.photos.forEach((ph, i) => { const im = h('img', 'h-20 w-28 shrink-0 rounded-lg object-cover ring-1 ring-zuna-100 cursor-zoom-in'); im.src = ph.url; im.alt = ph.caption || p.property; im.loading = 'lazy'; im.onclick = () => gallery(p, i); gl.appendChild(im); }); c.insertBefore(gl, c.children[1]); }
       const extra = h('div', 'px-5 pb-4 space-y-3');
-      if ((p.room_types || []).length) { const rt = h('div'); rt.appendChild(h('p', 'text-xs font-semibold text-zuna-500 mb-1.5', 'Room types')); const tb = h('div', 'rounded-xl ring-1 ring-zuna-100 divide-y divide-zuna-50 text-sm');
-        p.room_types.forEach((r) => { const row = h('div', 'px-3 py-2 flex flex-wrap items-center gap-x-3 gap-y-1'); const ti = h('img', 'w-11 h-8 rounded-md object-cover ring-1 ring-zuna-100 shrink-0'); ti.src = ZUI.art.room; ti.alt = ''; row.appendChild(ti); row.appendChild(h('span', 'font-semibold', r.name || 'Rooms')); row.appendChild(h('span', 'text-xs text-zuna-500', r.rooms + ' rooms' + (r.room_nos ? ' · ' + r.room_nos : '')));
-          row.appendChild(h('span', 'ml-auto inline-flex rounded-md px-2 py-0.5 text-xs font-semibold bg-zuna-50 ring-1 ring-zuna-100', r.occupancy + (r.bed_type ? ' · ' + r.bed_type + ' bed' : ''))); row.appendChild(h('span', 'inline-flex rounded-md px-2 py-0.5 text-xs font-semibold bg-mint-50 text-mint-700 ring-1 ring-mint-200', r.eligible)); tb.appendChild(row); });
-        rt.appendChild(tb); extra.appendChild(rt); }
+      if (hasRT) { const rt = h('div'); rt.appendChild(h('p', 'text-xs font-semibold text-zuna-500 mb-1.5', 'Room types'));
+        const wrap = h('div', 'rounded-xl ring-1 ring-zuna-100 overflow-x-auto'); const tb = h('table', 'w-full text-sm'); const th = h('thead'); const hr = h('tr', 'bg-zuna-50/70 text-[11px] font-semibold text-zuna-500 text-left');
+        [['Type', 'pl-3'], ['Occupancy', ''], ['Eligible', 'pr-3']].forEach(([t, cl]) => hr.appendChild(h('th', 'py-1.5 px-2 font-semibold ' + cl, t))); th.appendChild(hr); tb.appendChild(th);
+        const bd = h('tbody', 'divide-y divide-zuna-50');
+        p.room_types.forEach((r) => { const tr = h('tr', 'align-middle');
+          const c1 = h('td', 'py-2 pl-3 pr-2'); const f = h('div', 'flex items-center gap-2.5'); const ti = h('img', 'w-11 h-8 rounded-md object-cover ring-1 ring-zuna-100 shrink-0'); ti.src = ZUI.art.room; ti.alt = ''; f.appendChild(ti);
+          const nm = h('div', 'min-w-0'); nm.appendChild(h('p', 'font-semibold leading-tight', r.name || 'Rooms')); nm.appendChild(h('p', 'text-xs text-zuna-500 leading-tight mt-0.5', r.rooms + ' rooms' + (r.room_nos ? ' · ' + r.room_nos : ''))); f.appendChild(nm); c1.appendChild(f); tr.appendChild(c1);
+          const c2 = h('td', 'py-2 px-2 whitespace-nowrap'); c2.appendChild(h('span', 'inline-flex rounded-md px-2 py-0.5 text-xs font-semibold bg-zuna-50 ring-1 ring-zuna-100', r.occupancy)); if (r.bed_type) c2.appendChild(h('p', 'text-[11px] text-zuna-500 mt-0.5 pl-0.5', r.bed_type + ' bed')); tr.appendChild(c2);
+          const c3 = h('td', 'py-2 pl-2 pr-3'); c3.appendChild(h('span', 'inline-flex rounded-md px-2 py-0.5 text-xs font-semibold bg-mint-50 text-mint-700 ring-1 ring-mint-200 whitespace-nowrap', r.eligible)); tr.appendChild(c3); bd.appendChild(tr); });
+        tb.appendChild(bd); wrap.appendChild(tb); rt.appendChild(wrap); extra.appendChild(rt); }
       const tags = (label, arr, cls) => { if (!arr || !arr.length) return; const w = h('div'); w.appendChild(h('p', 'text-xs font-semibold text-zuna-500 mb-1.5', label)); const t = h('div', 'flex flex-wrap gap-1.5'); arr.forEach((v) => t.appendChild(h('span', 'inline-flex rounded-md px-2 py-0.5 text-xs font-semibold ' + cls, v))); w.appendChild(t); extra.appendChild(w); };
       tags('Inclusions', p.inclusions, 'bg-mint-50 text-mint-700 ring-1 ring-mint-200'); tags('Amenities', p.amenities, 'bg-white text-zuna-700 ring-1 ring-zuna-100');
       if (p.cancellation) { const w = h('div', 'rounded-xl bg-amber-50/60 ring-1 ring-amber-200 px-3 py-2'); w.appendChild(h('p', 'text-xs font-semibold text-amber-800', 'Cancellation policy')); w.appendChild(h('p', 'text-sm text-zuna-700 whitespace-pre-line', p.cancellation)); extra.appendChild(w); }
@@ -640,7 +647,7 @@ const renderHouses = () => {
       const cb = h('button', 'btn' + (hasCt ? '' : ' hidden')); cb.appendChild(icon('phone', 'w-4 h-4')); const cbt = h('span', null, 'Contacts'); cb.appendChild(cbt);
       cb.onclick = () => { ct.classList.toggle('hidden'); cbt.textContent = ct.classList.contains('hidden') ? 'Contacts' : 'Hide contacts'; }; ft.appendChild(cb);
       if (live) { const vb = h('button', 'btn-primary ml-auto'); vb.appendChild(document.createTextNode('Open dashboard')); vb.appendChild(icon('arrow-right', 'w-4 h-4')); vb.onclick = () => { state.prop = p.property; $('#propSel').value = p.property; go('overview'); }; ft.appendChild(vb); }
-      c.appendChild(ft);
+      if (hasCt || live) c.appendChild(ft); else c.appendChild(h('div', 'mt-auto'));
       grid.appendChild(c);
     });
     sec.appendChild(grid); box.appendChild(sec);

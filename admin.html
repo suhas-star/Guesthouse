@@ -72,7 +72,7 @@ $('#mClose').onclick = closeModal; document.addEventListener('keydown', (e) => {
 const toDataUrl = (file, max, png) => new Promise((res, rej) => { const fr = new FileReader(); fr.onerror = rej; fr.onload = () => { const img = new Image(); img.onerror = () => rej(new Error('Not an image')); img.onload = () => {
   const sc = Math.min(1, max / Math.max(img.width, img.height)), c = document.createElement('canvas'); c.width = Math.round(img.width * sc); c.height = Math.round(img.height * sc);
   const x = c.getContext('2d'); if (!png) { x.fillStyle = '#fff'; x.fillRect(0, 0, c.width, c.height); } x.drawImage(img, 0, 0, c.width, c.height); res(c.toDataURL(png ? 'image/png' : 'image/jpeg', .82)); }; img.src = fr.result; }; fr.readAsDataURL(file); });
-const field = (label, input, cls) => { const w = h('label', 'block ' + (cls || '')); w.appendChild(h('span', 'lbl', label)); w.appendChild(input); return w; };
+const field = (label, input, cls) => { const w = h(['INPUT', 'SELECT', 'TEXTAREA'].includes(input.tagName) ? 'label' : 'div', 'block ' + (cls || '')); w.appendChild(h('span', 'lbl', label)); w.appendChild(input); return w; };
 const inp = (v, ph, type) => { const i = h('input', 'inp'); i.value = v == null ? '' : v; if (ph) i.placeholder = ph; if (type) i.type = type; return i; };
 const sel = (v, opts) => { const s = h('select', 'inp'); opts.forEach((o) => { const op = h('option', null, o); op.value = o; s.appendChild(op); }); s.value = v; return s; };
 const switchEl = (label, on) => { const l = h('label', 'flex items-center gap-2.5 cursor-pointer text-sm font-medium'); const c = h('input', 'sr-only'); c.type = 'checkbox'; c.checked = on; l.append(c, h('span', 'sw'), document.createTextNode(label)); l.input = c; return l; };
@@ -87,10 +87,28 @@ const tagInput = (vals, sugg) => { const box = h('div', 'rounded-xl bg-white rin
   const wrap = h('div', 'space-y-1.5'); wrap.appendChild(box);
   if (sugg) { const s = h('div', 'flex flex-wrap gap-1'); sugg.forEach((v) => { const b = h('button', 'text-[11px] font-semibold text-mint-700 hover:underline', '+ ' + v); b.type = 'button'; b.onclick = () => add(v); s.appendChild(b); }); wrap.appendChild(s); }
   wrap.get = () => items; return wrap; };
-const gradePicker = (all, on) => { const w = h('div', 'flex flex-wrap gap-1'); const set = new Set(on);
-  const quick = h('div', 'w-full flex gap-2 mb-1 text-[11px] font-semibold'); [['All', all], ['None', []]].forEach(([l, v]) => { const b = h('button', 'text-mint-700 hover:underline', l); b.type = 'button'; b.onclick = () => { set.clear(); v.forEach((g) => set.add(g)); draw(); }; quick.appendChild(b); });
-  const draw = () => { w.replaceChildren(quick); all.forEach((g) => { const c = h('span', 'chip', g); if (set.has(g)) c.dataset.on = ''; c.onclick = () => { set.has(g) ? set.delete(g) : set.add(g); draw(); }; w.appendChild(c); }); };
-  draw(); w.get = () => all.filter((g) => set.has(g)); return w; };
+// grade chips; any new grade typed in is added for every room type in the form (and saved to the client's grade list)
+const gradePicker = (all, on, peers) => { const w = h('div', 'flex flex-wrap gap-1'); const set = new Set(on); on.forEach((g) => { if (!all.includes(g)) all.push(g); });
+  const quick = h('div', 'w-full flex gap-2 mb-1 text-[11px] font-semibold'); [['All', () => all], ['None', () => []]].forEach(([l, v]) => { const b = h('button', 'text-mint-700 hover:underline', l); b.type = 'button'; b.onclick = () => { set.clear(); v().forEach((g) => set.add(g)); draw(); }; quick.appendChild(b); });
+  const ng = h('input', 'w-28 rounded-lg px-2 py-0.5 text-xs ring-1 ring-zuna-100 outline-none focus:ring-2 focus:ring-mint-500'); ng.placeholder = '+ Add grade';
+  const addG = () => { ng.value.split(',').map((g) => g.trim()).filter(Boolean).forEach((g) => { if (!all.includes(g)) all.push(g); set.add(g); }); ng.value = ''; peers.forEach((p) => p !== w && p.draw()); draw(); ng.focus(); };
+  ng.onkeydown = (e) => { if (e.key === 'Enter' || e.key === ',') { e.preventDefault(); addG(); } }; ng.onblur = () => { if (ng.value.trim()) addG(); };
+  const draw = () => { w.replaceChildren(quick); all.forEach((g) => { const c = h('span', 'chip', g); if (set.has(g)) c.dataset.on = ''; c.onclick = () => { set.has(g) ? set.delete(g) : set.add(g); draw(); }; w.appendChild(c); }); w.appendChild(ng); };
+  draw(); w.draw = draw; peers.push(w); w.get = () => all.filter((g) => set.has(g)); return w; };
+// type-ahead dropdown: filters as you type, Enter / click picks, anything typed is kept
+const combo = (v, src, ph, onPick) => { const w = h('div', 'relative'); const i = inp(v, ph); i.autocomplete = 'off'; i.setAttribute('role', 'combobox');
+  const L = h('div', 'absolute z-50 left-0 right-0 mt-1 max-h-60 overflow-auto rounded-xl bg-white shadow-xl ring-1 ring-zuna-100 py-1 hidden'); w.append(i, L);
+  let items = [], act = -1, seq = 0, tm;
+  const lab = (o) => typeof o === 'string' ? o : o.label;
+  const draw = () => { L.replaceChildren(); items.forEach((o, k) => { const b = h('div', 'px-3 py-1.5 text-sm cursor-pointer ' + (k === act ? 'bg-mint-50' : 'hover:bg-zuna-50'), lab(o)); if (o.sub) b.appendChild(h('div', 'text-xs text-zuna-500', o.sub)); b.onmousedown = (e) => { e.preventDefault(); pick(o); }; L.appendChild(b); }); L.classList.toggle('hidden', !items.length || document.activeElement !== i); };
+  const find = async () => { const q = i.value.trim(), my = ++seq; let r; try { r = typeof src === 'function' ? await src(q) : src.filter((o) => lab(o).toLowerCase().includes(q.toLowerCase())); } catch (e) { r = []; } if (my !== seq) return; items = (r || []).slice(0, 40); act = -1; draw(); };
+  const pick = (o) => { i.value = typeof o === 'string' ? o : (o.value != null ? o.value : o.label); items = []; draw(); if (onPick) onPick(o); };
+  i.onfocus = find; i.oninput = () => { clearTimeout(tm); tm = setTimeout(find, typeof src === 'function' ? 300 : 0); };
+  i.onblur = () => setTimeout(() => L.classList.add('hidden'), 100);
+  i.onkeydown = (e) => { if (L.classList.contains('hidden')) return; if (e.key === 'ArrowDown' || e.key === 'ArrowUp') { e.preventDefault(); act = (act + (e.key === 'ArrowDown' ? 1 : items.length - 1)) % items.length; draw(); L.children[act] && L.children[act].scrollIntoView({block: 'nearest'}); } else if (e.key === 'Enter' && act >= 0) { e.preventDefault(); pick(items[act]); } else if (e.key === 'Escape') { e.stopPropagation(); L.classList.add('hidden'); } };
+  w.input = i; w.get = () => i.value.trim(); w.set = (x) => { i.value = x || ''; }; return w; };
+// address / city lookup (OpenStreetMap)
+const photon = async (q, extra) => { if (q.length < 3) return []; const r = await fetch('https://photon.komoot.io/api/?limit=8&lang=en&q=' + encodeURIComponent(q) + (extra || '')); if (!r.ok) return []; return ((await r.json()).features || []).map((f) => ({p: f.properties || {}, ll: (f.geometry || {}).coordinates})); };
 
 // ---------- render ----------
 const render = () => {
@@ -127,30 +145,58 @@ const renderGH = (D, c) => {
   D.appendChild(g);
 };
 
+const COUNTRIES = 'India,United Arab Emirates,United States,United Kingdom,Singapore,Malaysia,Thailand,Indonesia,Philippines,Vietnam,Sri Lanka,Nepal,Bangladesh,Bhutan,Maldives,Saudi Arabia,Qatar,Oman,Kuwait,Bahrain,Japan,China,Hong Kong,Taiwan,South Korea,Australia,New Zealand,Canada,Mexico,Brazil,Argentina,Chile,Colombia,Peru,Germany,France,Netherlands,Belgium,Luxembourg,Switzerland,Austria,Italy,Spain,Portugal,Ireland,Denmark,Sweden,Norway,Finland,Iceland,Poland,Czech Republic,Hungary,Romania,Bulgaria,Greece,Turkey,Israel,Egypt,Morocco,Kenya,Nigeria,Ghana,South Africa,Mauritius,Tanzania,Ethiopia,Russia,Ukraine,Kazakhstan,Uzbekistan,Pakistan,Afghanistan,Myanmar,Cambodia,Laos,Mongolia,Fiji,Croatia,Serbia,Slovakia,Slovenia,Estonia,Latvia,Lithuania,Cyprus,Malta,Jordan,Lebanon,Iraq,Iran,Algeria,Tunisia,Uganda,Rwanda,Zambia,Zimbabwe,Botswana,Namibia,Seychelles,Costa Rica,Panama,Uruguay,Ecuador,Venezuela,Puerto Rico,Jamaica'.split(',');
+const IN_STATES = {'Andhra Pradesh': 'Visakhapatnam,Vijayawada,Guntur,Tirupati,Nellore,Kakinada,Amaravati,Anantapur,Kurnool,Rajahmundry', 'Arunachal Pradesh': 'Itanagar,Tawang,Pasighat', 'Assam': 'Guwahati,Dibrugarh,Silchar,Jorhat,Tezpur', 'Bihar': 'Patna,Gaya,Bhagalpur,Muzaffarpur,Darbhanga', 'Chhattisgarh': 'Raipur,Bhilai,Bilaspur,Durg,Korba', 'Goa': 'Panaji,Margao,Vasco da Gama,Mapusa,Calangute', 'Gujarat': 'Ahmedabad,Gandhinagar,Surat,Vadodara,Rajkot,Bhavnagar,Jamnagar,Dahej,Hazira,Bharuch,Ankleshwar,Mundra', 'Haryana': 'Gurugram,Faridabad,Panipat,Ambala,Karnal,Sonipat,Hisar,Manesar', 'Himachal Pradesh': 'Shimla,Manali,Dharamshala,Solan,Baddi', 'Jharkhand': 'Ranchi,Jamshedpur,Dhanbad,Bokaro', 'Karnataka': 'Bengaluru,Mysuru,Mangaluru,Hubballi,Belagavi,Udupi,Kalaburagi,Ballari,Shivamogga,Hosur Road', 'Kerala': 'Kochi,Thiruvananthapuram,Kozhikode,Thrissur,Kollam,Kannur', 'Madhya Pradesh': 'Indore,Bhopal,Jabalpur,Gwalior,Ujjain,Pithampur', 'Maharashtra': 'Mumbai,Navi Mumbai,Thane,Pune,Nagpur,Nashik,Aurangabad,Kolhapur,Solapur,Raigad,Ratnagiri,Talegaon', 'Manipur': 'Imphal', 'Meghalaya': 'Shillong', 'Mizoram': 'Aizawl', 'Nagaland': 'Kohima,Dimapur', 'Odisha': 'Bhubaneswar,Cuttack,Rourkela,Paradip,Sambalpur,Puri,Angul', 'Punjab': 'Ludhiana,Amritsar,Jalandhar,Mohali,Patiala,Bathinda', 'Rajasthan': 'Jaipur,Jodhpur,Udaipur,Kota,Ajmer,Bikaner,Bhiwadi,Neemrana', 'Sikkim': 'Gangtok', 'Tamil Nadu': 'Chennai,Coimbatore,Madurai,Tiruchirappalli,Salem,Hosur,Tiruppur,Vellore,Thoothukudi,Kanchipuram,Sriperumbudur,Kanyakumari', 'Telangana': 'Hyderabad,Secunderabad,Warangal,Karimnagar,Nizamabad,Khammam', 'Tripura': 'Agartala', 'Uttar Pradesh': 'Noida,Greater Noida,Ghaziabad,Lucknow,Kanpur,Agra,Varanasi,Prayagraj,Meerut,Mathura', 'Uttarakhand': 'Dehradun,Haridwar,Rishikesh,Roorkee,Nainital,Rudrapur', 'West Bengal': 'Kolkata,Howrah,Durgapur,Asansol,Siliguri,Haldia,Kharagpur', 'Andaman and Nicobar Islands': 'Port Blair', 'Chandigarh': 'Chandigarh', 'Dadra and Nagar Haveli and Daman and Diu': 'Silvassa,Daman,Diu', 'Delhi': 'New Delhi,Delhi,Aerocity', 'Jammu and Kashmir': 'Srinagar,Jammu', 'Ladakh': 'Leh,Kargil', 'Lakshadweep': 'Kavaratti', 'Puducherry': 'Puducherry,Karaikal'};
+const ROOM_TYPES = ['Standard', 'Deluxe', 'Super Deluxe', 'Premium', 'Executive', 'Club', 'Suite', 'Junior Suite', 'Studio', '1 BHK', '2 BHK', '3 BHK', '4 BHK', 'Villa', 'Dormitory'];
+const BEDS = ['King', 'Queen', 'Twin', 'Double'];
+const CANCEL = [['24', 'Free cancellation up to 24 hours before check-in'], ['48', 'Free cancellation up to 48 hours before check-in'], ['72', 'Free cancellation up to 72 hours before check-in'], ['96', 'Free cancellation up to 96 hours before check-in'], ['nr', 'Non-refundable']];
 const AMEN = ['Air conditioning', 'Wi-Fi', 'Housekeeping', 'Laundry', 'Kitchen', 'Television', 'Hot water', 'Power backup', 'Parking', 'Lift', '24x7 security', 'Caretaker on site', 'Work desk', 'Refrigerator'];
 const INCL = ['Breakfast', 'Wi-Fi', 'Lunch', 'Dinner', 'Laundry (2 pcs/day)', 'Airport transfer', 'Tea / coffee'];
 const editGH = (c, x) => {
-  x = x || {status: 'Coming soon', room_types: [{name: 'Standard', rooms: 1, room_nos: '', occupancy: 'Single', grades: c.grades}], contacts: [{}], inclusions: [], amenities: [], show: {amenities: true, inclusions: true, cancellation: true, photos: true, contacts: true}};
+  x = x || {status: 'Coming soon', country: 'India', room_types: [{name: 'Standard', rooms: 1, room_nos: '', occupancy: 'Single', grades: c.grades}], contacts: [{}], inclusions: [], amenities: [], show: {amenities: true, inclusions: true, cancellation: true, photos: true, contacts: true}};
   const f = h('div', 'space-y-6');
   const sec = (t, sub) => { const s = h('section', 'space-y-3'); const hd = h('div'); hd.appendChild(h('h4', 'text-sm font-bold', t)); if (sub) hd.appendChild(h('p', 'text-xs text-zuna-500', sub)); s.appendChild(hd); f.appendChild(s); return s; };
   // basics
   const s1 = sec('Guest house'); const g1 = h('div', 'grid sm:grid-cols-2 gap-3');
-  const nm = inp(x.property, 'e.g. My Home Bhooja'), city = inp(x.city, 'e.g. Hyderabad'), op = inp(x.operator, 'e.g. Sapphire Asta Hospitality'), st = sel(x.status, ['Live', 'Coming soon']);
-  const addr = h('textarea', 'inp'); addr.rows = 2; addr.value = x.address || ''; const map = inp(x.map_url, 'https://maps.app.goo.gl/…');
-  g1.append(field('Name', nm), field('City', city), field('Operator', op), field('Status', st), field('Address', addr, 'sm:col-span-2'), field('Google Maps link', map, 'sm:col-span-2')); s1.appendChild(g1);
+  const nm = inp(x.property, 'e.g. My Home Bhooja'), op = inp(x.operator, 'e.g. Sapphire Asta Hospitality'), st = sel(x.status, ['Live', 'Coming soon']);
+  const isIN = () => /^india$/i.test(country.get());
+  const placeName = (p) => p.city || p.town || p.village || p.locality || p.district || p.county || p.name || '';
+  const country = combo(x.country || (x.id && !x.city ? '' : 'India'), COUNTRIES, 'Type to search');
+  const state = combo(x.state || Object.keys(IN_STATES).find((k) => IN_STATES[k].split(',').includes(x.city)) || '', (q) => (isIN() ? Object.keys(IN_STATES) : []).filter((k) => k.toLowerCase().includes(q.toLowerCase())), 'Type to search');
+  const city = combo(x.city, async (q) => { const ql = q.toLowerCase();
+      let r = isIN() ? Object.entries(IN_STATES).filter(([k]) => !state.get() || k === state.get()).flatMap(([k, v]) => v.split(',').map((c) => ({label: c, sub: state.get() ? '' : k, st: k}))).filter((o) => o.label.toLowerCase().includes(ql)) : [];
+      if (r.length < 3 && q.length >= 3) { const seen = new Set(r.map((o) => o.label)); (await photon(q + (state.get() ? ', ' + state.get() : '') + (country.get() ? ', ' + country.get() : ''), '&layer=city')).forEach(({p}) => { const n = placeName(p); if (n && !seen.has(n)) { seen.add(n); r.push({label: n, sub: [p.state, p.country].filter(Boolean).join(', '), st: p.state, co: p.country}); } }); }
+      return r; }, 'Type to search',
+    (o) => { if (o.st) state.set(o.st); if (o.co) country.set(o.co); });
+  const map = inp(x.map_url, 'https://maps.app.goo.gl/…');
+  const addr = combo(x.address, async (q) => (await photon(q + (city.get() && !q.toLowerCase().includes(city.get().toLowerCase()) ? ', ' + city.get() : ''))).map(({p, ll}) => {
+      const line = [p.name !== p.street ? p.name : '', [p.housenumber, p.street].filter(Boolean).join(' '), p.locality || p.district].filter(Boolean);
+      const full = [...new Set(line.concat([placeName(p) !== p.name ? placeName(p) : '', p.state, p.postcode, p.country]).filter(Boolean))].join(', ');
+      return {label: line.join(', ') || placeName(p), sub: [placeName(p), p.state, p.postcode, p.country].filter(Boolean).join(', '), value: full, p, ll}; }), 'Start typing the address',
+    (o) => { const c = placeName(Object.assign({}, o.p, {name: ''})); if (c) city.set(c); if (o.p.state) state.set(o.p.state); if (o.p.country) country.set(o.p.country);
+      if (!map.value.trim() && o.ll) map.value = 'https://www.google.com/maps/search/?api=1&query=' + o.ll[1].toFixed(6) + ',' + o.ll[0].toFixed(6); });
+  g1.append(field('Name', nm, 'sm:col-span-2'), field('Operator', op), field('Status', st), field('Address', addr, 'sm:col-span-2'), field('Country', country), field('State', state), field('City', city), field('Google Maps link', map));
+  g1.appendChild(h('p', 'sm:col-span-2 -mt-1 text-xs text-zuna-500', 'Pick an address from the list to fill city, state, country and the map link automatically.')); s1.appendChild(g1);
   // room types
   const s2 = sec('Room types', 'Each room type has its own rooms, occupancy and eligible grades.'); const rtBox = h('div', 'space-y-3'); s2.appendChild(rtBox);
-  const rts = [];
-  const addRT = (r) => { const card = h('div', 'rounded-xl bg-zuna-50/60 ring-1 ring-zuna-100 p-3 space-y-3'); const gg = h('div', 'grid grid-cols-2 sm:grid-cols-4 gap-3');
-    const rn = inp(r.name, 'e.g. Deluxe'), rc = inp(r.rooms, '4', 'number'), rnos = inp(r.room_nos, 'e.g. 1001-101 to 1001-104'), oc = sel(r.occupancy || 'Single', ['Single', 'Double', 'Single / Double']);
-    gg.append(field('Room type', rn), field('No. of rooms', rc), field('Room numbers', rnos), field('Occupancy', oc)); card.appendChild(gg);
-    const gp = gradePicker(c.grades, r.grades || []); card.appendChild(field('Eligible grades', gp));
-    const rm = h('button', 'text-xs font-semibold text-rose-600 hover:underline', 'Remove room type'); rm.type = 'button'; rm.onclick = () => { card.remove(); rts.splice(rts.indexOf(o), 1); }; card.appendChild(rm);
-    const o = {get: () => ({name: rn.value, rooms: rc.value, room_nos: rnos.value, occupancy: oc.value, grades: gp.get()})}; rts.push(o); rtBox.appendChild(card); };
-  (x.room_types || []).forEach(addRT); const art = h('button', 'btn text-xs', '+ Add room type'); art.type = 'button'; art.onclick = () => addRT({grades: []}); s2.appendChild(art);
+  const rts = [], grades = [...c.grades], pickers = [];
+  const addRT = (r) => { const card = h('div', 'rounded-xl bg-zuna-50/60 ring-1 ring-zuna-100 p-3 space-y-3'); const gg = h('div', 'grid grid-cols-2 sm:grid-cols-3 gap-3');
+    const rn = combo(r.name, ROOM_TYPES, 'Type or pick'), nums = Array.from({length: 50}, (_, k) => String(k + 1)); if (r.rooms && !nums.includes(String(r.rooms))) nums.push(String(r.rooms));
+    const rc = sel(String(r.rooms || 1), nums), rnos = inp(r.room_nos, 'e.g. 1001-101 to 1001-104'), oc = sel(r.occupancy || 'Single', ['Single', 'Double', 'Single / Double']);
+    const bd = sel(r.bed_type || '', [''].concat(BEDS)); bd.options[0].textContent = 'Select bed type';
+    gg.append(field('Room type', rn), field('No. of rooms', rc), field('Bed type', bd), field('Room numbers', rnos, 'col-span-2'), field('Occupancy', oc)); card.appendChild(gg);
+    const gp = gradePicker(grades, r.grades || [], pickers); card.appendChild(field('Eligible grades', gp));
+    const rm = h('button', 'text-xs font-semibold text-rose-600 hover:underline', 'Remove room type'); rm.type = 'button'; rm.onclick = () => { card.remove(); rts.splice(rts.indexOf(o), 1); pickers.splice(pickers.indexOf(gp), 1); }; card.appendChild(rm);
+    const o = {get: () => ({name: rn.get(), rooms: rc.value, room_nos: rnos.value, occupancy: oc.value, bed_type: bd.value, grades: gp.get()})}; rts.push(o); rtBox.appendChild(card); };
+  (x.room_types || []).forEach(addRT); const art = h('button', 'btn text-xs', '+ Add room type'); art.type = 'button'; art.onclick = () => addRT({rooms: 1, occupancy: 'Single', grades: []}); s2.appendChild(art);
   // inclusions / amenities / policy
   const s3 = sec('Inclusions & amenities'); const inc = tagInput(x.inclusions || [], INCL), am = tagInput(x.amenities || [], AMEN); s3.append(field('Inclusions', inc), field('Amenities', am));
-  const s4 = sec('Cancellation policy'); const cp = h('textarea', 'inp'); cp.rows = 3; cp.placeholder = 'e.g. Free cancellation up to 24 hours before check-in; after that one night is charged.'; cp.value = x.cancellation || ''; s4.appendChild(cp);
+  const s4 = sec('Cancellation policy'); const pre = CANCEL.find(([, t]) => t === (x.cancellation || '').trim());
+  const cps = h('select', 'inp'); [['', 'Select policy']].concat(CANCEL.map(([k, t]) => [k, k === 'nr' ? t : k + ' hrs · ' + t]), [['custom', 'Custom policy']]).forEach(([k, l]) => { const op = h('option', null, l); op.value = k; cps.appendChild(op); });
+  cps.value = pre ? pre[0] : (x.cancellation ? 'custom' : '');
+  const cp = h('textarea', 'inp'); cp.rows = 3; cp.placeholder = 'Type the cancellation policy'; cp.value = pre ? '' : (x.cancellation || '');
+  const cpSync = () => cp.classList.toggle('hidden', cps.value !== 'custom'); cps.onchange = cpSync; cpSync(); s4.append(cps, cp);
+  const cpVal = () => cps.value === 'custom' ? cp.value : ((CANCEL.find(([k]) => k === cps.value) || [, ''])[1]);
   // contacts
   const s5 = sec('Guest house contacts (POC)'); const ctBox = h('div', 'space-y-2'); s5.appendChild(ctBox); const cts = [];
   const addCT = (k) => { const row = h('div', 'grid grid-cols-2 sm:grid-cols-[1fr_1fr_1.2fr_1fr_auto] gap-2 items-end'); const a = inp(k.name, 'Name'), d = inp(k.designation, 'e.g. Caretaker'), e = inp(k.email, 'email@…', 'email'), p = inp(k.phone, '+91 …');
@@ -176,7 +222,7 @@ const editGH = (c, x) => {
   const save = h('button', 'ml-auto btn-primary', x.id ? 'Save changes' : 'Create guest house');
   save.onclick = async () => { save.disabled = true; try {
     const show = {}; Object.entries(shows).forEach(([k, v]) => show[k] = v.checked);
-    const r = await api('gh', {id: x.id, client_id: c.id, name: nm.value, city: city.value, address: addr.value, map_url: map.value, operator: op.value, status: st.value, cancellation: cp.value, inclusions: inc.get(), amenities: am.get(), show, room_types: rts.map((o) => o.get()), contacts: cts.map((o) => o.get())});
+    const r = await api('gh', {id: x.id, client_id: c.id, name: nm.value, city: city.get(), state: state.get(), country: country.get(), address: addr.get(), map_url: map.value, operator: op.value, status: st.value, cancellation: cpVal(), inclusions: inc.get(), amenities: am.get(), show, room_types: rts.map((o) => o.get()), contacts: cts.map((o) => o.get())});
     toast('Saved'); await load(true); const fresh = C().guesthouses.find((g) => g.id === r.id); if (!x.id) editGH(C(), fresh); else closeModal(); } catch (er) { toast(er.message, true); } finally { save.disabled = false; } };
   actions.appendChild(save); f.appendChild(actions);
   modal(x.id ? 'Edit ' + x.property : 'New guest house · ' + c.name, f);
@@ -212,7 +258,7 @@ const renderSettings = (D, c) => {
   const n = inp(c.name); card.appendChild(field('Client name', n));
   const gr = h('textarea', 'inp'); gr.rows = 2; gr.value = c.grades.join(', '); card.appendChild(field('Grades used by this client (comma separated, in order)', gr));
   const act = switchEl('Client active (users can log in)', c.active); card.appendChild(act);
-  const save = h('button', 'btn-primary', 'Save settings'); save.onclick = async () => { try { await api('client', {id: c.id, name: n.value, grades: gr.value.split(/[\s,]+/).filter(Boolean), active: act.input.checked}); toast('Saved'); load(true); } catch (er) { toast(er.message, true); } };
+  const save = h('button', 'btn-primary', 'Save settings'); save.onclick = async () => { try { await api('client', {id: c.id, name: n.value, grades: gr.value.split(/\s*[,\n]\s*/).map((g) => g.trim()).filter(Boolean), active: act.input.checked}); toast('Saved'); load(true); } catch (er) { toast(er.message, true); } };
   card.appendChild(save); D.appendChild(card);
 };
 

@@ -22,6 +22,7 @@ const SEC = {
 };
 // Pages only: scripts/styles are inline by design; the only external file is the chart library.
 const CSP = "default-src 'none'; script-src 'self' 'unsafe-inline' https://cdn.jsdelivr.net; style-src 'self' 'unsafe-inline'; img-src 'self' data: blob:; font-src 'self' data:; connect-src 'self'; frame-ancestors 'none'; base-uri 'none'; form-action 'self'";
+const ADMIN_CSP = CSP.replace("connect-src 'self'", "connect-src 'self' https://photon.komoot.io");
 const html = (body, extra = {}) => new Response(body, {headers: {"content-type": "text/html; charset=utf-8", "content-security-policy": CSP, ...SEC, ...extra}});
 const json = (obj, status = 200, extra = {}) => new Response(JSON.stringify(obj), {status, headers: {"content-type": "application/json", ...SEC, ...extra}});
 const redirect = (to, extra = {}) => new Response(null, {status: 302, headers: {location: to, ...SEC, ...extra}});
@@ -392,7 +393,7 @@ let schemaReady = false;
 async function ensureSchema(env) {
   if (schemaReady) return;
   for (const q of SCHEMA) await env.DB.prepare(q).run();
-  for (const c of ["role TEXT", "client_id INTEGER"]) { try { await env.DB.prepare("ALTER TABLE users ADD COLUMN " + c).run(); } catch (e) { /* exists */ } }
+  for (const c of ["users ADD COLUMN role TEXT", "users ADD COLUMN client_id INTEGER", "guesthouses ADD COLUMN state TEXT", "guesthouses ADD COLUMN country TEXT", "room_types ADD COLUMN bed_type TEXT"]) { try { await env.DB.prepare("ALTER TABLE " + c).run(); } catch (e) { /* exists */ } }
   schemaReady = true;
 }
 const DEFAULT_GRADES = "M1,M2,M3,M4,M5,M6,M7,M8,P1,P2,P3,E1,E2,E3,E4,E5,E6,E7";
@@ -429,10 +430,10 @@ async function clientGuestHouses(env, client, forAdmin) {
     const {results: cts} = await env.DB.prepare("SELECT * FROM contacts WHERE gh_id = ? ORDER BY sort, id").bind(g.id).all();
     const {results: phs} = await env.DB.prepare("SELECT id, file_id, caption FROM photos WHERE gh_id = ? ORDER BY sort, id").bind(g.id).all();
     const show = Object.assign({}, SHOW_DEFAULT, jparse(g.show_json, {})), multi = rts.length > 1;
-    const types = rts.map((r) => ({id: r.id, name: r.name || "", rooms: r.rooms || 0, room_nos: r.room_nos || "", occupancy: r.occupancy || "Single", grades: list(r.grades), eligible: gradeText(list(r.grades), all)}));
+    const types = rts.map((r) => ({id: r.id, name: r.name || "", rooms: r.rooms || 0, room_nos: r.room_nos || "", occupancy: r.occupancy || "Single", bed_type: r.bed_type || "", grades: list(r.grades), eligible: gradeText(list(r.grades), all)}));
     const contacts = cts.map((c) => ({id: c.id, name: c.name || "", designation: c.designation || "", email: c.email || "", phone: c.phone || ""}));
     const gh = {
-      id: g.id, property: g.name, city: g.city || "", address: g.address || "", map_url: g.map_url || "", operator: g.operator || "", status: g.status || "Coming soon",
+      id: g.id, property: g.name, city: g.city || "", state: g.state || "", country: g.country || "", address: g.address || "", map_url: g.map_url || "", operator: g.operator || "", status: g.status || "Coming soon",
       rooms: String(types.reduce((t, r) => t + (+r.rooms || 0), 0)),
       room_nos: types.map((r) => (multi && r.name ? r.name + " " : "") + r.room_nos).filter((x) => x.trim()).join(", "),
       rooms_list: types.flatMap((r) => expandRooms(r.room_nos)),
@@ -490,7 +491,7 @@ async function adminApi(req, env, user, path) {
       }
       case "/api/admin/client": {
         const name = clean(b.name, 120); if (!name) return json({error: "Enter the client name."}, 400);
-        const grades = (Array.isArray(b.grades) ? b.grades : String(b.grades || DEFAULT_GRADES).split(",")).map((g) => clean(g, 10).toUpperCase()).filter(Boolean).join(",") || DEFAULT_GRADES;
+        const grades = (Array.isArray(b.grades) ? b.grades : String(b.grades || DEFAULT_GRADES).split(",")).map((g) => clean(g, 20)).filter(Boolean).join(",") || DEFAULT_GRADES;
         if (b.id) await env.DB.prepare("UPDATE clients SET name = ?, grades = ?, active = ? WHERE id = ?").bind(name, grades, b.active === false ? 0 : 1, +b.id).run();
         else { const r = await env.DB.prepare("INSERT INTO clients (name, grades, active, created) VALUES (?, ?, 1, ?)").bind(name, grades, now).run(); return json({ok: true, id: r.meta ? r.meta.last_row_id : r.lastInsertRowid}); }
         return json({ok: true, id: +b.id});
@@ -508,14 +509,19 @@ async function adminApi(req, env, user, path) {
         const status = b.status === "Live" ? "Live" : "Coming soon";
         const show = {}; for (const k of Object.keys(SHOW_DEFAULT)) show[k] = !(b.show && b.show[k] === false);
         const tags = (a) => JSON.stringify((Array.isArray(a) ? a : []).map((x) => clean(x, 80)).filter(Boolean).slice(0, 40));
-        const vals = [name, clean(b.city, 80), clean(b.address, 400), clean(b.map_url, 500), clean(b.operator, 120), status, clean(b.cancellation, 3000), tags(b.inclusions), tags(b.amenities), JSON.stringify(show), now];
+        const vals = [name, clean(b.city, 80), clean(b.state, 80), clean(b.country, 80), clean(b.address, 400), clean(b.map_url, 500), clean(b.operator, 120), status, clean(b.cancellation, 3000), tags(b.inclusions), tags(b.amenities), JSON.stringify(show), now];
         let id = +b.id || 0;
         if (id) { const ex = await env.DB.prepare("SELECT id FROM guesthouses WHERE id = ? AND client_id = ?").bind(id, c.id).first(); if (!ex) return json({error: "No such guest house."}, 404);
-          await env.DB.prepare("UPDATE guesthouses SET name = ?, city = ?, address = ?, map_url = ?, operator = ?, status = ?, cancellation = ?, inclusions = ?, amenities = ?, show_json = ?, updated = ? WHERE id = ?").bind(...vals, id).run(); }
-        else { const r = await env.DB.prepare("INSERT INTO guesthouses (name, city, address, map_url, operator, status, cancellation, inclusions, amenities, show_json, updated, client_id) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)").bind(...vals, c.id).run(); id = r.meta ? r.meta.last_row_id : r.lastInsertRowid; }
+          await env.DB.prepare("UPDATE guesthouses SET name = ?, city = ?, state = ?, country = ?, address = ?, map_url = ?, operator = ?, status = ?, cancellation = ?, inclusions = ?, amenities = ?, show_json = ?, updated = ? WHERE id = ?").bind(...vals, id).run(); }
+        else { const r = await env.DB.prepare("INSERT INTO guesthouses (name, city, state, country, address, map_url, operator, status, cancellation, inclusions, amenities, show_json, updated, client_id) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)").bind(...vals, c.id).run(); id = r.meta ? r.meta.last_row_id : r.lastInsertRowid; }
         const stmts = [env.DB.prepare("DELETE FROM room_types WHERE gh_id = ?").bind(id), env.DB.prepare("DELETE FROM contacts WHERE gh_id = ?").bind(id)];
-        (Array.isArray(b.room_types) ? b.room_types : []).slice(0, 20).forEach((r, i) => stmts.push(env.DB.prepare("INSERT INTO room_types (gh_id, name, rooms, room_nos, occupancy, grades, sort) VALUES (?, ?, ?, ?, ?, ?, ?)")
-          .bind(id, clean(r.name, 60), Math.max(0, Math.min(500, parseInt(r.rooms, 10) || 0)), clean(r.room_nos, 200), ["Single", "Double", "Single / Double"].includes(r.occupancy) ? r.occupancy : "Single", JSON.stringify((Array.isArray(r.grades) ? r.grades : []).map((g) => clean(g, 10)).filter(Boolean)), i)));
+        const gradeList = (r) => [...new Set((Array.isArray(r.grades) ? r.grades : []).map((g) => clean(g, 20)).filter(Boolean))];
+        (Array.isArray(b.room_types) ? b.room_types : []).slice(0, 20).forEach((r, i) => stmts.push(env.DB.prepare("INSERT INTO room_types (gh_id, name, rooms, room_nos, occupancy, bed_type, grades, sort) VALUES (?, ?, ?, ?, ?, ?, ?, ?)")
+          .bind(id, clean(r.name, 60), Math.max(0, Math.min(500, parseInt(r.rooms, 10) || 0)), clean(r.room_nos, 200), ["Single", "Double", "Single / Double"].includes(r.occupancy) ? r.occupancy : "Single", ["King", "Queen", "Twin", "Double"].includes(r.bed_type) ? r.bed_type : "", JSON.stringify(gradeList(r)), i)));
+        // grades typed in for a room type are added to the client's grade list
+        const cg = await env.DB.prepare("SELECT grades FROM clients WHERE id = ?").bind(c.id).first();
+        const have = (cg && cg.grades || DEFAULT_GRADES).split(",").filter(Boolean), extra = [...new Set((Array.isArray(b.room_types) ? b.room_types : []).flatMap(gradeList))].filter((g) => !have.includes(g));
+        if (extra.length) stmts.push(env.DB.prepare("UPDATE clients SET grades = ? WHERE id = ?").bind(have.concat(extra).join(","), c.id));
         (Array.isArray(b.contacts) ? b.contacts : []).slice(0, 20).forEach((x, i) => { if (clean(x.name) || clean(x.phone) || clean(x.email))
           stmts.push(env.DB.prepare("INSERT INTO contacts (gh_id, name, designation, email, phone, sort) VALUES (?, ?, ?, ?, ?, ?)").bind(id, clean(x.name, 120), clean(x.designation, 80), clean(x.email, 160), clean(x.phone, 60), i)); });
         await env.DB.batch(stmts);
@@ -621,7 +627,7 @@ export default {
       const u = await currentUser(request, env);
       if (!u) return html(LOGIN);
       if (!u.admin) return redirect("/");
-      return html(ADMIN.replace("__ME__", () => JSON.stringify({name: u.name || "", email: u.email}).replace(/</g, "\\u003c")));
+      return html(ADMIN.replace("__ME__", () => JSON.stringify({name: u.name || "", email: u.email}).replace(/</g, "\\u003c")), {"content-security-policy": ADMIN_CSP});
     }
     if (path !== "/") return redirect("/");
     const user = await currentUser(request, env);

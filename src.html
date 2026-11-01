@@ -895,16 +895,28 @@ const openWeekly = (onGo) => {
   const prevMonth = (() => { const d = D(today); return iso(new Date(Date.UTC(d.getUTCFullYear(), d.getUTCMonth() - 1, 1))).slice(0, 7); })();
   const f = h('div', 'space-y-4'); const p = P();
   f.appendChild(h('p', 'text-sm text-zuna-600', 'Night-by-night occupancy with bed and room occupancy and the guest list. One guest house downloads as an Excel file; several download as a zip folder with one Excel file each.'));
-  // guest houses: tick one or several (one -> Excel, several -> zip)
+  // guest houses: a closed dropdown that opens to a ticked list, with "All guest houses" first (one -> Excel, several -> zip)
   const ghs = props.filter((x) => +x.rooms > 0), picked = new Set([p.property]);
-  const gw = h('div'); const gh = h('div', 'flex items-center gap-3 mb-1'); gh.appendChild(h('span', 'text-xs font-semibold text-zuna-500', 'Guest houses'));
-  const all = h('button', 'ml-auto text-xs font-semibold text-mint-700 hover:underline', 'Select all'), none = h('button', 'text-xs font-semibold text-zuna-500 hover:underline', 'Clear'); all.type = none.type = 'button'; gh.append(all, none); gw.appendChild(gh);
-  const list = h('div', 'rounded-xl ring-1 ring-zuna-100 bg-white divide-y divide-zuna-50 max-h-72 overflow-y-auto'); list.setAttribute('role', 'group'); list.setAttribute('aria-label', 'Guest houses'); gw.appendChild(list); f.appendChild(gw);
-  const boxes = ghs.map((x) => { const row = h('label', 'flex items-center gap-3 px-3 py-2.5 cursor-pointer hover:bg-zuna-50/60'); const cb = h('input', 'peer sr-only'); cb.type = 'checkbox'; cb.value = x.property; cb.checked = picked.has(x.property);
+  const gw = h('div', 'relative'); gw.appendChild(h('span', 'block text-xs font-semibold text-zuna-500 mb-1', 'Guest houses'));
+  const trig = h('button', 'w-full flex items-center gap-2 rounded-xl bg-white ring-1 ring-zuna-100 px-3 py-2.5 text-sm text-left hover:ring-mint-500 focus:outline-none focus-visible:ring-2 focus-visible:ring-mint-500'); trig.type = 'button'; trig.setAttribute('aria-haspopup', 'listbox'); trig.setAttribute('aria-expanded', 'false');
+  const trigT = h('span', 'flex-1 min-w-0 truncate font-medium'); trig.append(icon('building-2', 'w-4 h-4 text-mint-600 shrink-0'), trigT, icon('chevron-down', 'w-4 h-4 text-zuna-400 shrink-0 transition-transform'));
+  gw.appendChild(trig); f.appendChild(gw);
+  const pan = h('div', 'hidden absolute left-0 right-0 top-full mt-1.5 z-30 rounded-xl bg-white ring-1 ring-zuna-100 shadow-xl p-1 max-h-72 overflow-y-auto'); pan.setAttribute('role', 'listbox'); pan.setAttribute('aria-multiselectable', 'true'); gw.appendChild(pan);
+  const row = (label, sub, bold) => { const r = h('label', 'flex items-center gap-3 rounded-lg px-2.5 py-2 cursor-pointer hover:bg-zuna-50'); const cb = h('input', 'peer sr-only'); cb.type = 'checkbox';
     const tick = h('span', 'grid place-items-center w-5 h-5 shrink-0 rounded-md ring-1 ring-zuna-200 bg-white text-transparent peer-checked:bg-mint-500 peer-checked:ring-mint-500 peer-checked:text-zuna-900 peer-focus-visible:ring-2 peer-focus-visible:ring-mint-500 transition-colors'); tick.appendChild(icon('check', 'w-3.5 h-3.5'));
-    const tx = h('span', 'min-w-0 flex-1'); tx.appendChild(h('span', 'block text-sm font-semibold truncate', x.property)); tx.appendChild(h('span', 'block text-xs text-zuna-500', (x.city || '') + (x.status === 'Live' ? '' : (x.city ? ' · ' : '') + 'coming soon')));
-    row.append(cb, tick, tx); list.appendChild(row); cb.addEventListener('change', () => { cb.checked ? picked.add(x.property) : picked.delete(x.property); syncGo(); }); return cb; });
-  all.onclick = () => { boxes.forEach((b) => { b.checked = true; picked.add(b.value); }); syncGo(); }; none.onclick = () => { boxes.forEach((b) => { b.checked = false; }); picked.clear(); syncGo(); };
+    const tx = h('span', 'min-w-0 flex-1'); tx.appendChild(h('span', 'block text-sm truncate ' + (bold ? 'font-bold' : 'font-semibold'), label)); if (sub) tx.appendChild(h('span', 'block text-xs text-zuna-500', sub));
+    r.append(cb, tick, tx); pan.appendChild(r); return [cb, tick]; };
+  const [allCb, allTick] = row('All guest houses', ghs.length + ' guest houses', true); pan.appendChild(h('div', 'my-1 border-t border-zuna-100'));
+  const boxes = ghs.map((x) => { const [cb] = row(x.property, (x.city || '') + (x.status === 'Live' ? '' : (x.city ? ' · ' : '') + 'coming soon')); cb.value = x.property; cb.checked = picked.has(x.property);
+    cb.addEventListener('change', () => { cb.checked ? picked.add(x.property) : picked.delete(x.property); syncGo(); }); return cb; });
+  allCb.addEventListener('change', () => { boxes.forEach((b) => { b.checked = allCb.checked; allCb.checked ? picked.add(b.value) : picked.delete(b.value); }); syncGo(); });
+  const openPan = (o) => { pan.classList.toggle('hidden', !o); trig.setAttribute('aria-expanded', o ? 'true' : 'false'); trig.lastChild.style.transform = o ? 'rotate(180deg)' : ''; };
+  trig.onclick = () => openPan(pan.classList.contains('hidden'));
+  document.addEventListener('mousedown', (e) => { if (gw.isConnected && !gw.contains(e.target)) openPan(false); });
+  gw.addEventListener('keydown', (e) => { if (e.key === 'Escape' && !pan.classList.contains('hidden')) { e.stopPropagation(); openPan(false); trig.focus(); } });
+  const syncPick = () => { const n = picked.size; allCb.checked = n === ghs.length; allTick.classList.toggle('!bg-mint-100', n > 0 && n < ghs.length);
+    trigT.textContent = n === 0 ? 'Choose guest houses' : n === ghs.length ? 'All guest houses (' + n + ')' : n === 1 ? [...picked][0] : n + ' guest houses: ' + ghs.filter((x) => picked.has(x.property)).map((x) => x.property).join(', ');
+    trigT.classList.toggle('text-zuna-500', n === 0); };
   // report type
   const tw = h('div'); tw.appendChild(h('span', 'block text-xs font-semibold text-zuna-500 mb-1', 'Report'));
   const seg = h('div', 'grid grid-cols-4 gap-1 rounded-xl bg-zuna-50 p-1 ring-1 ring-zuna-100'); seg.setAttribute('role', 'tablist'); tw.appendChild(seg); f.appendChild(tw);
@@ -932,7 +944,7 @@ const openWeekly = (onGo) => {
   f.appendChild(summary);
   const err = h('p', 'hidden text-xs font-semibold text-rose-600'); f.appendChild(err);
   const go = h('button', 'btn-primary w-full justify-center !py-2.5 !text-sm'); go.appendChild(icon('download', 'w-4 h-4')); const goT = document.createTextNode('Download Excel'); go.appendChild(goT);
-  function syncGo() { const n = picked.size; goT.textContent = n > 1 ? 'Download zip folder (' + n + ' guest houses)' : 'Download Excel'; all.textContent = n === ghs.length ? 'All selected' : 'Select all'; }
+  function syncGo() { const n = picked.size; goT.textContent = n > 1 ? 'Download zip folder (' + n + ' guest houses)' : 'Download Excel'; syncPick(); }
   go.onclick = () => { const [a, b] = range();
     if (!a || !b || b < a) { err.textContent = !a || !b ? 'Choose the dates.' : 'The last night must be on or after the first night.'; err.classList.remove('hidden'); return; }
     if (nightsBetween(a, b) > 91) { err.textContent = 'Choose up to 92 nights.'; err.classList.remove('hidden'); return; }

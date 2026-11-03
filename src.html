@@ -171,12 +171,25 @@ if(document.readyState!=='loading')setTimeout(hide,150);else document.addEventLi
           </div>
           <div class="px-5 py-3 flex flex-wrap items-center gap-3 border-b border-zuna-50">
             <div id="bfilters" class="flex flex-wrap gap-1 rounded-xl bg-zuna-50 p-1 ring-1 ring-zuna-100"></div>
-            <div id="coBox" class="flex items-center gap-2 rounded-xl bg-zuna-50 p-1 pl-3 ring-1 ring-zuna-100" role="group" aria-label="Filter by check-out date">
-              <span class="flex items-center gap-1.5 text-xs font-semibold text-zuna-600 whitespace-nowrap"><i data-i="log-out" class="w-3.5 h-3.5"></i>Check-out</span>
-              <div class="grid grid-cols-2 gap-1 w-[268px] max-w-[60vw]"><input id="coFrom" type="date" aria-label="Check-out from" class="w-full rounded-lg bg-white ring-1 ring-zuna-100 px-2 py-1.5 text-xs focus:outline-none focus:ring-2 focus:ring-mint-500"><input id="coTo" type="date" aria-label="Check-out to" class="w-full rounded-lg bg-white ring-1 ring-zuna-100 px-2 py-1.5 text-xs focus:outline-none focus:ring-2 focus:ring-mint-500"></div>
-              <button type="button" id="coClear" class="hidden grid place-items-center w-7 h-7 rounded-lg text-zuna-500 hover:bg-white hover:text-zuna-900" title="Clear check-out dates" aria-label="Clear check-out dates"><i data-i="x" class="w-4 h-4"></i></button>
+            <div class="ml-auto flex items-center gap-2 w-full sm:w-auto">
+            <div id="coBox" class="relative shrink-0">
+              <div id="coBtnWrap" class="flex items-center rounded-xl bg-white ring-1 ring-zuna-100 hover:ring-mint-500 transition-shadow">
+                <button type="button" id="coBtn" class="flex items-center gap-2 pl-3 pr-3 py-2 text-sm font-semibold text-zuna-700 whitespace-nowrap rounded-xl" aria-haspopup="dialog" aria-expanded="false"><i data-i="log-out" class="w-4 h-4 text-mint-600"></i><span id="coBtnTxt">Check-out dates</span><i data-i="chevron-down" class="w-3.5 h-3.5 text-zuna-400"></i></button>
+                <button type="button" id="coClear" class="hidden -ml-1 mr-1 grid place-items-center w-7 h-7 rounded-lg text-zuna-500 hover:bg-zuna-50 hover:text-zuna-900" title="Clear check-out dates" aria-label="Clear check-out dates"><i data-i="x" class="w-4 h-4"></i></button>
+              </div>
+              <div id="coPop" class="hidden absolute right-0 top-full mt-2 z-40 w-[320px] max-w-[calc(100vw-2rem)] rounded-2xl bg-white ring-1 ring-zuna-100 shadow-xl p-4 space-y-3" role="dialog" aria-label="Show stays by check-out date">
+                <div><p class="text-sm font-bold">Show stays by check-out date</p><p class="text-xs text-zuna-500">The register and its PDF / Excel list only stays that check out on these dates.</p></div>
+                <div class="grid grid-cols-2 gap-2">
+                  <label class="block"><span class="block text-xs font-semibold text-zuna-500 mb-1">From</span><input id="coFrom" type="date" class="w-full rounded-lg bg-white ring-1 ring-zuna-100 px-2 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-mint-500"></label>
+                  <label class="block"><span class="block text-xs font-semibold text-zuna-500 mb-1">To</span><input id="coTo" type="date" class="w-full rounded-lg bg-white ring-1 ring-zuna-100 px-2 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-mint-500"></label>
+                </div>
+                <div id="coQuick" class="flex flex-wrap gap-1.5"></div>
+                <p id="coErr" class="hidden text-xs font-semibold text-rose-600"></p>
+                <div class="flex gap-2 pt-1"><button type="button" id="coReset" class="btn flex-1 justify-center">Clear</button><button type="button" id="coApply" class="btn-primary flex-1 justify-center">Apply</button></div>
+              </div>
             </div>
-            <label class="relative ml-auto w-full sm:w-72"><i data-i="search" class="w-4 h-4 absolute left-3 top-1/2 -translate-y-1/2 text-zuna-400"></i><input id="bsearch" type="search" placeholder="Search guest, grade, room…" class="w-full pl-9 pr-3 py-2 rounded-xl ring-1 ring-zuna-100 bg-white text-sm placeholder:text-zuna-300 focus:outline-none focus:ring-2 focus:ring-mint-500"></label>
+            <label class="relative flex-1 sm:flex-none sm:w-72"><i data-i="search" class="w-4 h-4 absolute left-3 top-1/2 -translate-y-1/2 text-zuna-400"></i><input id="bsearch" type="search" placeholder="Search guest, grade, room…" class="w-full pl-9 pr-3 py-2 rounded-xl ring-1 ring-zuna-100 bg-white text-sm placeholder:text-zuna-300 focus:outline-none focus:ring-2 focus:ring-mint-500"></label>
+            </div>
           </div>
           <div class="overflow-x-auto">
             <table class="w-full text-sm">
@@ -646,12 +659,25 @@ const renderBookings = () => {
 };
 $$('th[data-k]').forEach((th) => th.onclick = () => { const k = th.dataset.k; state.bsort = {k, dir: state.bsort.k === k ? -state.bsort.dir : 1}; renderBookings(); });
 $('#bsearch').addEventListener('input', (e) => { state.bsearch = e.target.value; renderBookings(); });
-{ const f = $('#coFrom'), t = $('#coTo'), clr = $('#coClear');
-  const apply = () => { state.cofrom = f.value; state.coto = t.value; clr.classList.toggle('hidden', !(f.value || t.value)); $('#coBox').classList.toggle('ring-mint-500', coOn()); $('#coBox').classList.toggle('ring-2', coOn());
-    if (coOn() || (!f.value && !t.value)) { render(); if (coOn()) toast('Showing stays with ' + coText().replace('Check-out', 'check-out')); } };
-  f.addEventListener('change', () => { if (t.value && t.value < f.value) t.value = ''; apply(); }); t.addEventListener('change', apply);
-  clr.onclick = () => { f.value = ''; t.value = ''; apply(); };
-  window.__coClear = () => { if (f.value || t.value) { f.value = ''; t.value = ''; state.cofrom = state.coto = ''; clr.classList.add('hidden'); $('#coBox').classList.remove('ring-mint-500', 'ring-2'); } }; }
+// check-out filter: one compact button that opens a small panel with the two calendars
+{ const f = $('#coFrom'), t = $('#coTo'), clr = $('#coClear'), btn = $('#coBtn'), pop = $('#coPop'), wrap = $('#coBtnWrap'), er = $('#coErr');
+  const paint = () => { const on = coOn(); $('#coBtnTxt').textContent = on ? 'Check-out ' + (state.cofrom === state.coto ? fShort(state.cofrom) : fShort(state.cofrom) + ' – ' + fShort(state.coto)) : 'Check-out dates';
+    clr.classList.toggle('hidden', !on); btn.classList.toggle('pr-2', on); btn.lastElementChild && btn.lastElementChild.classList.toggle('hidden', on);
+    wrap.classList.toggle('!ring-2', on); wrap.classList.toggle('!ring-mint-500', on); wrap.classList.toggle('bg-mint-50', on); wrap.classList.toggle('bg-white', !on); };
+  const close = () => { pop.classList.add('hidden'); btn.setAttribute('aria-expanded', 'false'); };
+  const quick = () => { if ($('#coQuick').childElementCount) return; const lw = addDays(monday(today), -7);
+    [['Last week', lw, addDays(lw, 6)], ['This week', monday(today), addDays(monday(today), 6)], ['Yesterday', addDays(today, -1), addDays(today, -1)], ['Today', today, today]].forEach(([l, a, b]) => {
+      const c = h('button', 'rounded-lg px-2.5 py-1 text-xs font-semibold bg-zuna-50 text-zuna-700 ring-1 ring-zuna-100 hover:ring-mint-500', l); c.type = 'button'; c.onclick = () => { f.value = a; t.value = b; }; $('#coQuick').appendChild(c); }); };
+  const open = () => { quick(); f.value = state.cofrom || ''; t.value = state.coto || ''; er.classList.add('hidden'); pop.classList.remove('hidden'); btn.setAttribute('aria-expanded', 'true'); setTimeout(() => (f._zcal || f).click(), 40); };
+  btn.onclick = () => pop.classList.contains('hidden') ? open() : close();
+  const set =(a, b) => { state.cofrom = a; state.coto = b; paint(); render(); };
+  $('#coApply').onclick = () => { if (!f.value || !t.value || t.value < f.value) { er.textContent = !f.value || !t.value ? 'Choose both dates.' : 'The second date must be on or after the first.'; er.classList.remove('hidden'); return; }
+    set(f.value, t.value); close(); toast('Showing stays with ' + coText().replace('Check-out', 'check-out')); };
+  $('#coReset').onclick = () => { close(); if (coOn()) { set('', ''); toast('Check-out dates cleared'); } };
+  clr.onclick = (e) => { e.stopPropagation(); close(); set('', ''); };
+  document.addEventListener('mousedown', (e) => { if (!pop.classList.contains('hidden') && !e.target.closest('#coBox, .zcal')) close(); });
+  document.addEventListener('keydown', (e) => { if (e.key === 'Escape' && !pop.classList.contains('hidden') && !document.querySelector('.zcal')) { close(); btn.focus(); } });
+  window.__coClear = () => { if (coOn()) { state.cofrom = state.coto = ''; paint(); } }; paint(); }
 
 /* ---------- HOUSES ---------- */
 const copy = async (t) => { try { await navigator.clipboard.writeText(t); toast('Copied ' + t); } catch (e) { toast(t); } };
@@ -948,8 +974,10 @@ const openWeekly = (onGo) => {
     trigT.textContent = n === 0 ? 'Choose guest houses' : n === ghs.length ? 'All guest houses (' + n + ')' : n === 1 ? [...picked][0] : n + ' guest houses: ' + ghs.filter((x) => picked.has(x.property)).map((x) => x.property).join(', ');
     trigT.classList.toggle('text-zuna-500', n === 0); };
   // report type
-  const tw = h('div'); tw.appendChild(h('span', 'block text-xs font-semibold text-zuna-500 mb-1', 'Report'));
-  const seg = h('div', 'grid grid-cols-5 gap-1 rounded-xl bg-zuna-50 p-1 ring-1 ring-zuna-100'); seg.setAttribute('role', 'tablist'); tw.appendChild(seg); f.appendChild(tw);
+  // step 1: report on nights stayed or on check-out date; step 2 (nights only): daily / weekly / monthly / custom
+  const tw = h('div', 'space-y-2'); tw.appendChild(h('span', 'block text-xs font-semibold text-zuna-500 -mb-1', 'Report on'));
+  const basis = h('div', 'grid grid-cols-2 gap-2'); basis.setAttribute('role', 'radiogroup'); basis.setAttribute('aria-label', 'Report on'); tw.appendChild(basis);
+  const seg = h('div', 'grid grid-cols-4 gap-1 rounded-xl bg-zuna-50 p-1 ring-1 ring-zuna-100'); seg.setAttribute('role', 'tablist'); tw.appendChild(seg); f.appendChild(tw);
   const body = h('div', 'space-y-3'); f.appendChild(body);
   const field = (l, type, v) => { const w = h('label', 'block'); w.appendChild(h('span', 'block text-xs font-semibold text-zuna-500 mb-1', l)); const i = h('input', 'w-full rounded-xl bg-white ring-1 ring-zuna-100 px-3 py-2.5 text-sm focus:outline-none focus:ring-2 focus:ring-mint-500'); i.type = type; i.value = v; w.appendChild(i); return [w, i]; };
   const chips = (list, apply) => { const q = h('div', 'flex flex-wrap gap-1.5'); list.forEach(([l, v]) => { const c = h('button', 'rounded-lg px-2.5 py-1 text-xs font-semibold bg-zuna-50 text-zuna-700 ring-1 ring-zuna-100 hover:ring-mint-500', l); c.type = 'button'; c.onclick = () => apply(v); q.appendChild(c); }); return q; };
@@ -977,10 +1005,20 @@ const openWeekly = (onGo) => {
         h('p', 'text-xs text-zuna-500', 'Includes only stays that check out on these dates. Each report starts from the earliest check-in among them.'));
       i1.oninput = i2.oninput = show; i1.onchange = i2.onchange = show; range = () => [i1.value, i2.value]; } };
   const LBL = {daily: 'Daily', weekly: 'Weekly', monthly: 'Monthly', custom: 'Custom dates', checkout: 'Check-out'};
-  const TAB = {custom: 'Custom'};   // shorter tab text so five options fit
+  const TAB = {custom: 'Custom'};
   let mode = openWeekly.mode || 'weekly';
-  const pick = (m) => { mode = openWeekly.mode = m; [...seg.children].forEach((b) => { const on = b.dataset.m === m; b.setAttribute('aria-selected', on ? 'true' : 'false'); b.className = 'segbtn whitespace-nowrap rounded-lg px-1 py-1.5 text-xs font-semibold transition-all ' + (on ? '' : 'text-zuna-500 hover:text-zuna-900'); }); MODES[m](); show(); };
-  Object.keys(LBL).forEach((m) => { const b = h('button', '', TAB[m] || LBL[m]); b.type = 'button'; b.dataset.m = m; b.setAttribute('role', 'tab'); b.onclick = () => pick(m); seg.appendChild(b); });
+  const BASIS = [['nights', 'Nights stayed', 'bed-double', 'Occupancy by night'], ['checkout', 'Check-out date', 'log-out', 'Stays checking out']];
+  const pick = (m) => { mode = openWeekly.mode = m; if (m !== 'checkout') openWeekly.lastNights = m; const co = m === 'checkout';
+    [...basis.children].forEach((b) => { const on = (b.dataset.b === 'checkout') === co; b.setAttribute('aria-checked', on ? 'true' : 'false');
+      b.className = 'flex items-center gap-2.5 rounded-xl px-3 py-2.5 text-left ring-1 transition-all ' + (on ? 'bg-zuna-900 text-white ring-zuna-900 shadow-[inset_0_-2px_0_#02C988]' : 'bg-white text-zuna-700 ring-zuna-100 hover:ring-mint-500'); });
+    seg.classList.toggle('hidden', co);
+    [...seg.children].forEach((b) => { const on = b.dataset.m === m; b.setAttribute('aria-selected', on ? 'true' : 'false'); b.className = 'segbtn whitespace-nowrap rounded-lg px-2 py-1.5 text-xs font-semibold transition-all ' + (on ? '' : 'text-zuna-500 hover:text-zuna-900'); });
+    MODES[m](); show(); };
+  BASIS.forEach(([k, l, ic, sub]) => { const b = h('button'); b.type = 'button'; b.dataset.b = k; b.setAttribute('role', 'radio');
+    const i = h('span', 'grid place-items-center w-8 h-8 shrink-0 rounded-lg bg-mint-500/15 text-mint-600'); i.appendChild(icon(ic, 'w-4 h-4'));
+    const t = h('span', 'min-w-0'); t.appendChild(h('span', 'block text-sm font-bold leading-tight', l)); t.appendChild(h('span', 'block text-[11px] opacity-70 leading-tight mt-0.5', sub));
+    b.append(i, t); b.onclick = () => pick(k === 'checkout' ? 'checkout' : (openWeekly.lastNights || 'weekly')); basis.appendChild(b); });
+  Object.keys(LBL).filter((m) => m !== 'checkout').forEach((m) => { const b = h('button', '', TAB[m] || LBL[m]); b.type = 'button'; b.dataset.m = m; b.setAttribute('role', 'tab'); b.onclick = () => pick(m); seg.appendChild(b); });
   f.appendChild(summary);
   const err = h('p', 'hidden text-xs font-semibold text-rose-600'); f.appendChild(err);
   const go = h('button', 'btn-primary w-full justify-center !py-2.5 !text-sm'); go.appendChild(icon('download', 'w-4 h-4')); const goT = document.createTextNode('Download Excel'); go.appendChild(goT);

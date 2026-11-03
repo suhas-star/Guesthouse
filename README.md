@@ -219,6 +219,19 @@ Tables: `clients`, `guesthouses`, `room_types`, `contacts`, `photos`, `files` (c
 `role` and `client_id`. Once at least one client exists, guest-house details come from these tables instead of the
 `properties` dataset, and bookings are matched to guest houses by name.
 
+### Hotel transaction reports
+
+Admin → client → **Hotel reports**: drop the transaction report (.xlsx or .csv, 39-column layout). The file is read in
+the browser and checked before anything is saved; the preview shows new / updated / unchanged / repeated rows, rows
+above the policy cap, cancellations and any problems. Rows are stored exactly as uploaded (dates made ISO) in
+`transactions`, keyed by client + **Booking Code**: a later upload updates a booking, nothing is duplicated, and bookings
+missing from a later file are kept. Every upload is logged in `tx_uploads`; the latest one can be undone (previous
+versions are kept in `tx_versions`).
+
+Clients see the rows under **Hotel bookings** (`POST /api/tx`, filtered by booked date and/or check-out date) with
+city / type / status filters, totals and an Excel download in the same column layout. Zuna admins and client admins
+always have access; other users get it when an admin turns on **Hotel bookings** for them (`users.tx_access`).
+
 ## Voucher intake
 
 Operators e-mail a confirmation voucher (PDF) for each booking. A small mail job (Google Apps Script, every 10 minutes)

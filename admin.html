@@ -205,9 +205,9 @@ const render = () => {
   const top = h('div', 'flex flex-wrap items-center gap-3 mb-4');
   top.appendChild(h('h1', 'text-xl font-bold', c.name));
   const tabs = h('div', 'ml-auto flex gap-1 rounded-xl bg-white ring-1 ring-zuna-100 p-1');
-  (CLIENT_MODE ? [] : [['gh', 'Guest houses', 'building-2'], ['bookings', 'Bookings', 'calendar-days'], ['users', 'Users', 'users'], ['settings', 'Client settings', 'sliders-horizontal']]).forEach(([k, l, ic]) => { const b = ib('button', 'tab rounded-lg px-3 py-1.5 text-xs font-semibold text-zuna-600 transition-colors hover:text-zuna-900', l, ic); if (tab === k) b.dataset.on = ''; b.onclick = () => { tab = k; render(); }; tabs.appendChild(b); });
+  (CLIENT_MODE ? [] : [['gh', 'Guest houses', 'building-2'], ['bookings', 'Bookings', 'calendar-days'], ['tx', 'Hotel reports', 'file-spreadsheet'], ['users', 'Users', 'users'], ['settings', 'Client settings', 'sliders-horizontal']]).forEach(([k, l, ic]) => { const b = ib('button', 'tab rounded-lg px-3 py-1.5 text-xs font-semibold text-zuna-600 transition-colors hover:text-zuna-900', l, ic); if (tab === k) b.dataset.on = ''; b.onclick = () => { tab = k; render(); }; tabs.appendChild(b); });
   if (!CLIENT_MODE) top.appendChild(tabs); D.appendChild(top);
-  ({gh: renderGH, bookings: renderBookings, users: renderUsers, settings: renderSettings})[tab](D, c);
+  ({gh: renderGH, bookings: renderBookings, tx: renderTx, users: renderUsers, settings: renderSettings})[tab](D, c);
 };
 
 const renderGH = (D, c) => {
@@ -513,6 +513,62 @@ const pwBox = (email, pw) => { const b = h('div', 'rounded-xl bg-mint-50 ring-1 
   const row = h('div', 'flex items-center gap-2'); row.appendChild(h('code', 'flex-1 rounded-lg bg-white ring-1 ring-mint-200 px-3 py-2 font-bold text-base', pw)); const cp = h('button', 'btn', 'Copy'); cp.onclick = () => { navigator.clipboard.writeText(pw).then(() => toast('Copied')); }; row.appendChild(cp); b.appendChild(row);
   b.appendChild(h('p', 'text-xs text-zuna-600', 'Shown once. Share it privately with the user; they can change it with "Forgot password?".')); return b; };
 const ROLE = {client: 'Viewer', client_admin: 'Client admin'}, UF = {};
+/* ---------- hotel transaction reports: upload -> preview -> import; history with undo ---------- */
+const TXS = {};   // per client: the file being checked, its preview and the upload history
+const rupee = (v) => '₹' + Number(v || 0).toLocaleString('en-IN', {maximumFractionDigits: 0});
+const fDT = (s) => new Date(s).toLocaleString('en-IN', {day: 'numeric', month: 'short', year: 'numeric', hour: 'numeric', minute: '2-digit'});
+const renderTx = (D, c) => {
+  const st = TXS[c.id] = TXS[c.id] || {};
+  D.appendChild(h('p', 'text-sm text-zuna-500 mb-3', 'Upload the hotel transaction report as received (.xlsx or .csv). Bookings are matched by Booking Code: new ones are added, changed ones are updated, nothing is duplicated and nothing is removed. ' + c.name + ' admins see them under Hotel bookings.'));
+  const grid = h('div', 'grid xl:grid-cols-[minmax(0,1fr)_340px] gap-4 items-start'); D.appendChild(grid);
+  const left = h('div', 'card p-5 space-y-4 min-w-0'), right = h('div', 'card p-5 min-w-0'); grid.append(left, right);
+  // drop zone
+  const dz = h('label', 'dz flex flex-col items-center justify-center gap-2 rounded-2xl border-2 border-dashed border-zuna-200 bg-zuna-50/40 px-6 py-8 text-center cursor-pointer hover:border-mint-500 focus-within:border-mint-500 transition-colors');
+  const ic = h('span', 'grid place-items-center w-12 h-12 rounded-2xl bg-zuna-900 text-mint-400'); ic.appendChild(icon('file-spreadsheet', 'w-6 h-6'));
+  const fi = h('input', 'sr-only'); fi.type = 'file'; fi.accept = '.xlsx,.csv'; fi.setAttribute('aria-label', 'Transaction report file');
+  dz.append(ic, h('p', 'text-sm font-bold', 'Drop the transaction report here'), h('p', 'text-xs text-zuna-500', 'or click to choose an .xlsx or .csv file · nothing is saved until you confirm'), fi);
+  const out = h('div', 'space-y-4'); left.append(dz, out);
+  const tile = (n, l, cls) => { const t = h('div', 'rounded-xl px-3 py-2.5 ring-1 ' + (cls || 'bg-white ring-zuna-100')); t.append(h('p', 'text-xl font-bold tabular-nums leading-tight', String(n)), h('p', 'text-[11px] font-semibold text-zuna-500', l)); return t; };
+  const flag = (n, l, tone) => n ? h('span', 'zchip ' + tone, n + ' ' + l) : null;
+  const showPreview = () => { const p = st.preview, f = st.file; out.replaceChildren(); if (!p) return;
+    const hd = h('div', 'flex flex-wrap items-baseline gap-x-3 gap-y-1'); hd.append(h('p', 'font-bold', f.name), h('p', 'text-xs text-zuna-500', p.rows + ' bookings · booked ' + (p.booked_from === p.booked_to ? fD(p.booked_from) : fD(p.booked_from) + ' – ' + fD(p.booked_to)) + ' · net ' + rupee(p.net))); out.appendChild(hd);
+    const tiles = h('div', 'grid grid-cols-2 sm:grid-cols-4 gap-2');
+    tiles.append(tile(p.added, 'New bookings', 'bg-mint-50 ring-mint-200'), tile(p.changed, 'Updated', p.changed ? 'bg-amber-50 ring-amber-200' : ''), tile(p.unchanged, 'Already up to date'), tile(p.dup_same + p.dup_diff, 'Repeated in the file')); out.appendChild(tiles);
+    const flags = h('div', 'flex flex-wrap gap-2'); [flag(p.over_policy, 'above policy cap', 'zchip-warn'), flag(p.cancelled, 'cancelled', 'zchip-muted'), flag(p.no_emp, 'without Emp Code', 'zchip-muted'), flag(p.problem_count, p.problem_count === 1 ? 'problem' : 'problems', 'zchip-bad')].filter(Boolean).forEach((x) => flags.appendChild(x));
+    if (flags.childElementCount) out.appendChild(flags);
+    if (p.changes.length) { const box = h('div', 'rounded-xl ring-1 ring-amber-200 bg-amber-50/50 p-3 space-y-2'); box.appendChild(h('p', 'text-xs font-bold text-amber-800', 'What changes' + (p.changed > p.changes.length ? ' (first ' + p.changes.length + ' of ' + p.changed + ')' : '')));
+      p.changes.forEach((ch) => { const r = h('div', 'text-xs'); r.appendChild(h('p', 'font-semibold', ch.code + ' · ' + ch.guest)); ch.fields.forEach((x) => r.appendChild(h('p', 'text-zuna-600 pl-3', x.col + ': ' + (x.from === '' ? '(blank)' : x.from) + ' → ' + (x.to === '' ? '(blank)' : x.to)))); box.appendChild(r); }); out.appendChild(box); }
+    if (p.problems.length) { const box = h('div', 'rounded-xl ring-1 ring-rose-200 bg-rose-50/60 p-3 space-y-1'); box.appendChild(h('p', 'text-xs font-bold text-rose-700', 'Check these rows' + (p.problem_count > p.problems.length ? ' (first ' + p.problems.length + ' of ' + p.problem_count + ')' : '')));
+      p.problems.forEach((x) => box.appendChild(h('p', 'text-xs text-rose-800', 'Row ' + x.line + (x.code ? ' · ' + x.code : '') + ': ' + x.issue))); out.appendChild(box); }
+    const n = p.added + p.changed, acts = h('div', 'flex flex-wrap justify-end gap-2 pt-1');
+    const cancel = h('button', 'btn', 'Cancel'); cancel.onclick = () => { st.file = st.preview = null; fi.value = ''; showPreview(); };
+    const go = ib('button', 'btn-primary', n ? 'Import ' + n + (n === 1 ? ' booking' : ' bookings') : 'Nothing new to import', 'upload'); go.disabled = !n;
+    go.onclick = async () => { go.disabled = true; const pr = progressRow(f.name); acts.before(pr.el);
+      try { const r = await apiUp('tx/import', {client_id: c.id, header: f.header, rows: f.rows, filename: f.name}, (x) => pr.set(x)); pr.done(true);
+        st.file = st.preview = null; st.hist = null; fi.value = ''; ZUI.celebrate('Report imported', r.result.added + ' new · ' + r.result.changed + ' updated'); showPreview(); loadHist(); } catch (er) { pr.done(false); toast(er.message, true); go.disabled = false; } };
+    acts.append(cancel, go); out.appendChild(acts); };
+  const pick = async (F) => { if (!F) return; if (!/\.(xlsx|csv)$/i.test(F.name)) { toast('Choose an .xlsx or .csv file.', true); return; }
+    out.replaceChildren(h('p', 'text-sm text-zuna-500', 'Checking ' + F.name + '…'));
+    try { const s = await ZUI.readSheet(F); const r = await api('tx/preview', {client_id: c.id, header: s.header, rows: s.rows}); st.file = {name: F.name, header: s.header, rows: s.rows}; st.preview = r.preview; showPreview(); }
+    catch (er) { st.file = st.preview = null; fi.value = ''; const b = h('div', 'rounded-xl ring-1 ring-rose-200 bg-rose-50 p-3 text-sm font-medium text-rose-700'); b.textContent = er.message; out.replaceChildren(b); } };
+  fi.onchange = () => pick(fi.files[0]); dropZone(dz, (fs) => pick(fs[0])); showPreview();
+  // history
+  right.appendChild(h('p', 'text-sm font-bold mb-1', 'Upload history')); right.appendChild(h('p', 'text-xs text-zuna-500 mb-3', 'The latest upload can be undone.'));
+  const list = h('div', 'space-y-2'); right.appendChild(list);
+  const paintHist = () => { list.replaceChildren(); const hs = st.hist || [];
+    if (!hs.length) { list.appendChild(h('p', 'text-sm text-zuna-500', 'No uploads yet.')); return; }
+    const latest = hs.find((u) => !u.undone);
+    hs.forEach((u) => { const r = h('div', 'rounded-xl ring-1 ring-zuna-100 p-3 ' + (u.undone ? 'opacity-60' : ''));
+      const t = h('div', 'flex items-start gap-2'); const m = h('div', 'min-w-0 flex-1'); m.append(h('p', 'text-sm font-semibold truncate', u.filename || 'Upload'), h('p', 'text-[11px] text-zuna-500', fDT(u.at) + ' · ' + (u.by_email || '')));
+      t.appendChild(m); if (u.undone) t.appendChild(h('span', 'zchip zchip-muted', 'Undone'));
+      else if (u === latest) { const un = ib('button', 'btn !py-1 !px-2 text-xs', 'Undo', 'undo-2'); un.onclick = async () => {
+          if (!(await ZUI.confirm({title: 'Undo this upload?', message: [(u.added || 0) + ' new bookings are removed and ' + (u.changed || 0) + ' updated bookings go back to how they were.', 'Clients stop seeing these changes straight away.'], ok: 'Undo upload', tone: 'danger', hold: true}))) return;
+          try { await api('tx/undo', {client_id: c.id, id: u.id}); toast('Upload undone'); loadHist(); } catch (er) { toast(er.message, true); } }; t.appendChild(un); }
+      r.append(t, h('p', 'text-xs text-zuna-600 mt-1.5', u.rows + ' rows · ' + u.added + ' new · ' + u.changed + ' updated · ' + u.unchanged + ' unchanged')); list.appendChild(r); }); };
+  const loadHist = async () => { try { st.hist = (await api('tx/uploads', {client_id: c.id})).uploads; } catch (er) { st.hist = []; } if (list.isConnected) paintHist(); };
+  if (st.hist) paintHist(); else { list.appendChild(h('p', 'text-sm text-zuna-500', 'Loading…')); loadHist(); }
+};
+
 const renderUsers = (D, c) => {
   const bar = h('div', 'flex items-center gap-2 mb-3'); bar.appendChild(h('p', 'text-sm text-zuna-500', c.users.length + ' users · Viewers see the ' + c.name + ' dashboard; client admins can also manage users'));
   const add = ib('button', 'ml-auto btn-primary', 'Add user', 'user-plus'); add.onclick = () => { const f = h('div', 'space-y-4'); const g = h('div', 'grid sm:grid-cols-2 gap-3'); const n = inp('', 'Full name'), e = inp('', 'name@company.com', 'email');
@@ -537,6 +593,13 @@ const renderUsers = (D, c) => {
       const tx = h('div', 'min-w-0'); const n1 = h('p', 'font-semibold'); n1.textContent = u.name; if (u.email === ME.email) n1.appendChild(h('span', 'ml-1.5 text-[11px] font-semibold text-zuna-500', '(you)')); tx.append(n1, h('p', 'text-xs text-zuna-500', u.email)); row.appendChild(tx); return row; }},
     {k: 'role', label: 'Role', sort: (u) => u.role, render: (u) => h('span', 'rounded-full px-2 py-0.5 text-[11px] font-bold whitespace-nowrap ' + (u.role === 'client_admin' ? 'bg-zuna-900 text-white' : 'bg-zuna-50 text-zuna-600 ring-1 ring-zuna-100'), ROLE[u.role] || 'Viewer')},
     {k: 'status', label: 'Status', sort: (u) => (u.active ? '0' : '1') + (u.last_login || ''), render: (u) => [h('span', 'rounded-full px-2 py-0.5 text-[11px] font-bold ' + (u.active ? 'bg-mint-50 text-mint-700 ring-1 ring-mint-200' : 'bg-zuna-50 text-zuna-500 ring-1 ring-zuna-100'), u.active ? 'Active' : 'Disabled'), h('p', 'text-[11px] text-zuna-500 mt-1 whitespace-nowrap', 'Last login: ' + (u.last_login ? new Date(u.last_login).toLocaleString('en-IN', {day: 'numeric', month: 'short', hour: 'numeric', minute: '2-digit'}) : 'never'))]},
+    {k: 'tx', label: 'Hotel bookings', sort: (u) => (u.role === 'client_admin' ? '0' : u.tx ? '1' : '2'), render: (u) => {
+      if (u.role === 'client_admin') { const s = h('span', 'inline-flex items-center gap-1.5 text-xs font-semibold text-zuna-500 whitespace-nowrap'); s.appendChild(icon('shield-check', 'w-3.5 h-3.5 text-mint-600')); s.appendChild(document.createTextNode('Always (admin)')); return s; }
+      const sw = h('button', 'group inline-flex items-center gap-2 text-xs font-semibold whitespace-nowrap'); sw.type = 'button'; sw.setAttribute('role', 'switch'); sw.setAttribute('aria-checked', u.tx ? 'true' : 'false'); sw.setAttribute('aria-label', 'Hotel bookings access for ' + u.name);
+      const tr = h('span', 'relative inline-block w-9 h-5 rounded-full transition-colors ' + (u.tx ? 'bg-mint-500' : 'bg-zuna-200')); tr.appendChild(h('span', 'absolute top-0.5 left-0.5 w-4 h-4 rounded-full bg-white shadow transition-transform ' + (u.tx ? 'translate-x-4' : '')));
+      sw.append(tr, h('span', u.tx ? 'text-mint-700' : 'text-zuna-500', u.tx ? 'Allowed' : 'Off'));
+      sw.onclick = async () => { sw.disabled = true; try { await api('user/access', {email: u.email, tx: !u.tx}); toast((u.tx ? 'Hotel bookings turned off for ' : 'Hotel bookings turned on for ') + u.name); load(true); } catch (er) { toast(er.message, true); sw.disabled = false; } };
+      return sw; }},
     {k: 'act', label: '', actions: true, render: actions}];
   UF.st = UF.st || {sort: {k: 'user', dir: 1}, page: 1};
   D.appendChild(dataTable({cols, rows: c.users, st: UF.st, noun: 'users', empty: 'No users yet.'}));

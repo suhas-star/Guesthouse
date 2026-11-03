@@ -400,5 +400,37 @@ html.dark .zc-list{background:rgba(245,158,11,.13);color:#fcd34d;box-shadow:inse
     addEventListener('touchstart', (e) => { if (busyR || scrollY > 0 || e.touches.length > 1 || e.target.closest('[role=dialog],.z-car,#drawer,#side,.zcal,input,textarea,select')) { y0 = null; return; } y0 = e.touches[0].clientY; x0 = e.touches[0].clientX; dy = 0; }, {passive: true});
     addEventListener('touchmove', (e) => { if (y0 == null) return; const t = e.touches[0]; dy = (t.clientY - y0) * .5; if (dy <= 0 || Math.abs(t.clientX - x0) > Math.abs(t.clientY - y0)) { if (dy <= 0) set(0); return; } if (scrollY > 0) { y0 = null; set(0, true); return; } e.preventDefault(); set(Math.min(dy, 110)); }, {passive: false});
     addEventListener('touchend', async () => { if (y0 == null) return; y0 = null; if (dy > 64) { busyR = true; set(64, true); ind.classList.add('zp-spin'); try { await fn(); } finally { ind.classList.remove('zp-spin'); set(0, true); busyR = false; } } else set(0, true); dy = 0; }); }
-  return {show, close, key, isOpen, select, auto, noFill, chevron, art, confirm, clickables, busy, theme, celebrate, tilt, toast, gauge, stagger, shimmer, carousel, pullRefresh};
+  // read the first sheet of an .xlsx (or a .csv) in the browser -> {header, rows}; numbers stay numbers, dates arrive as Excel day numbers
+  async function readSheet(file) {
+    const buf = new Uint8Array(await file.arrayBuffer());
+    if (/\.csv$/i.test(file.name) || buf[0] !== 0x50 || buf[1] !== 0x4b) {   // not a zip: treat as CSV text
+      const txt = new TextDecoder().decode(buf).replace(/^﻿/, ''), out = []; let row = [], cell = '', q = false;
+      for (let i = 0; i < txt.length; i++) { const ch = txt[i];
+        if (q) { if (ch === '"') { if (txt[i + 1] === '"') { cell += '"'; i++; } else q = false; } else cell += ch; }
+        else if (ch === '"') q = true; else if (ch === ',') { row.push(cell); cell = ''; } else if (ch === '\n' || ch === '\r') { if (ch === '\r' && txt[i + 1] === '\n') i++; row.push(cell); out.push(row); row = []; cell = ''; } else cell += ch; }
+      if (cell || row.length) { row.push(cell); out.push(row); }
+      const num = (v) => /^-?\d+(\.\d+)?$/.test(v.trim()) ? +v : v;
+      return {header: out[0] || [], rows: out.slice(1).map((r) => r.map(num))}; }
+    const dv = new DataView(buf.buffer); let eocd = -1;
+    for (let i = buf.length - 22; i >= Math.max(0, buf.length - 70000); i--) if (dv.getUint32(i, true) === 0x06054b50) { eocd = i; break; }
+    if (eocd < 0) throw new Error('This file could not be read. Save it as .xlsx and try again.');
+    const files = {}; let p = dv.getUint32(eocd + 16, true); const n = dv.getUint16(eocd + 10, true), dec = new TextDecoder();
+    for (let k = 0; k < n; k++) { const method = dv.getUint16(p + 10, true), csize = dv.getUint32(p + 20, true), nl = dv.getUint16(p + 28, true), xl = dv.getUint16(p + 30, true), cl = dv.getUint16(p + 32, true), off = dv.getUint32(p + 42, true);
+      files[dec.decode(buf.subarray(p + 46, p + 46 + nl))] = {method, csize, off}; p += 46 + nl + xl + cl; }
+    const get = async (name) => { const f = files[name]; if (!f) return null; const lnl = dv.getUint16(f.off + 26, true), lxl = dv.getUint16(f.off + 28, true), data = buf.subarray(f.off + 30 + lnl + lxl, f.off + 30 + lnl + lxl + f.csize);
+      if (f.method === 0) return dec.decode(data);
+      return await new Response(new Blob([data]).stream().pipeThrough(new DecompressionStream('deflate-raw'))).text(); };
+    const X = (s) => new DOMParser().parseFromString(s, 'application/xml');
+    let sheet = 'xl/worksheets/sheet1.xml';
+    try { const wb = X(await get('xl/workbook.xml')), rel = X(await get('xl/_rels/workbook.xml.rels')); const first = wb.getElementsByTagName('sheet')[0];
+      const rid = first && (first.getAttribute('r:id') || first.getAttributeNS('http://schemas.openxmlformats.org/officeDocument/2006/relationships', 'id'));
+      const r = [...rel.getElementsByTagName('Relationship')].find((x) => x.getAttribute('Id') === rid); if (r) { const t = r.getAttribute('Target').replace(/^\//, ''); sheet = t.startsWith('xl/') ? t : 'xl/' + t; } } catch (e) { /* default sheet */ }
+    const ssx = await get('xl/sharedStrings.xml'), ss = ssx ? [...X(ssx).getElementsByTagName('si')].map((si) => [...si.getElementsByTagName('t')].map((t) => t.textContent).join('')) : [];
+    const sx = await get(sheet); if (!sx) throw new Error('This file has no sheet to read.');
+    const col = (ref) => { let c = 0; for (const ch of ref.replace(/\d+$/, '')) c = c * 26 + ch.charCodeAt(0) - 64; return c - 1; };
+    const grid = [...X(sx).getElementsByTagName('row')].map((r) => { const out = []; for (const c of r.getElementsByTagName('c')) { const t = c.getAttribute('t'), v = c.getElementsByTagName('v')[0], i = col(c.getAttribute('r') || 'A');
+        out[i] = t === 's' ? (ss[+(v && v.textContent)] ?? '') : t === 'inlineStr' ? [...c.getElementsByTagName('t')].map((x) => x.textContent).join('') : t === 'str' || t === 'e' ? (v ? v.textContent : '') : t === 'b' ? (v && v.textContent === '1') : v ? (isNaN(+v.textContent) ? v.textContent : +v.textContent) : ''; }
+      for (let i = 0; i < out.length; i++) if (out[i] === undefined) out[i] = ''; return out; });
+    return {header: grid[0] || [], rows: grid.slice(1)}; }
+  return {show, close, key, isOpen, select, auto, noFill, chevron, art, confirm, clickables, busy, theme, celebrate, tilt, toast, gauge, stagger, shimmer, carousel, pullRefresh, readSheet};
 })();

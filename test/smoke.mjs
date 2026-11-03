@@ -188,6 +188,33 @@ check('old host redirects to PRIMARY_HOST', r.status === 301 && r.headers.get('l
   check("client admin cannot touch another client's user", (await M('user', {email: 'zed@other.example', name: 'Zed', active: false})).status === 400 && (await M('user/reset', {email: 'zed@other.example'})).status === 400);
   check('client admin cannot reset a Zuna admin', (await M('user/reset', {email: 'boss@zuna.example'})).status === 400);
   check('viewer cannot use the manage API', (await call('/api/manage/state', {method: 'POST', body: {}, cookie: asha})).status === 403);
+  // hotel transaction reports (made-up rows)
+  { const H = ['Booking Code', 'Entity Name', 'Property Name', 'Property Category', 'City', 'State', 'Emp Code', 'Guest Name ', 'Booked Date', 'Check-In Date ', 'Check-Out Date ', 'Grade', 'Eligibility Criteria', 'Tariff Per Day', 'Stay Days ', 'Total Tariff ', 'Status', 'Net Amount Charged', 'GST Charges', 'Invoice No'];
+    const row = (code, guest, booked, ci, co, tariff, status = 'Billed') => [code, 'Acme Industries', 'Lakeside Inn', 'Hotel', 'Pune', 'Maharashtra', 'E' + code, guest, booked, ci, co, 'M5', 6500, tariff, 2, tariff * 2, status, tariff * 2.36, tariff * 0.36, 'INV-' + code];
+    const rows = [row('TX1', 'Ravi Menon', '2026-10-19', '2026-10-20', '2026-10-22', 5000), row('TX2', 'Sara Khan', '21/10/2026', '2026-10-24', '2026-10-26', 7000), row('TX2', 'Sara Khan', '21/10/2026', '2026-10-24', '2026-10-26', 7000), row('TX3', 'Dev Rao', 46326, '2026-11-01', '2026-11-03', 4000)];
+    x = await A('tx/preview', {client_id: acme, header: ['Name', 'Amount'], rows: [['a', 1]]}); check('transaction upload: wrong file is refused with the missing columns named', x.status === 400 && /Booking Code/.test(x.j.error));
+    x = await A('tx/preview', {client_id: acme, header: H, rows}); const pv = x.j.preview || {};
+    check('transaction preview: 3 new, identical duplicate folded, 1 over policy, dates read in any format', x.status === 200 && pv.added === 3 && pv.dup_same === 1 && pv.over_policy === 1 && pv.booked_from === '2026-10-19' && pv.booked_to === '2026-10-31');
+    check('preview writes nothing', DB.raw.prepare('SELECT COUNT(*) n FROM transactions').get().n === 0);
+    x = await A('tx/import', {client_id: acme, header: H, rows, filename: 'week1.xlsx'}); const up1 = x.j.upload_id;
+    check('transaction import stores 3 bookings', x.status === 200 && DB.raw.prepare('SELECT COUNT(*) n FROM transactions WHERE client_id = ?').get(acme).n === 3);
+    const T = async (cookie, body = {}) => { const y = await call('/api/tx', {method: 'POST', body, cookie}); return {status: y.status, j: await y.json()}; };
+    check('viewer without access cannot see hotel bookings', (await T(asha)).status === 403);
+    x = await T(meera, {checkout_from: '2026-10-21', checkout_to: '2026-10-26'}); check('client admin sees hotel bookings filtered by check-out date', x.status === 200 && x.j.rows.length === 2 && x.j.rows.every((r) => r['Check-Out Date'] <= '2026-10-26'));
+    x = await T(meera, {booked_from: '2026-10-21', booked_to: '2026-10-21'}); check('filter by booked date (dd/mm/yyyy in the file read as Indian format)', x.j.rows.length === 1 && x.j.rows[0]['Booking Code'] === 'TX2');
+    check('access switch for an unknown email creates nobody', (await M('user/access', {email: 'ghost@acme.example', tx: true})).status === 404 && !DB.raw.prepare("SELECT 1 FROM users WHERE email = 'ghost@acme.example'").get());
+    check('client admin gives a viewer access', (await M('user/access', {email: 'asha@acme.example', tx: true})).status === 200);
+    x = await T(asha, {client_id: other}); check("viewer with access sees own client's bookings only", x.status === 200 && x.j.rows.length === 3);
+    check("client admin cannot switch access for another client's user", (await M('user/access', {email: 'zed@other.example', tx: true})).status === 400);
+    rows[1][16] = 'Cancelled'; rows[2][16] = 'Cancelled';
+    x = await A('tx/import', {client_id: acme, header: H, rows, filename: 'week1-again.xlsx'}); const up2 = x.j.upload_id;
+    check('re-upload updates by Booking Code (no duplicates): 1 changed, 2 unchanged', x.j.result.changed === 1 && x.j.result.unchanged === 2 && x.j.result.added === 0 && DB.raw.prepare('SELECT COUNT(*) n FROM transactions WHERE client_id = ?').get(acme).n === 3);
+    check('only the latest upload can be undone', (await A('tx/undo', {client_id: acme, id: up1})).status === 400);
+    x = await A('tx/undo', {client_id: acme, id: up2}); const st = JSON.parse(DB.raw.prepare("SELECT row FROM transactions WHERE code = 'TX2'").get().row).Status;
+    check('undo restores the earlier version', x.status === 200 && st === 'Billed');
+    x = await A('tx/undo', {client_id: acme, id: up1}); check('undoing the first upload removes its bookings', x.status === 200 && DB.raw.prepare('SELECT COUNT(*) n FROM transactions WHERE client_id = ?').get(acme).n === 0);
+    x = await A('tx/uploads', {client_id: acme}); check('upload history lists both uploads as undone', x.j.uploads.length === 2 && x.j.uploads.every((u) => u.undone));
+    await M('user/access', {email: 'asha@acme.example', tx: false}); check('access can be switched off again', (await T(asha)).status === 403); }
   check('client admin cannot use the Zuna admin API', (await call('/api/admin/state', {method: 'POST', body: {}, cookie: meera})).status === 403);
   { const rr = await call('/manage', {cookie: meera}); check('/manage opens Users & access inside the dashboard', rr.status === 302 && rr.headers.get('location').endsWith('/#users')); }
   { const pg = await (await call('/', {cookie: meera})).text(); const dd = JSON.parse(pg.match(/window\.__LTMGH_DATA = (.*?);\nconst REPORT_DATE/s)[1]);

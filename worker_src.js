@@ -41,9 +41,11 @@ async function currentUser(req, env) {
   const tok = getCookie(req, COOKIE);
   if (!tok || !/^[a-f0-9]{64}$/.test(tok)) return null;
   await ensureSchema(env);
-  const row = await env.DB.prepare("SELECT s.email, s.expires, u.name, u.active, u.role, u.client_id FROM sessions s JOIN users u ON u.email = s.email WHERE s.token_hash = ?").bind(await sha256(tok)).first();
+  const row = await env.DB.prepare("SELECT s.email, s.expires, u.name, u.active, u.role, u.client_id, u.tx_access FROM sessions s JOIN users u ON u.email = s.email WHERE s.token_hash = ?").bind(await sha256(tok)).first();
   if (!row || !row.active || row.expires < new Date().toISOString()) return null;
-  return {email: row.email, name: row.name, role: row.role || "client", client_id: row.client_id, admin: row.role === "admin", manager: row.role === "client_admin" && !!row.client_id};
+  const admin = row.role === "admin", manager = row.role === "client_admin" && !!row.client_id;
+  // hotel bookings: Zuna admins and client admins always; other users when an admin switches it on
+  return {email: row.email, name: row.name, role: row.role || "client", client_id: row.client_id, admin, manager, tx: admin || manager || !!row.tx_access};
 }
 
 async function login(req, env) {
@@ -389,12 +391,19 @@ const SCHEMA = [
   "CREATE TABLE IF NOT EXISTS photos (id INTEGER PRIMARY KEY AUTOINCREMENT, gh_id INTEGER NOT NULL, file_id INTEGER NOT NULL, caption TEXT, sort INTEGER DEFAULT 0)",
   "CREATE TABLE IF NOT EXISTS documents (id INTEGER PRIMARY KEY AUTOINCREMENT, gh_id INTEGER NOT NULL, file_id INTEGER, doc_type TEXT, title TEXT, number TEXT, issued TEXT, expires TEXT, remind_days INTEGER DEFAULT 30, visible INTEGER DEFAULT 1, file_name TEXT, updated TEXT, last_notice TEXT)",
   "CREATE TABLE IF NOT EXISTS files (id INTEGER PRIMARY KEY AUTOINCREMENT, client_id INTEGER, mime TEXT NOT NULL, data TEXT NOT NULL, created TEXT)",
+  // hotel transaction reports uploaded by the Zuna team; one row per Booking Code per client
+  "CREATE TABLE IF NOT EXISTS transactions (client_id INTEGER NOT NULL, code TEXT NOT NULL, booked TEXT, checkin TEXT, checkout TEXT, status TEXT, row TEXT NOT NULL, upload_id INTEGER, updated TEXT, PRIMARY KEY (client_id, code))",
+  "CREATE INDEX IF NOT EXISTS tx_booked ON transactions (client_id, booked)",
+  "CREATE INDEX IF NOT EXISTS tx_checkout ON transactions (client_id, checkout)",
+  "CREATE TABLE IF NOT EXISTS tx_uploads (id INTEGER PRIMARY KEY AUTOINCREMENT, client_id INTEGER NOT NULL, by_email TEXT, at TEXT, filename TEXT, rows INTEGER, added INTEGER, changed INTEGER, unchanged INTEGER, undone TEXT)",
+  "CREATE TABLE IF NOT EXISTS tx_versions (upload_id INTEGER NOT NULL, code TEXT NOT NULL, prev TEXT)",
+  "CREATE INDEX IF NOT EXISTS tx_versions_up ON tx_versions (upload_id)",
 ];
 let schemaReady = false;
 async function ensureSchema(env) {
   if (schemaReady) return;
   for (const q of SCHEMA) await env.DB.prepare(q).run();
-  for (const c of ["users ADD COLUMN role TEXT", "users ADD COLUMN client_id INTEGER", "guesthouses ADD COLUMN state TEXT", "guesthouses ADD COLUMN country TEXT", "room_types ADD COLUMN bed_type TEXT", "clients ADD COLUMN legal_name TEXT"]) { try { await env.DB.prepare("ALTER TABLE " + c).run(); } catch (e) { /* exists */ } }
+  for (const c of ["users ADD COLUMN role TEXT", "users ADD COLUMN client_id INTEGER", "guesthouses ADD COLUMN state TEXT", "guesthouses ADD COLUMN country TEXT", "room_types ADD COLUMN bed_type TEXT", "clients ADD COLUMN legal_name TEXT", "users ADD COLUMN tx_access INTEGER"]) { try { await env.DB.prepare("ALTER TABLE " + c).run(); } catch (e) { /* exists */ } }
   schemaReady = true;
 }
 const DEFAULT_GRADES = "M1,M2,M3,M4,M5,M6,M7,M8,P1,P2,P3,E1,E2,E3,E4,E5,E6,E7";
@@ -479,12 +488,15 @@ function docMail(client, list) {
 }
 
 // ---- users of one client (Zuna admins, and the client's own client admins) ----
-async function clientUsers(env, cid) { const {results} = await env.DB.prepare("SELECT email, name, active, last_login, locked_until, role FROM users WHERE client_id = ? AND (role IS NULL OR role <> 'admin') ORDER BY name").bind(cid).all(); return results.map((u) => Object.assign(u, {role: u.role === "client_admin" ? "client_admin" : "client"})); }
+async function clientUsers(env, cid) { const {results} = await env.DB.prepare("SELECT email, name, active, last_login, locked_until, role, tx_access FROM users WHERE client_id = ? AND (role IS NULL OR role <> 'admin') ORDER BY name").bind(cid).all(); return results.map((u) => Object.assign(u, {role: u.role === "client_admin" ? "client_admin" : "client", tx: u.role === "client_admin" || !!u.tx_access})); }
 async function userAction(env, cid, b, actor, action) {
   const email = clean(b.email, 200).toLowerCase(), name = clean(b.name, 120), role = b.role === "client_admin" ? "client_admin" : "client";
   if (!email) return json({error: "Enter an email address or user ID."}, 400);
   const ex = await env.DB.prepare("SELECT email, name, role, client_id FROM users WHERE email = ?").bind(email).first();
   if (ex && (ex.role === "admin" || ex.client_id !== cid)) return json({error: ex.role === "admin" ? "That account is a Zuna admin." : "That email already has an account."}, 400);
+  if (action === "access") {   // switch hotel bookings on or off for a user (client admins always have it)
+    if (!ex) return json({error: "No such user."}, 404);
+    await env.DB.prepare("UPDATE users SET tx_access = ? WHERE email = ?").bind(b.tx ? 1 : 0, email).run(); return json({ok: true}); }
   if (action === "reset") { if (!ex) return json({error: "No such user."}, 404); const pw = makePassword(ex.name); await setPassword(env, email, pw); await env.DB.prepare("DELETE FROM sessions WHERE email = ?").bind(email).run(); return json({ok: true, password: pw}); }
   if (!ex) {
     const pw = makePassword(name || email);
@@ -508,6 +520,7 @@ async function manageApi(req, env, user, path) {
     if (path === "/api/manage/state") return json(await manageState(env, user));
     if (path === "/api/manage/user") return userAction(env, user.client_id, b, user, "save");
     if (path === "/api/manage/user/reset") return userAction(env, user.client_id, b, user, "reset");
+    if (path === "/api/manage/user/access") return userAction(env, user.client_id, b, user, "access");
   } catch (e) { return json({error: e.message || "Something went wrong."}, 400); }
   return json({error: "Not found."}, 404);
 }
@@ -631,6 +644,98 @@ async function restoreBooking(env, client, b) {
   return json({ok: true});
 }
 
+/* ---------- hotel transaction reports ----------
+   The file is final as received: rows are stored exactly as uploaded (dates made ISO), keyed by Booking Code.
+   A newer upload updates a booking; bookings missing from a later file are kept; the latest upload can be undone. */
+const TX_COLS = ["Booking Code", "Entity Name", "Property Name", "Property Category", "City", "State", "Emp Code", "Guest Name", "Booked Date", "Check-In Date", "Check-Out Date", "Designation", "Grade", "Eligibility Criteria", "Tariff Per Day", "Stay Days", "Total Tariff", "Taxes", "Tariff Payment Mode", "Room Type", "Booking Level", "Occupancy", "Status", "Net Amount Charged", "GST Charges", "Cancellation Charges Total", "Transaction Fee", "Transaction Fee GST Charged", "Invoice No", "WBS/ID or Cost Code", "Concur Request Date", "Purpose of Travel", "Travel Req ID", "Base Location", "Approving Manager", "Request Policy", "Employee Email ID", "Contact Number", "Remarks"];
+const TX_DATES = new Set(["Booked Date", "Check-In Date", "Check-Out Date", "Concur Request Date"]);
+const TX_TEXT = new Set(["Booking Code", "Emp Code", "Contact Number", "Invoice No", "Travel Req ID", "WBS/ID or Cost Code"]);
+const TX_NEED = ["Booking Code", "Guest Name", "Booked Date", "Check-In Date", "Check-Out Date"];
+const hkey = (s) => String(s == null ? "" : s).toLowerCase().replace(/\s+/g, " ").trim();
+function txDate(v) {
+  if (v == null || v === "") return "";
+  if (typeof v === "number" && v > 20000 && v < 80000) return new Date(Math.round((v - 25569) * 864e5)).toISOString().slice(0, 10);   // Excel serial day
+  const s = String(v).trim(); let m;
+  if ((m = /^(\d{4})-(\d{1,2})-(\d{1,2})/.exec(s))) return m[1] + "-" + m[2].padStart(2, "0") + "-" + m[3].padStart(2, "0");
+  if ((m = /^(\d{1,2})[\/.-](\d{1,2})[\/.-](\d{4})$/.exec(s))) return m[3] + "-" + m[2].padStart(2, "0") + "-" + m[1].padStart(2, "0");   // dd/mm/yyyy (India)
+  if ((m = /^(\d{1,2})[\s-]([A-Za-z]{3})[a-z]*[\s-,]+(\d{4})$/.exec(s)) && MON3[m[2].toLowerCase()]) return m[3] + "-" + MON3[m[2].toLowerCase()] + "-" + m[1].padStart(2, "0");
+  return null;   // not a date we can read
+}
+// header row + data rows (arrays) -> {rows, problems}
+function txParse(header, data) {
+  const idx = {}; (header || []).forEach((h, i) => { const k = hkey(h); const col = TX_COLS.find((c) => hkey(c) === k); if (col && !(col in idx)) idx[col] = i; });
+  const missing = TX_NEED.filter((c) => !(c in idx));
+  if (missing.length) return {error: "This doesn't look like the transaction report. Missing column" + (missing.length > 1 ? "s: " : ": ") + missing.join(", ") + "."};
+  const rows = [], problems = [], seen = new Map(); let dupSame = 0, dupDiff = 0;
+  (data || []).forEach((arr, n) => {
+    if (!Array.isArray(arr) || arr.every((v) => v == null || v === "")) return;
+    const r = {}; for (const c of TX_COLS) { let v = c in idx ? arr[idx[c]] : ""; if (v == null) v = "";
+      if (TX_DATES.has(c)) { const d = txDate(v); if (d === null) { problems.push({line: n + 2, issue: c + ' "' + String(v).slice(0, 20) + '" is not a date'}); v = String(v); } else v = d; }
+      else if (TX_TEXT.has(c)) v = String(v).trim().slice(0, 120);   // IDs and phone numbers stay text (no 9.1E+12 in Excel)
+      else v = typeof v === "number" ? v : String(v).trim().slice(0, 400);
+      r[c] = v; }
+    const code = String(r["Booking Code"]).trim();
+    if (!code) { problems.push({line: n + 2, issue: "No Booking Code; row skipped"}); return; }
+    if (!r["Check-In Date"] || !r["Check-Out Date"] || r["Check-Out Date"] < r["Check-In Date"]) problems.push({line: n + 2, code, issue: "Check-out is before check-in"});
+    if (seen.has(code)) { const same = JSON.stringify(seen.get(code)) === JSON.stringify(r); same ? dupSame++ : dupDiff++; if (!same) problems.push({line: n + 2, code, issue: "Booking Code appears twice with different details; the later row is used"}); }
+    seen.set(code, r);
+  });
+  for (const r of seen.values()) rows.push(r);
+  return {rows, problems, dupSame, dupDiff};
+}
+const txFlags = (r) => { const t = +r["Tariff Per Day"] || 0, e = +String(r["Eligibility Criteria"]).replace(/,/g, "") || 0; return {over: !!(e && t > e), cancelled: /cancel/i.test(r.Status || "")}; };
+async function txImport(env, cid, b, user, dry) {
+  const p = txParse(b.header, b.rows); if (p.error) return json({error: p.error}, 400);
+  if (!p.rows.length) return json({error: "No bookings found in this file."}, 400);
+  if (p.rows.length > 20000) return json({error: "Upload up to 20,000 bookings at a time."}, 400);
+  const codes = p.rows.map((r) => String(r["Booking Code"]).trim()), old = new Map();
+  for (let i = 0; i < codes.length; i += 90) { const part = codes.slice(i, i + 90);
+    const {results} = await env.DB.prepare("SELECT code, row FROM transactions WHERE client_id = ? AND code IN (" + part.map(() => "?").join(",") + ")").bind(cid, ...part).all();
+    results.forEach((x) => old.set(x.code, x.row)); }
+  const added = [], changed = [], same = [];
+  p.rows.forEach((r) => { const code = String(r["Booking Code"]).trim(), was = old.get(code), now = JSON.stringify(r);
+    if (!was) added.push(r); else if (was === now) same.push(r); else { const o = JSON.parse(was); changed.push({r, prev: was, fields: TX_COLS.filter((c) => String(o[c] ?? "") !== String(r[c] ?? "")).map((c) => ({col: c, from: o[c] ?? "", to: r[c] ?? ""}))}); } });
+  const all = p.rows, sum = (k) => all.reduce((t, r) => t + (+r[k] || 0), 0);
+  const summary = {rows: all.length, added: added.length, changed: changed.length, unchanged: same.length, dup_same: p.dupSame, dup_diff: p.dupDiff, problems: p.problems.slice(0, 50), problem_count: p.problems.length,
+    over_policy: all.filter((r) => txFlags(r).over).length, cancelled: all.filter((r) => txFlags(r).cancelled).length, no_emp: all.filter((r) => !String(r["Emp Code"]).trim()).length,
+    booked_from: all.reduce((m, r) => r["Booked Date"] && (!m || r["Booked Date"] < m) ? r["Booked Date"] : m, ""), booked_to: all.reduce((m, r) => r["Booked Date"] > m ? r["Booked Date"] : m, ""),
+    net: Math.round(sum("Net Amount Charged") * 100) / 100,
+    changes: changed.slice(0, 25).map((c) => ({code: c.r["Booking Code"], guest: c.r["Guest Name"], fields: c.fields.slice(0, 6)})),
+    sample_new: added.slice(0, 5).map((r) => ({code: r["Booking Code"], guest: r["Guest Name"], hotel: r["Property Name"], booked: r["Booked Date"]}))};
+  if (dry) return json({ok: true, preview: summary});
+  const now = new Date().toISOString();
+  const up = await env.DB.prepare("INSERT INTO tx_uploads (client_id, by_email, at, filename, rows, added, changed, unchanged) VALUES (?, ?, ?, ?, ?, ?, ?, ?)").bind(cid, user.email, now, clean(b.filename, 160), all.length, added.length, changed.length, same.length).run();
+  const uid = up.meta ? up.meta.last_row_id : up.lastInsertRowid, st = [];
+  const put = (r) => env.DB.prepare("INSERT INTO transactions (client_id, code, booked, checkin, checkout, status, row, upload_id, updated) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?) ON CONFLICT(client_id, code) DO UPDATE SET booked = excluded.booked, checkin = excluded.checkin, checkout = excluded.checkout, status = excluded.status, row = excluded.row, upload_id = excluded.upload_id, updated = excluded.updated")
+    .bind(cid, String(r["Booking Code"]).trim(), r["Booked Date"] || "", r["Check-In Date"] || "", r["Check-Out Date"] || "", r.Status || "", JSON.stringify(r), uid, now);
+  added.forEach((r) => { st.push(env.DB.prepare("INSERT INTO tx_versions (upload_id, code, prev) VALUES (?, ?, NULL)").bind(uid, String(r["Booking Code"]).trim()), put(r)); });
+  changed.forEach((c) => { st.push(env.DB.prepare("INSERT INTO tx_versions (upload_id, code, prev) VALUES (?, ?, ?)").bind(uid, String(c.r["Booking Code"]).trim(), c.prev), put(c.r)); });
+  for (let i = 0; i < st.length; i += 80) await env.DB.batch(st.slice(i, i + 80));
+  return json({ok: true, upload_id: uid, result: summary});
+}
+async function txUploads(env, cid) { const {results} = await env.DB.prepare("SELECT id, by_email, at, filename, rows, added, changed, unchanged, undone FROM tx_uploads WHERE client_id = ? ORDER BY id DESC LIMIT 12").bind(cid).all(); return results; }
+async function txUndo(env, cid, id) {
+  const last = await env.DB.prepare("SELECT id FROM tx_uploads WHERE client_id = ? AND undone IS NULL ORDER BY id DESC LIMIT 1").bind(cid).first();
+  if (!last || last.id !== +id) return json({error: "Only the latest upload can be undone."}, 400);
+  const {results} = await env.DB.prepare("SELECT code, prev FROM tx_versions WHERE upload_id = ?").bind(last.id).all(), st = [];
+  results.forEach((v) => { if (v.prev == null) st.push(env.DB.prepare("DELETE FROM transactions WHERE client_id = ? AND code = ?").bind(cid, v.code));
+    else { const r = JSON.parse(v.prev); st.push(env.DB.prepare("UPDATE transactions SET booked = ?, checkin = ?, checkout = ?, status = ?, row = ?, upload_id = NULL, updated = ? WHERE client_id = ? AND code = ?").bind(r["Booked Date"] || "", r["Check-In Date"] || "", r["Check-Out Date"] || "", r.Status || "", v.prev, new Date().toISOString(), cid, v.code)); } });
+  st.push(env.DB.prepare("UPDATE tx_uploads SET undone = ? WHERE id = ?").bind(new Date().toISOString(), last.id));
+  for (let i = 0; i < st.length; i += 80) await env.DB.batch(st.slice(i, i + 80));
+  return json({ok: true, reverted: results.length});
+}
+// client side: bookings by booked date or check-out date (both optional; at most about 13 months at a time)
+async function txList(env, cid, b) {
+  const iso = /^\d{4}-\d{2}-\d{2}$/, w = ["client_id = ?"], args = [cid];
+  for (const [k, col] of [["booked", "booked"], ["checkout", "checkout"]]) { const f = b[k + "_from"], t = b[k + "_to"];
+    if (f || t) { if (!iso.test(f || "") || !iso.test(t || "") || t < f) return json({error: "Choose a valid date range."}, 400);
+      if ((Date.parse(t) - Date.parse(f)) / 864e5 > 400) return json({error: "Choose up to 13 months at a time."}, 400);
+      w.push(col + " >= ? AND " + col + " <= ?"); args.push(f, t); } }
+  const {results} = await env.DB.prepare("SELECT row FROM transactions WHERE " + w.join(" AND ") + " ORDER BY booked DESC, code LIMIT 10001").bind(...args).all();
+  const last = await env.DB.prepare("SELECT at FROM tx_uploads WHERE client_id = ? AND undone IS NULL ORDER BY id DESC LIMIT 1").bind(cid).first();
+  return json({rows: results.slice(0, 10000).map((x) => JSON.parse(x.row)), more: results.length > 10000, updated: last ? last.at : null, cols: TX_COLS});
+}
+
 async function adminApi(req, env, user, path) {
   let b; try { b = await req.json(); } catch (e) { return json({error: "Bad request."}, 400); }
   const now = new Date().toISOString();
@@ -723,16 +828,24 @@ async function adminApi(req, env, user, path) {
         return json({ok: true});
       }
       case "/api/admin/reminders": return json(await docReminders(env));
+      case "/api/admin/tx/preview":
+      case "/api/admin/tx/import": {
+        const c = await env.DB.prepare("SELECT id FROM clients WHERE id = ?").bind(+b.client_id).first(); if (!c) return json({error: "No such client."}, 404);
+        return txImport(env, c.id, b, user, path.endsWith("/preview"));
+      }
+      case "/api/admin/tx/uploads": return json({uploads: await txUploads(env, +b.client_id)});
+      case "/api/admin/tx/undo": return txUndo(env, +b.client_id, b.id);
       case "/api/admin/booking":
       case "/api/admin/booking/delete":
       case "/api/admin/booking/restore": {
         const c = await env.DB.prepare("SELECT id, name, grades FROM clients WHERE id = ?").bind(+b.client_id).first(); if (!c) return json({error: "No such client."}, 404);
         return path.endsWith("/delete") ? cancelBooking(env, c, b) : path.endsWith("/restore") ? restoreBooking(env, c, b) : saveBooking(env, c, b);
       }
-      case "/api/admin/user/reset": {
+      case "/api/admin/user/reset":
+      case "/api/admin/user/access": {
         const u = await env.DB.prepare("SELECT client_id, role FROM users WHERE email = ?").bind(clean(b.email, 200).toLowerCase()).first();
         if (!u || u.role === "admin" || !u.client_id) return json({error: "No such client user."}, 404);
-        return userAction(env, u.client_id, b, user, "reset");
+        return userAction(env, u.client_id, b, user, path.endsWith("/access") ? "access" : "reset");
       }
     }
   } catch (e) { return json({error: e.message || "Something went wrong."}, 400); }
@@ -757,7 +870,7 @@ async function dashboard(env, user, url) {
     if (user.manager && !user.admin) data.users = await clientUsers(env, client.id);   // Users & access view, shown without a page load
   }
   const payload = JSON.stringify(data).replace(/</g, "\\u003c");
-  const userJs = JSON.stringify({name: user.name || "", email: user.email, admin: !!user.admin, manager: !!user.manager}).replace(/</g, "\\u003c");
+  const userJs = JSON.stringify({name: user.name || "", email: user.email, admin: !!user.admin, manager: !!user.manager, tx: !!user.tx}).replace(/</g, "\\u003c");
   let page = TEMPLATE.replace("__DATA__", () => payload).replace("__USER__", () => userJs);
   if (updated) page = page.replace(/REPORT_DATE = '\d{4}-\d{2}-\d{2}'/, "REPORT_DATE = '" + updated.slice(0, 10) + "'");
   return html(page);
@@ -814,6 +927,17 @@ async function handle(request, env) {
       const u = await currentUser(request, env);
       if (!u || !u.admin) return json({error: "Not allowed."}, 403);
       return adminApi(request, env, u, path);
+    }
+    if (path === "/api/tx" && request.method === "POST") {   // hotel bookings for the signed-in client
+      const origin = request.headers.get("origin");
+      if (origin && origin !== url.origin) return json({error: "Bad origin."}, 403);
+      const u = await currentUser(request, env);
+      if (!u) return json({error: "Your session has expired."}, 403);
+      if (!u.tx) return json({error: "You don't have access to hotel bookings. Ask your admin."}, 403);
+      let b; try { b = await request.json(); } catch (e) { return json({error: "Bad request."}, 400); }
+      const cid = u.admin ? +b.client_id : u.client_id;
+      if (!cid) return json({error: "No client."}, 400);
+      return txList(env, cid, b);
     }
     if (path.startsWith("/api/manage/") && request.method === "POST") {
       const origin = request.headers.get("origin");

@@ -42,6 +42,7 @@ if(document.readyState!=='loading')setTimeout(hide,150);else document.addEventLi
       <button data-view="rack" class="navbtn" title="Room rack"><i data-i="bed-double"></i><span class="sb-label">Room rack</span></button>
       <button data-view="calendar" class="navbtn" title="Availability"><i data-i="calendar-days"></i><span class="sb-label">Availability</span></button>
       <button data-view="bookings" class="navbtn" title="Bookings"><i data-i="list-checks"></i><span class="sb-label">Bookings</span><span id="navCount" class="sb-label ml-auto text-xs font-bold rounded-full px-2 py-0.5 bg-white/15">0</span></button>
+      <button data-view="hotels" id="navHotels" class="navbtn hidden" title="Hotel bookings"><i data-i="hotel"></i><span class="sb-label">Hotel bookings</span></button>
       <button data-view="houses" class="navbtn" title="Guest houses"><i data-i="building-2"></i><span class="sb-label">Guest houses</span></button>
     </nav>
     <div class="mt-auto border-t border-white/10 p-3 sb-user">
@@ -206,6 +207,20 @@ if(document.readyState!=='loading')setTimeout(hide,150);else document.addEventLi
       <!-- HOUSES -->
       <section data-view="houses" class="view hidden">
         <div id="houses" class="space-y-7"></div>
+      </section>
+
+      <!-- HOTEL BOOKINGS (transaction reports uploaded by the Zuna team) -->
+      <section data-view="hotels" class="view hidden space-y-4">
+        <div id="hxKpis" class="grid grid-cols-2 md:grid-cols-3 xl:grid-cols-6 gap-3"></div>
+        <div class="card">
+          <div class="card-h">
+            <div><h2 class="card-t">Hotel bookings</h2><p class="card-s" id="hxSub">Click a booking for full details</p></div>
+            <div class="ml-auto"><button type="button" class="btn-primary" id="hxXlsx"><i data-i="download" class="w-4 h-4"></i>Excel</button></div>
+          </div>
+          <div id="hxBar" class="px-5 py-3 flex flex-wrap items-center gap-2 border-b border-zuna-50"></div>
+          <div class="overflow-x-auto"><table class="w-full text-sm"><thead><tr id="hxHead" class="text-left text-xs font-semibold text-zuna-500 bg-zuna-50/70"></tr></thead><tbody id="hxBody" class="divide-y divide-zuna-50"></tbody></table></div>
+          <div id="hxFoot" class="px-5 py-3 flex flex-wrap items-center gap-3 text-xs text-zuna-500 border-t border-zuna-50"></div>
+        </div>
       </section>
 
       <!-- USERS & ACCESS (client admins) -->
@@ -806,7 +821,7 @@ const renderUsersView = () => {
   const t = h('div'); t.appendChild(h('h2', 'card-t', 'Users & access')); t.appendChild(h('p', 'card-s', 'Viewers can see the dashboard. Client admins can also add users, reset passwords and change access.')); hd.appendChild(t);
   const add = h('button', 'btn-primary ml-auto'); add.appendChild(icon('user-plus', 'w-4 h-4')); add.appendChild(document.createTextNode('Add user')); add.onclick = () => openDrawer('Add user', DATA.client ? DATA.client.name : '', userForm()); hd.appendChild(add); card.appendChild(hd);
   const sc = h('div', 'overflow-x-auto'); const tb = h('table', 'w-full text-sm'); const th = h('thead'); const hr = h('tr', 'text-left text-xs font-semibold text-zuna-500 bg-zuna-50/70');
-  ['User', 'Role', 'Status', ''].forEach((x) => { const c = h('th', 'px-4 py-2.5 whitespace-nowrap', x); c.scope = 'col'; if (!x) c.appendChild(h('span', 'sr-only', 'Actions')); hr.appendChild(c); }); th.appendChild(hr); tb.appendChild(th);
+  ['User', 'Role', 'Status', 'Hotel bookings', ''].forEach((x) => { const c = h('th', 'px-4 py-2.5 whitespace-nowrap', x); c.scope = 'col'; if (!x) c.appendChild(h('span', 'sr-only', 'Actions')); hr.appendChild(c); }); th.appendChild(hr); tb.appendChild(th);
   const body = h('tbody', 'divide-y divide-zuna-50'); const B = 'btn !py-1 !px-2 text-xs w-full justify-center whitespace-nowrap';
   const ab = (txt, ic, cls) => { const b = h('button', B + ' ' + (cls || '')); b.type = 'button'; b.appendChild(icon(ic, 'w-3.5 h-3.5 shrink-0')); b.appendChild(document.createTextNode(txt)); return b; };
   us.forEach((u) => { const me = u.email === USER.email, tr = h('tr', 'align-middle hover:bg-zuna-50/50 transition-colors');
@@ -814,6 +829,14 @@ const renderUsersView = () => {
     const tx = h('div', 'min-w-0'); const n1 = h('p', 'font-semibold', u.name); if (me) n1.appendChild(h('span', 'ml-1.5 text-[11px] font-semibold text-zuna-500', '(you)')); tx.append(n1, h('p', 'text-xs text-zuna-500', u.email)); row.appendChild(tx); c1.appendChild(row); tr.appendChild(c1);
     const c2 = h('td', 'px-4 py-3'); c2.appendChild(h('span', 'rounded-full px-2 py-0.5 text-[11px] font-bold whitespace-nowrap ' + (u.role === 'client_admin' ? 'bg-zuna-900 text-white' : 'bg-zuna-50 text-zuna-600 ring-1 ring-zuna-100'), ROLE_NAME[u.role] || 'Viewer')); tr.appendChild(c2);
     const c4 = h('td', 'px-4 py-3'); c4.appendChild(h('span', 'rounded-full px-2 py-0.5 text-[11px] font-bold ' + (u.active ? 'bg-mint-50 text-mint-700 ring-1 ring-mint-200' : 'bg-zuna-50 text-zuna-500 ring-1 ring-zuna-100'), u.active ? 'Active' : 'Disabled')); c4.appendChild(h('p', 'text-[11px] text-zuna-500 mt-1 whitespace-nowrap', 'Last login: ' + (u.last_login ? new Date(u.last_login).toLocaleString('en-IN', {day: 'numeric', month: 'short', hour: 'numeric', minute: '2-digit'}) : 'never'))); tr.appendChild(c4);
+    const cx = h('td', 'px-4 py-3');   // hotel bookings: always for client admins; a switch for viewers
+    if (u.role === 'client_admin') { const s = h('span', 'inline-flex items-center gap-1.5 text-xs font-semibold text-zuna-500 whitespace-nowrap'); s.append(icon('shield-check', 'w-3.5 h-3.5 text-mint-600'), document.createTextNode('Always (admin)')); cx.appendChild(s); }
+    else { const sw = h('button', 'inline-flex items-center gap-2 text-xs font-semibold whitespace-nowrap'); sw.type = 'button'; sw.setAttribute('role', 'switch'); sw.setAttribute('aria-checked', u.tx ? 'true' : 'false'); sw.setAttribute('aria-label', 'Hotel bookings access for ' + u.name);
+      const trk = h('span', 'relative inline-block w-9 h-5 rounded-full transition-colors ' + (u.tx ? 'bg-mint-500' : 'bg-zuna-200')); trk.appendChild(h('span', 'absolute top-0.5 left-0.5 w-4 h-4 rounded-full bg-white shadow transition-transform ' + (u.tx ? 'translate-x-4' : '')));
+      sw.append(trk, h('span', u.tx ? 'text-mint-700' : 'text-zuna-500', u.tx ? 'Allowed' : 'Off'));
+      sw.onclick = async () => { sw.disabled = true; try { await mApi('user/access', {email: u.email, tx: !u.tx}); toast((u.tx ? 'Hotel bookings turned off for ' : 'Hotel bookings turned on for ') + u.name); reloadUsers(); } catch (er) { toast(er.message); sw.disabled = false; } };
+      cx.appendChild(sw); }
+    tr.appendChild(cx);
     const c5 = h('td', 'px-4 py-3'); const g = h('div', 'grid grid-cols-[84px_112px_84px] gap-1.5 justify-end ml-auto w-max'); c5.appendChild(g);
     const rs = ab('Reset', 'key-round'); rs.title = 'Reset password'; rs.setAttribute('aria-label', 'Reset password for ' + u.name); rs.onclick = async () => { if (!(await ZUI.confirm({title: 'Reset password?', message: ['A new password is created for ' + u.name + ' (' + u.email + ').', 'The old password stops working and they are signed out.'], ok: 'Reset password', tone: 'warn'}))) return;
       try { const r = await mApi('user/reset', {email: u.email}); const w = h('div', 'p-5'); w.appendChild(pwCard(u.email, r.password)); openDrawer('New password', u.name, w); } catch (er) { toast(er.message); } };
@@ -826,25 +849,121 @@ const renderUsersView = () => {
         try { await mApi('user', {email: u.email, name: u.name, active: !u.active}); toast(u.active ? 'User disabled' : 'User enabled'); reloadUsers(); } catch (er) { toast(er.message); } };
       g.append(rb, tg); }
     tr.appendChild(c5); body.appendChild(tr); });
-  if (!us.length) { const tr = h('tr'); const td = h('td', 'px-5 py-10 text-center text-zuna-500', 'No users yet.'); td.colSpan = 4; tr.appendChild(td); body.appendChild(tr); }
+  if (!us.length) { const tr = h('tr'); const td = h('td', 'px-5 py-10 text-center text-zuna-500', 'No users yet.'); td.colSpan = 5; tr.appendChild(td); body.appendChild(tr); }
   tb.appendChild(body); sc.appendChild(tb); card.appendChild(sc); box.appendChild(card);
 };
 
+/* ---------- HOTEL BOOKINGS (uploaded transaction reports; any guest house rows in them show here too) ---------- */
+const HX = {rows: null, cols: [], loading: false, booked: null, checkout: null, city: '', cat: '', status: '', q: '', sort: {k: 'Booked Date', dir: -1}, show: 50, updated: null, err: '', more: false};
+const inr = (v) => '₹' + Math.round(+v || 0).toLocaleString('en-IN');
+const num = (v) => +String(v == null ? '' : v).replace(/,/g, '') || 0;
+const hxOver = (r) => !!(num(r['Eligibility Criteria']) && num(r['Tariff Per Day']) > num(r['Eligibility Criteria']));
+const hxCancelled = (r) => /cancel/i.test(r.Status || '');
+const hxRangeText = (r) => r ? (r[0] === r[1] ? fShort(r[0]) : fShort(r[0]) + ' – ' + fShort(r[1])) : '';
+const hxLoad = async () => {
+  HX.loading = true; HX.err = ''; paintHotels();
+  const body = {client_id: DATA.client ? DATA.client.id : null};
+  if (HX.booked) { body.booked_from = HX.booked[0]; body.booked_to = HX.booked[1]; }
+  if (HX.checkout) { body.checkout_from = HX.checkout[0]; body.checkout_to = HX.checkout[1]; }
+  try { const r = await ZUI.busy(fetch('/api/tx', {method: 'POST', headers: {'content-type': 'application/json'}, body: JSON.stringify(body), credentials: 'same-origin'}));
+    const j = await r.json().catch(() => ({})); if (r.status === 403 && /session/i.test(j.error || '')) { location.reload(); return; } if (!r.ok) throw new Error(j.error || 'Could not load hotel bookings.');
+    HX.rows = j.rows; HX.cols = j.cols; HX.updated = j.updated; HX.more = j.more; }
+  catch (e) { HX.err = e.message === 'Failed to fetch' ? 'Network error. Check your connection and try again.' : e.message; HX.rows = HX.rows || []; }
+  HX.loading = false; HX.show = 50; if (state.view === 'hotels') render(); };
+const hxFiltered = () => { const q = HX.q.trim().toLowerCase();
+  return (HX.rows || []).filter((r) => (!HX.city || r.City === HX.city) && (!HX.cat || r['Property Category'] === HX.cat) && (!HX.status || (HX.status === 'over' ? hxOver(r) : HX.status === 'cancelled' ? hxCancelled(r) : !hxCancelled(r)))
+    && (!q || [r['Guest Name'], r['Emp Code'], r['Booking Code'], r['Travel Req ID'], r['Invoice No'], r['Property Name'], r['Employee Email ID']].join(' ').toLowerCase().includes(q))); };
+// a date-range button that opens a small panel (same pattern as the Bookings check-out filter)
+const hxDateBtn = (key, label, icn) => {
+  const box = h('div', 'hx-dd relative shrink-0'), wrap = h('div', 'flex items-center rounded-xl ring-1 ring-zuna-100 bg-white hover:ring-mint-500 transition-shadow');
+  const btn = h('button', 'flex items-center gap-2 pl-3 pr-3 py-2 text-sm font-semibold text-zuna-700 whitespace-nowrap rounded-xl'); btn.type = 'button'; btn.setAttribute('aria-haspopup', 'dialog'); btn.setAttribute('aria-expanded', 'false');
+  const txt = h('span'); btn.append(icon(icn, 'w-4 h-4 text-mint-600'), txt, icon('chevron-down', 'w-3.5 h-3.5 text-zuna-400'));
+  const clr = h('button', 'hidden -ml-1 mr-1 grid place-items-center w-7 h-7 rounded-lg text-zuna-500 hover:bg-zuna-50 hover:text-zuna-900'); clr.type = 'button'; clr.title = 'Clear ' + label.toLowerCase(); clr.setAttribute('aria-label', clr.title); clr.appendChild(icon('x', 'w-4 h-4'));
+  wrap.append(btn, clr); box.appendChild(wrap);
+  const pop = h('div', 'hidden absolute left-0 top-full mt-2 z-40 w-[320px] max-w-[calc(100vw-2rem)] rounded-2xl bg-white ring-1 ring-zuna-100 shadow-xl p-4 space-y-3'); pop.setAttribute('role', 'dialog'); pop.setAttribute('aria-label', label);
+  const g = h('div', 'grid grid-cols-2 gap-2'), mk = (l) => { const w = h('label', 'block'); w.appendChild(h('span', 'block text-xs font-semibold text-zuna-500 mb-1', l)); const i = h('input', 'w-full rounded-lg bg-white ring-1 ring-zuna-100 px-2 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-mint-500'); i.type = 'date'; w.appendChild(i); g.appendChild(w); return i; };
+  const f = mk('From'), t = mk('To'); const quick = h('div', 'flex flex-wrap gap-1.5'), er = h('p', 'hidden text-xs font-semibold text-rose-600');
+  const mStart = (d) => d.slice(0, 8) + '01', prevM = () => { const d = D(today); return iso(new Date(Date.UTC(d.getUTCFullYear(), d.getUTCMonth() - 1, 1))); }, mEnd = (s) => { const d = D(s); return iso(new Date(Date.UTC(d.getUTCFullYear(), d.getUTCMonth() + 1, 0))); };
+  [['Last 7 days', addDays(today, -6), today], ['Last 30 days', addDays(today, -29), today], ['This month', mStart(today), mEnd(today)], ['Last month', prevM(), mEnd(prevM())]].forEach(([l, a, b]) => { const c = h('button', 'rounded-lg px-2.5 py-1 text-xs font-semibold bg-zuna-50 text-zuna-700 ring-1 ring-zuna-100 hover:ring-mint-500', l); c.type = 'button'; c.onclick = () => { f.value = a; t.value = b; }; quick.appendChild(c); });
+  const acts = h('div', 'flex gap-2 pt-1'), reset = h('button', 'btn flex-1 justify-center', 'Clear'), ok = h('button', 'btn-primary flex-1 justify-center', 'Apply'); reset.type = ok.type = 'button'; acts.append(reset, ok);
+  pop.append(h('p', 'text-sm font-bold', label), g, quick, er, acts); box.appendChild(pop);
+  const paint = () => { const on = !!HX[key]; txt.textContent = on ? label + ': ' + hxRangeText(HX[key]) : label; clr.classList.toggle('hidden', !on);
+    wrap.classList.toggle('!ring-2', on); wrap.classList.toggle('!ring-mint-500', on); wrap.classList.toggle('bg-mint-50', on); wrap.classList.toggle('bg-white', !on); btn.lastElementChild.classList.toggle('hidden', on); };
+  const close = () => { pop.classList.add('hidden'); btn.setAttribute('aria-expanded', 'false'); };
+  btn.onclick = () => { if (!pop.classList.contains('hidden')) return close(); document.querySelectorAll('.hx-dd [role=dialog]').forEach((x) => x.classList.add('hidden')); f.value = HX[key] ? HX[key][0] : ''; t.value = HX[key] ? HX[key][1] : ''; er.classList.add('hidden'); pop.classList.remove('hidden'); btn.setAttribute('aria-expanded', 'true'); };
+  ok.onclick = () => { if (!f.value || !t.value || t.value < f.value) { er.textContent = !f.value || !t.value ? 'Choose both dates.' : 'The second date must be on or after the first.'; er.classList.remove('hidden'); return; } HX[key] = [f.value, t.value]; close(); paint(); hxLoad(); };
+  reset.onclick = () => { close(); if (HX[key]) { HX[key] = null; paint(); hxLoad(); } };
+  clr.onclick = (e) => { e.stopPropagation(); close(); HX[key] = null; paint(); hxLoad(); };
+  document.addEventListener('mousedown', (e) => { if (!pop.classList.contains('hidden') && !e.target.closest('.hx-dd, .zcal') ) close(); });
+  document.addEventListener('mousedown', (e) => { if (!pop.classList.contains('hidden') && box.contains(e.target) === false && e.target.closest('.hx-dd')) close(); });
+  paint(); return box; };
+const hxSelect = (key, all) => { const s = h('select', 'rounded-xl ring-1 ring-zuna-100 bg-white px-3 py-2 text-sm font-semibold text-zuna-700'); s.setAttribute('aria-label', all); s.dataset.all = all;
+  s.onchange = () => { HX[key] = s.value; HX.show = 50; paintHotels(); }; return s; };
+const hxFillSelect = (s, values, cur) => { const want = [''].concat(values).join('|'); if (s.dataset.opts !== want) { s.dataset.opts = want; s.replaceChildren(); [['', s.dataset.all]].concat(values.map((v) => [v, v])).forEach(([v, l]) => { const o = h('option', null, l); o.value = v; s.appendChild(o); }); } s.value = cur; };
+const hxBar = () => { const bar = $('#hxBar'); if (bar.dataset.ready) return; bar.dataset.ready = '1';
+  HX.ui = {city: hxSelect('city', 'All cities'), cat: hxSelect('cat', 'All types'), status: hxSelect('status', 'All statuses')};
+  const q = h('label', 'relative ml-auto w-full sm:w-56'); q.appendChild(icon('search', 'w-4 h-4 absolute left-3 top-1/2 -translate-y-1/2 text-zuna-400')); const qi = h('input', 'w-full pl-9 pr-3 py-2 rounded-xl ring-1 ring-zuna-100 bg-white text-sm placeholder:text-zuna-300 focus:outline-none focus:ring-2 focus:ring-mint-500'); qi.type = 'search'; qi.placeholder = 'Search guests…'; qi.title = 'Search by guest, employee code, booking code, TR ID, invoice or hotel'; qi.oninput = () => { HX.q = qi.value; HX.show = 50; paintHotels(); }; q.appendChild(qi);
+  bar.append(hxDateBtn('booked', 'Booked date', 'calendar-days'), hxDateBtn('checkout', 'Check-out', 'log-out'), HX.ui.city, HX.ui.cat, HX.ui.status, q); };
+const HX_COLS = [['Guest Name', 'Guest'], ['Property Name', 'Hotel'], ['Booked Date', 'Booked'], ['Check-In Date', 'Stay'], ['Tariff Per Day', 'Tariff / night'], ['Net Amount Charged', 'Net amount'], ['Status', 'Status']];
+const hxDrawer = (r) => { const w = h('div', 'p-5 space-y-4'); const chips = h('div', 'flex flex-wrap gap-2'); chips.appendChild(h('span', 'zchip ' + (hxCancelled(r) ? 'zchip-bad' : ''), r.Status || '—')); if (hxOver(r)) chips.appendChild(h('span', 'zchip zchip-warn', 'Above policy cap')); w.appendChild(chips);
+  w.appendChild(kv((HX.cols || []).filter((c) => r[c] !== '' && r[c] != null && c !== 'Guest Name').map((c) => [c, /Date$/.test(c) && /^\d{4}-\d{2}-\d{2}$/.test(r[c]) ? fLong(r[c]) : /Tariff|Amount|Charges|Fee/.test(c) && typeof r[c] === 'number' ? '₹' + r[c].toLocaleString('en-IN', {minimumFractionDigits: Number.isInteger(r[c]) ? 0 : 2, maximumFractionDigits: 2}) : String(r[c])])));
+  openDrawer(r['Guest Name'] || 'Booking', (r['Property Name'] || '') + (r.City ? ', ' + r.City : ''), w); };
+const paintHotels = () => {
+  hxBar(); const all = HX.rows || [], rows = hxFiltered();
+  const uniq = (k) => [...new Set(all.map((r) => r[k]).filter(Boolean))].sort();
+  hxFillSelect(HX.ui.city, uniq('City'), HX.city); hxFillSelect(HX.ui.cat, uniq('Property Category'), HX.cat);
+  const stv = [['active', 'Billed / active'], ['cancelled', 'Cancelled'], ['over', 'Above policy cap']]; if (HX.ui.status.dataset.opts !== 'st') { HX.ui.status.dataset.opts = 'st'; HX.ui.status.replaceChildren(); [['', 'All statuses']].concat(stv).forEach(([v, l]) => { const o = h('option', null, l); o.value = v; HX.ui.status.appendChild(o); }); } HX.ui.status.value = HX.status;
+  // summary
+  const live = rows.filter((r) => !hxCancelled(r)), nights = live.reduce((t, r) => t + num(r['Stay Days']), 0), tariff = live.reduce((t, r) => t + num(r['Total Tariff']), 0);
+  const K = $('#hxKpis'); K.replaceChildren();
+  [['Bookings', String(rows.length), live.length + ' active', 'list-checks'], ['Room nights', int(nights), 'excluding cancelled', 'bed-double'], ['Net spend', inr(rows.reduce((t, r) => t + num(r['Net Amount Charged']), 0)), 'incl. GST', 'indian-rupee'],
+   ['Avg. tariff / night', nights ? inr(tariff / nights) : '—', 'before tax', 'trending-up'], ['Above policy cap', String(rows.filter(hxOver).length), 'tariff over eligibility', 'triangle-alert'], ['Cancelled', String(rows.filter(hxCancelled).length), 'in this list', 'circle-x']].forEach(([l, v, s, ic], i) => {
+    const c = h('div', 'card p-4 ' + (i === 4 && v !== '0' ? 'ring-1 !ring-amber-300' : '')); const t = h('div', 'flex items-center gap-2 text-xs font-semibold text-zuna-500'); t.append(icon(ic, 'w-4 h-4 ' + (i === 4 && v !== '0' ? 'text-amber-600' : 'text-mint-600')), document.createTextNode(l));
+    c.append(t, h('p', 'mt-1.5 text-2xl font-bold tabular-nums tracking-tight', HX.loading && !HX.rows ? '…' : v), h('p', 'text-[11px] text-zuna-500', s)); K.appendChild(c); });
+  // table
+  const hd = $('#hxHead'); if (!hd.childElementCount) HX_COLS.forEach(([k, l], i) => { const th = h('th', 'th ' + (i === 0 ? 'pl-5 ' : '') + (i === HX_COLS.length - 1 ? 'pr-5 ' : ''), l); th.dataset.k = k; th.scope = 'col'; th.onclick = () => { HX.sort = {k, dir: HX.sort.k === k ? -HX.sort.dir : (k === 'Booked Date' || k === 'Check-In Date' ? -1 : 1)}; paintHotels(); }; hd.appendChild(th); });
+  [...hd.children].forEach((th) => { th.dataset.sort = th.dataset.k === HX.sort.k ? (HX.sort.dir > 0 ? '↑' : '↓') : ''; });
+  const {k, dir} = HX.sort; rows.sort((a, b) => { const x = a[k], y = b[k]; return (typeof x === 'number' || typeof y === 'number' ? num(x) - num(y) : String(x || '').localeCompare(String(y || ''))) * dir || String(b['Booked Date']).localeCompare(String(a['Booked Date'])); });
+  const tb = $('#hxBody'); tb.replaceChildren();
+  if (HX.loading && !HX.rows) { for (let i = 0; i < 5; i++) { const tr = h('tr'); const td = h('td', 'px-5 py-3'); td.colSpan = HX_COLS.length; td.appendChild(h('div', 'chart-skel h-8 rounded-lg')); tr.appendChild(td); tb.appendChild(tr); } }
+  else if (!rows.length) { const tr = h('tr'); const td = h('td', 'px-5 py-12 text-center text-zuna-500'); td.colSpan = HX_COLS.length; td.textContent = HX.err || (all.length ? 'No bookings match these filters.' : 'No hotel bookings yet for these dates. They appear here once the Zuna team uploads the transaction report.'); if (HX.err) td.classList.add('text-rose-600'); tr.appendChild(td); tb.appendChild(tr); }
+  rows.slice(0, HX.show).forEach((r) => { const tr = h('tr', 'hover:bg-zuna-50/70 cursor-pointer transition-colors'); tr.tabIndex = 0;
+    const g = h('td', 'pl-5 pr-3 py-3'); const w = h('div', 'flex items-center gap-3'); w.appendChild(avatar(r['Guest Name'] || '?', 'w-8 h-8 text-xs')); const m = h('div', 'min-w-0'); m.appendChild(h('p', 'font-semibold whitespace-nowrap', r['Guest Name'] || '—'));
+    m.appendChild(h('p', 'text-xs text-zuna-500 whitespace-nowrap', [r.Grade, r['Emp Code']].filter(Boolean).join(' · ') || '—')); w.appendChild(m); g.appendChild(w); tr.appendChild(g);
+    const ho = h('td', 'px-3 py-3 max-w-[260px]'); ho.appendChild(h('p', 'font-medium truncate', r['Property Name'] || '—')); ho.lastChild.title = r['Property Name'] || ''; ho.appendChild(h('p', 'text-xs text-zuna-500', [r.City, r['Property Category']].filter(Boolean).join(' · '))); tr.appendChild(ho);
+    tr.appendChild(h('td', 'px-3 py-3 whitespace-nowrap tabular-nums', r['Booked Date'] ? fShort(r['Booked Date']) : '—'));
+    const sy = h('td', 'px-3 py-3 whitespace-nowrap tabular-nums'); sy.appendChild(h('p', 'font-medium', (r['Check-In Date'] ? fShort(r['Check-In Date']) : '?') + ' → ' + (r['Check-Out Date'] ? fShort(r['Check-Out Date']) : '?'))); const n = num(r['Stay Days']); sy.appendChild(h('p', 'text-xs text-zuna-400', n + (n === 1 ? ' night' : ' nights'))); tr.appendChild(sy);
+    const tf = h('td', 'px-3 py-3 whitespace-nowrap tabular-nums'); tf.appendChild(h('p', 'font-medium ' + (hxOver(r) ? 'text-amber-700' : ''), inr(r['Tariff Per Day']))); if (num(r['Eligibility Criteria'])) tf.appendChild(h('p', 'text-xs ' + (hxOver(r) ? 'text-amber-700 font-semibold' : 'text-zuna-400'), (hxOver(r) ? 'Above cap ' : 'Cap ') + inr(r['Eligibility Criteria']))); tr.appendChild(tf);
+    tr.appendChild(h('td', 'px-3 py-3 whitespace-nowrap tabular-nums font-medium', inr(r['Net Amount Charged'])));
+    const s = h('td', 'pl-3 pr-5 py-3 whitespace-nowrap'); s.appendChild(h('span', 'zchip ' + (hxCancelled(r) ? 'zchip-bad' : /unbilled/i.test(r.Status || '') ? 'zchip-warn' : ''), r.Status || '—')); tr.appendChild(s);
+    tr.onclick = () => hxDrawer(r); tr.onkeydown = (e) => { if (e.key === 'Enter') hxDrawer(r); }; tb.appendChild(tr); });
+  const ft = $('#hxFoot'); ft.replaceChildren(); ft.appendChild(h('span', null, rows.length ? 'Showing ' + Math.min(HX.show, rows.length) + ' of ' + rows.length + (rows.length === 1 ? ' booking' : ' bookings') : ''));
+  if (rows.length > HX.show) { const more = h('button', 'btn !py-1 !px-3 text-xs', 'Show ' + Math.min(100, rows.length - HX.show) + ' more'); more.type = 'button'; more.onclick = () => { HX.show += 100; paintHotels(); }; ft.appendChild(more); }
+  if (HX.more) ft.appendChild(h('span', 'text-amber-700 font-semibold', 'Only the latest 10,000 are shown. Narrow the dates to see older bookings.'));
+  ft.appendChild(h('span', 'ml-auto', HX.updated ? 'Last uploaded ' + new Date(HX.updated).toLocaleString('en-IN', {day: 'numeric', month: 'short', year: 'numeric', hour: 'numeric', minute: '2-digit'}) : ''));
+  $('#hxSub').textContent = [HX.booked ? 'Booked ' + hxRangeText(HX.booked) : '', HX.checkout ? 'Check-out ' + hxRangeText(HX.checkout) : ''].filter(Boolean).join(' · ') || 'All uploaded bookings · click a booking for full details';
+};
+const renderHotels = () => { if (HX.rows === null && !HX.loading) hxLoad(); else paintHotels(); };
+$('#hxXlsx').onclick = () => { const rows = hxFiltered(); if (!rows.length) { toast('No bookings to download'); return; }
+  const {k, dir} = HX.sort; rows.sort((a, b) => String(a[k] || '').localeCompare(String(b[k] || ''), undefined, {numeric: true}) * dir);
+  const tag = [HX.booked ? 'Booked_' + HX.booked.join('_to_') : '', HX.checkout ? 'Checkout_' + HX.checkout.join('_to_') : ''].filter(Boolean).join('_') || 'All';
+  window.__ltm.txExcel(HX.cols, rows, ((DATA.client && DATA.client.name) || 'Client').replace(/[^A-Za-z0-9]+/g, '_') + '_Hotel_Bookings_' + tag + '.xlsx'); };
+
 /* ---------- routing ---------- */
-const TITLES = {overview: 'Overview', rack: 'Room rack', calendar: 'Night-wise availability', bookings: 'Booking register', houses: 'All guest houses', users: 'Users & access'};
+const TITLES = {overview: 'Overview', rack: 'Room rack', calendar: 'Night-wise availability', bookings: 'Booking register', hotels: 'Hotel bookings', houses: 'All guest houses', users: 'Users & access'};
 const render = () => {
   $$('#nav button').forEach((b) => b.toggleAttribute('data-active', b.dataset.view === state.view));
   $$('.view').forEach((v) => v.classList.toggle('hidden', v.dataset.view !== state.view));
   $('#viewTitle').textContent = TITLES[state.view]; document.title = TITLES[state.view] + ' · Zuna Stays';
   const p = P();
-  $('#viewSub').textContent = state.view === 'users' ? (DATA.client ? DATA.client.name + ' · ' : '') + (DATA.users || []).length + ' users' : state.view === 'houses' ? props.length + ' guest houses · ' + props.filter((x) => x.status === 'Live').length + ' live' : p.property + ', ' + p.city + ' · ' + (state.view === 'calendar' ? fShort(period.from) + ' – ' + fLong(period.to) : state.view === 'bookings' && coOn() ? coText() : rangeLabel());
+  $('#viewSub').textContent = state.view === 'hotels' ? (DATA.client ? DATA.client.name + ' · ' : '') + 'Hotels and apartments booked through Zuna' : state.view === 'users' ? (DATA.client ? DATA.client.name + ' · ' : '') + (DATA.users || []).length + ' users' : state.view === 'houses' ? props.length + ' guest houses · ' + props.filter((x) => x.status === 'Live').length + ' live' : p.property + ', ' + p.city + ' · ' + (state.view === 'calendar' ? fShort(period.from) + ' – ' + fLong(period.to) : state.view === 'bookings' && coOn() ? coText() : rangeLabel());
   $('#rangeBox').classList.toggle('invisible', !(state.view === 'overview' || state.view === 'rack' || state.view === 'bookings'));
   $('#rangeCustomTxt').textContent = state.range === 'custom' ? fShort(state.cfrom) + ' – ' + fShort(state.cto) : 'Custom';
-  $('#propWrap').classList.toggle('invisible', state.view === 'houses' || state.view === 'users');
+  $('#propWrap').classList.toggle('invisible', state.view === 'houses' || state.view === 'users' || state.view === 'hotels');
   const coRule = state.view === 'bookings' && coOn();   // check-out dates replace the range here
   $$('#rangeWrap button').forEach((b) => b.toggleAttribute('data-active', !coRule && b.dataset.range === state.range));
   $('#navCount').textContent = myB().length;
-  ({overview: renderOverview, rack: renderRack, calendar: renderCal, bookings: renderBookings, houses: renderHouses, users: () => renderUsersView()})[state.view]();
+  ({overview: renderOverview, rack: renderRack, calendar: renderCal, bookings: renderBookings, hotels: renderHotels, houses: renderHouses, users: () => renderUsersView()})[state.view]();
   if (state.view !== render.v) { render.v = state.view; ZUI.stagger(document.querySelector('.view[data-view="' + state.view + '"]')); }   // a soft lift only when the page changes; content is never hidden
 };
 const reRender = render;   // range / guest house switches repaint instantly (the data is already here)
@@ -927,7 +1046,8 @@ hydrateIcons();
   ['#dHandle', '#dHead'].forEach((sel) => { const n = $(sel); n.addEventListener('touchstart', startY, {passive: true}); n.addEventListener('touchmove', moveY, {passive: false}); n.addEventListener('touchend', endY); n.addEventListener('touchcancel', endY); }); }
 { const tb = $('#themeBtn'); const sync = () => { const dk = ZUI.theme.get() === 'dark'; tb.replaceChildren(icon(dk ? 'sun' : 'moon', 'w-[18px] h-[18px]'), h('span', 'sb-label', dk ? 'Light mode' : 'Dark mode')); tb.dataset.tip = dk ? 'Light mode' : 'Dark mode'; tb.setAttribute('aria-label', dk ? 'Switch to light mode' : 'Switch to dark mode'); tb.setAttribute('aria-pressed', dk ? 'true' : 'false'); };
   tb.onclick = () => { ZUI.theme.set(ZUI.theme.get() === 'dark' ? 'light' : 'dark'); sync(); render(); toast(ZUI.theme.get() === 'dark' ? 'Dark mode on' : 'Light mode on'); }; sync(); }
-const hs = location.hash.slice(1); if (TITLES[hs] && (hs !== 'users' || (USER.manager && !USER.admin))) state.view = hs;
+if (USER.tx) $('#navHotels').classList.remove('hidden');   // hotel bookings: admins, client admins and users given access
+const hs = location.hash.slice(1); if (TITLES[hs] && (hs !== 'users' || (USER.manager && !USER.admin)) && (hs !== 'hotels' || USER.tx)) state.view = hs;
 /* auto-refresh: reload data every 10 minutes while the tab is open (quietly, keeps the current page) */
 const LOADED = Date.now();
 setInterval(() => {

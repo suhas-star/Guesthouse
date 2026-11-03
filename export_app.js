@@ -257,14 +257,15 @@
     + '<xf applyAlignment="1"><alignment horizontal="left"/></xf>'                                          // 5 left
     + '<xf numFmtId="1" applyNumberFormat="1"/>'                                                            // 6 whole number
     + '</cellXfs><cellStyles count="1"><cellStyle name="Normal" xfId="0" builtinId="0"/></cellStyles></styleSheet>';
-  const sheetZip = (sheet, cells, merges, widths) => {
+  const sheetZip = (sheet, cells, merges, widths, freeze = {x: 2, y: 3}) => {
+    const pane = freeze.x ? '<pane xSplit="' + freeze.x + '" ySplit="' + freeze.y + '" topLeftCell="' + colName(freeze.x) + (freeze.y + 1) + '" activePane="bottomRight" state="frozen"/>' : '<pane ySplit="' + freeze.y + '" topLeftCell="A' + (freeze.y + 1) + '" activePane="bottomLeft" state="frozen"/>';
     const byRow = new Map(); cells.forEach((c) => { if (!byRow.has(c.r)) byRow.set(c.r, []); byRow.get(c.r).push(c); });
     const rowsXml = [...byRow.keys()].sort((a, b) => a - b).map((r) => '<row r="' + r + '">' + byRow.get(r).sort((a, b) => a.c - b.c).map((c) => {
       const ref = colName(c.c) + r, st = c.s ? ' s="' + c.s + '"' : '';
       return typeof c.v === 'number' ? '<c r="' + ref + '"' + st + '><v>' + c.v + '</v></c>' : '<c r="' + ref + '"' + st + ' t="inlineStr"><is><t xml:space="preserve">' + xmlEsc(c.v) + '</t></is></c>';
     }).join('') + '</row>').join('');
     const xml = '<?xml version="1.0" encoding="UTF-8" standalone="yes"?><worksheet xmlns="http://schemas.openxmlformats.org/spreadsheetml/2006/main">'
-      + '<sheetViews><sheetView workbookViewId="0"><pane xSplit="2" ySplit="3" topLeftCell="C4" activePane="bottomRight" state="frozen"/></sheetView></sheetViews>'
+      + '<sheetViews><sheetView workbookViewId="0">' + pane + '</sheetView></sheetViews>'
       + '<cols>' + widths.map((w, i) => '<col min="' + (i + 1) + '" max="' + (i + 1) + '" width="' + w + '" customWidth="1"/>').join('') + '</cols>'
       + '<sheetData>' + rowsXml + '</sheetData>'
       + (merges.length ? '<mergeCells count="' + merges.length + '">' + merges.map((m) => '<mergeCell ref="' + m + '"/>').join('') + '</mergeCells>' : '')
@@ -336,6 +337,14 @@
   };
   const dl = (f) => { const url = URL.createObjectURL(f.data), a = document.createElement('a'); a.href = url; a.download = f.filename; document.body.appendChild(a); a.click(); a.remove(); setTimeout(() => URL.revokeObjectURL(url), 4000); L.toast('Downloading ' + f.filename); };
   L.weeklyReport = weeklyReport;
+  // hotel bookings: the filtered rows in the transaction report's own column layout
+  L.txExcel = (cols, rows, filename) => { const cells = [];
+    cols.forEach((c, i) => cells.push({r: 1, c: i, v: c, s: 3}));
+    rows.forEach((r, k) => cols.forEach((c, i) => { let v = r[c]; if (v === '' || v == null) return;
+      if (/Date$/.test(c) && /^\d{4}-\d{2}-\d{2}$/.test(v)) v = DMY(v);
+      cells.push({r: k + 2, c: i, v, s: typeof v === 'number' && !Number.isInteger(v) ? 4 : 0}); }));
+    const widths = cols.map((c) => /Guest|Property Name|Manager|Email|Purpose|Payment|WBS/.test(c) ? 28 : /Date/.test(c) ? 13 : 15);
+    dl({filename, data: sheetZip('Hotel bookings', cells, [], widths, {x: 0, y: 1})}); };
   // one guest house -> Excel; all guest houses -> zip folder of the individual Excel files
   const ghReport = async (from, to, which, kind) => {
     const sel = Array.isArray(which) ? which : which === '*' ? L.props.filter((x) => +x.rooms > 0).map((x) => x.property) : [which];

@@ -908,9 +908,39 @@ const hxBar = () => { const bar = $('#hxBar'); if (bar.dataset.ready) return; ba
   const q = h('label', 'relative ml-auto w-full sm:w-56'); q.appendChild(icon('search', 'w-4 h-4 absolute left-3 top-1/2 -translate-y-1/2 text-zuna-400')); const qi = h('input', 'w-full pl-9 pr-3 py-2 rounded-xl ring-1 ring-zuna-100 bg-white text-sm placeholder:text-zuna-300 focus:outline-none focus:ring-2 focus:ring-mint-500'); qi.type = 'search'; qi.placeholder = 'Search guests…'; qi.title = 'Search by guest, employee code, booking code, TR ID, invoice or hotel'; qi.oninput = () => { HX.q = qi.value; HX.show = 50; paintHotels(); }; q.appendChild(qi);
   bar.append(hxDateBtn('booked', 'Booked date', 'calendar-days'), hxDateBtn('checkout', 'Check-out', 'log-out'), HX.ui.city, HX.ui.cat, HX.ui.status, q); };
 const HX_COLS = [['Guest Name', 'Guest'], ['Property Name', 'Hotel'], ['Booked Date', 'Booked'], ['Check-In Date', 'Stay'], ['Tariff Per Day', 'Tariff / night'], ['Net Amount Charged', 'Net amount'], ['Status', 'Status']];
-const hxDrawer = (r) => { const w = h('div', 'p-5 space-y-4'); const chips = h('div', 'flex flex-wrap gap-2'); chips.appendChild(h('span', 'zchip ' + (hxCancelled(r) ? 'zchip-bad' : ''), r.Status || '—')); if (hxOver(r)) chips.appendChild(h('span', 'zchip zchip-warn', 'Above policy cap')); w.appendChild(chips);
-  w.appendChild(kv((HX.cols || []).filter((c) => r[c] !== '' && r[c] != null && c !== 'Guest Name').map((c) => [c, /Date$/.test(c) && /^\d{4}-\d{2}-\d{2}$/.test(r[c]) ? fLong(r[c]) : /Tariff|Amount|Charges|Fee/.test(c) && typeof r[c] === 'number' ? '₹' + r[c].toLocaleString('en-IN', {minimumFractionDigits: Number.isInteger(r[c]) ? 0 : 2, maximumFractionDigits: 2}) : String(r[c])])));
-  openDrawer(r['Guest Name'] || 'Booking', (r['Property Name'] || '') + (r.City ? ', ' + r.City : ''), w); };
+// booking details: a summary card, the money in tiles, then the rest grouped into short sections (empty fields left out)
+const money = (v) => typeof v === 'number' || /^-?\d+(\.\d+)?$/.test(String(v)) ? '₹' + (+v).toLocaleString('en-IN', {minimumFractionDigits: Number.isInteger(+v) ? 0 : 2, maximumFractionDigits: 2}) : String(v);
+const hxDrawer = (r) => {
+  const w = h('div', 'space-y-4'), has = (c) => r[c] !== '' && r[c] != null, dt = (c) => /^\d{4}-\d{2}-\d{2}$/.test(r[c]) ? fLong(r[c]) : String(r[c]), nights = num(r['Stay Days']);
+  // summary
+  const top = h('div', 'rounded-2xl bg-zuna-900 text-white p-4 space-y-3');
+  const t1 = h('div', 'flex items-start gap-3'); const ic = h('span', 'grid place-items-center w-10 h-10 rounded-xl bg-white/10 text-mint-400 shrink-0'); ic.appendChild(icon('hotel', 'w-5 h-5'));
+  const tm = h('div', 'min-w-0 flex-1'); tm.append(h('p', 'font-bold leading-snug', r['Property Name'] || '—'), h('p', 'text-xs text-zuna-200', [r.City, r.State, r['Property Category']].filter(Boolean).join(' · ')));
+  t1.append(ic, tm); top.appendChild(t1);
+  const dates = h('div', 'grid grid-cols-[1fr_auto_1fr] items-center gap-2 rounded-xl bg-white/[.07] px-3 py-2.5');
+  const dcol = (l, v, right) => { const d = h('div', right ? 'text-right' : ''); d.append(h('p', 'text-[10px] font-bold uppercase tracking-wider text-zuna-300', l), h('p', 'text-sm font-bold', v)); return d; };
+  const mid = h('span', 'rounded-full bg-mint-500 text-zuna-900 px-2.5 py-0.5 text-[11px] font-bold whitespace-nowrap', nights + (nights === 1 ? ' night' : ' nights'));
+  dates.append(dcol('Check-in', has('Check-In Date') ? dt('Check-In Date') : '—'), mid, dcol('Check-out', has('Check-Out Date') ? dt('Check-Out Date') : '—', true)); top.appendChild(dates);
+  const chips = h('div', 'flex flex-wrap items-center gap-2'); chips.appendChild(h('span', 'zchip ' + (hxCancelled(r) ? 'zchip-bad' : /unbilled/i.test(r.Status || '') ? 'zchip-warn' : ''), r.Status || '—'));
+  if (hxOver(r)) chips.appendChild(h('span', 'zchip zchip-warn', 'Above policy cap'));
+  if (has('Booked Date')) chips.appendChild(h('span', 'ml-auto text-[11px] text-zuna-200', 'Booked ' + dt('Booked Date'))); top.appendChild(chips); w.appendChild(top);
+  // money
+  const tiles = h('div', 'grid grid-cols-2 gap-2'); const tile = (l, v, sub, warn) => { const t = h('div', 'rounded-xl ring-1 px-3 py-2.5 ' + (warn ? 'bg-amber-50 ring-amber-200' : 'bg-white ring-zuna-100')); t.append(h('p', 'text-[11px] font-semibold text-zuna-500', l), h('p', 'text-lg font-bold tabular-nums leading-tight ' + (warn ? 'text-amber-800' : ''), v)); if (sub) t.appendChild(h('p', 'text-[11px] ' + (warn ? 'text-amber-700 font-semibold' : 'text-zuna-400'), sub)); return t; };
+  tiles.append(tile('Tariff / night', money(r['Tariff Per Day'] || 0), num(r['Eligibility Criteria']) ? (hxOver(r) ? 'Above cap of ' : 'Within cap of ') + inr(r['Eligibility Criteria']) : 'No cap on file', hxOver(r)),
+    tile('Net amount', money(r['Net Amount Charged'] || 0), 'incl. GST ' + money(r['GST Charges'] || 0)));
+  w.appendChild(tiles);
+  // sections
+  const SECT = [['Guest', 'user-round', ['Guest Name', 'Emp Code', 'Grade', 'Designation', 'Employee Email ID', 'Contact Number', 'Base Location']],
+    ['Stay', 'bed-double', ['Room Type', 'Occupancy', 'Booking Level', 'Booking Code']],
+    ['Billing', 'receipt', ['Total Tariff', 'Taxes', 'GST Charges', 'Net Amount Charged', 'Cancellation Charges Total', 'Transaction Fee', 'Transaction Fee GST Charged', 'Invoice No', 'Tariff Payment Mode']],
+    ['Travel request', 'file-text', ['Travel Req ID', 'Concur Request Date', 'Purpose of Travel', 'Approving Manager', 'WBS/ID or Cost Code', 'Request Policy']],
+    ['Company', 'building-2', ['Entity Name', 'Remarks']]];
+  const LBL = {'Employee Email ID': 'Email', 'Contact Number': 'Phone', 'Net Amount Charged': 'Net amount', 'Cancellation Charges Total': 'Cancellation charges', 'Transaction Fee GST Charged': 'Fee GST', 'Tariff Payment Mode': 'Payment', 'WBS/ID or Cost Code': 'WBS / cost code', 'Travel Req ID': 'TR ID', 'Emp Code': 'Employee code', 'Entity Name': 'Billed entity'};
+  SECT.forEach(([title, ic2, cols]) => { const items = cols.filter(has); if (!items.length) return;
+    const sec = h('section', 'rounded-2xl ring-1 ring-zuna-100 bg-white overflow-hidden'); const hd = h('div', 'flex items-center gap-2 px-4 py-2.5 bg-zuna-50/70 border-b border-zuna-100 text-xs font-bold text-zuna-700'); hd.append(icon(ic2, 'w-4 h-4 text-mint-600'), document.createTextNode(title)); sec.appendChild(hd);
+    const dl = h('dl', 'divide-y divide-zuna-50'); items.forEach((c) => { const row = h('div', 'grid grid-cols-[130px_minmax(0,1fr)] gap-3 px-4 py-2 text-sm'); const v = /Date$/.test(c) ? dt(c) : /Tariff|Amount|Charges|Fee/.test(c) && c !== 'Tariff Payment Mode' ? money(r[c]) : String(r[c]);
+      row.append(h('dt', 'text-zuna-500', LBL[c] || c), h('dd', 'font-medium break-words', v)); dl.appendChild(row); }); sec.appendChild(dl); w.appendChild(sec); });
+  openDrawer(r['Guest Name'] || 'Booking', [r.Grade, r['Emp Code'] ? 'Emp ' + r['Emp Code'] : ''].filter(Boolean).join(' · '), w); };
 const paintHotels = () => {
   hxBar(); const all = HX.rows || [], rows = hxFiltered();
   const uniq = (k) => [...new Set(all.map((r) => r[k]).filter(Boolean))].sort();
@@ -924,21 +954,23 @@ const paintHotels = () => {
     const c = h('div', 'card p-4 ' + (i === 4 && v !== '0' ? 'ring-1 !ring-amber-300' : '')); const t = h('div', 'flex items-center gap-2 text-xs font-semibold text-zuna-500'); t.append(icon(ic, 'w-4 h-4 ' + (i === 4 && v !== '0' ? 'text-amber-600' : 'text-mint-600')), document.createTextNode(l));
     c.append(t, h('p', 'mt-1.5 text-2xl font-bold tabular-nums tracking-tight', HX.loading && !HX.rows ? '…' : v), h('p', 'text-[11px] text-zuna-500', s)); K.appendChild(c); });
   // table
-  const hd = $('#hxHead'); if (!hd.childElementCount) HX_COLS.forEach(([k, l], i) => { const th = h('th', 'th ' + (i === 0 ? 'pl-5 ' : '') + (i === HX_COLS.length - 1 ? 'pr-5 ' : ''), l); th.dataset.k = k; th.scope = 'col'; th.onclick = () => { HX.sort = {k, dir: HX.sort.k === k ? -HX.sort.dir : (k === 'Booked Date' || k === 'Check-In Date' ? -1 : 1)}; paintHotels(); }; hd.appendChild(th); });
+  const hd = $('#hxHead'); if (!hd.childElementCount) HX_COLS.forEach(([k, l], i) => { const th = h('th', 'th ' + (i === 0 ? 'pl-5 ' : '') + (i === HX_COLS.length - 1 ? 'pr-5 ' : '') + (k === 'Booked Date' ? 'hidden 2xl:table-cell' : ''), l); th.dataset.k = k; th.scope = 'col'; th.onclick = () => { HX.sort = {k, dir: HX.sort.k === k ? -HX.sort.dir : (k === 'Booked Date' || k === 'Check-In Date' ? -1 : 1)}; paintHotels(); }; hd.appendChild(th); });
   [...hd.children].forEach((th) => { th.dataset.sort = th.dataset.k === HX.sort.k ? (HX.sort.dir > 0 ? '↑' : '↓') : ''; });
   const {k, dir} = HX.sort; rows.sort((a, b) => { const x = a[k], y = b[k]; return (typeof x === 'number' || typeof y === 'number' ? num(x) - num(y) : String(x || '').localeCompare(String(y || ''))) * dir || String(b['Booked Date']).localeCompare(String(a['Booked Date'])); });
   const tb = $('#hxBody'); tb.replaceChildren();
   if (HX.loading && !HX.rows) { for (let i = 0; i < 5; i++) { const tr = h('tr'); const td = h('td', 'px-5 py-3'); td.colSpan = HX_COLS.length; td.appendChild(h('div', 'chart-skel h-8 rounded-lg')); tr.appendChild(td); tb.appendChild(tr); } }
   else if (!rows.length) { const tr = h('tr'); const td = h('td', 'px-5 py-12 text-center text-zuna-500'); td.colSpan = HX_COLS.length; td.textContent = HX.err || (all.length ? 'No bookings match these filters.' : 'No hotel bookings yet for these dates. They appear here once the Zuna team uploads the transaction report.'); if (HX.err) td.classList.add('text-rose-600'); tr.appendChild(td); tb.appendChild(tr); }
   rows.slice(0, HX.show).forEach((r) => { const tr = h('tr', 'hover:bg-zuna-50/70 cursor-pointer transition-colors'); tr.tabIndex = 0;
-    const g = h('td', 'pl-5 pr-3 py-3'); const w = h('div', 'flex items-center gap-3'); w.appendChild(avatar(r['Guest Name'] || '?', 'w-8 h-8 text-xs')); const m = h('div', 'min-w-0'); m.appendChild(h('p', 'font-semibold whitespace-nowrap', r['Guest Name'] || '—'));
-    m.appendChild(h('p', 'text-xs text-zuna-500 whitespace-nowrap', [r.Grade, r['Emp Code']].filter(Boolean).join(' · ') || '—')); w.appendChild(m); g.appendChild(w); tr.appendChild(g);
-    const ho = h('td', 'px-3 py-3 max-w-[260px]'); ho.appendChild(h('p', 'font-medium truncate', r['Property Name'] || '—')); ho.lastChild.title = r['Property Name'] || ''; ho.appendChild(h('p', 'text-xs text-zuna-500', [r.City, r['Property Category']].filter(Boolean).join(' · '))); tr.appendChild(ho);
-    tr.appendChild(h('td', 'px-3 py-3 whitespace-nowrap tabular-nums', r['Booked Date'] ? fShort(r['Booked Date']) : '—'));
-    const sy = h('td', 'px-3 py-3 whitespace-nowrap tabular-nums'); sy.appendChild(h('p', 'font-medium', (r['Check-In Date'] ? fShort(r['Check-In Date']) : '?') + ' → ' + (r['Check-Out Date'] ? fShort(r['Check-Out Date']) : '?'))); const n = num(r['Stay Days']); sy.appendChild(h('p', 'text-xs text-zuna-400', n + (n === 1 ? ' night' : ' nights'))); tr.appendChild(sy);
-    const tf = h('td', 'px-3 py-3 whitespace-nowrap tabular-nums'); tf.appendChild(h('p', 'font-medium ' + (hxOver(r) ? 'text-amber-700' : ''), inr(r['Tariff Per Day']))); if (num(r['Eligibility Criteria'])) tf.appendChild(h('p', 'text-xs ' + (hxOver(r) ? 'text-amber-700 font-semibold' : 'text-zuna-400'), (hxOver(r) ? 'Above cap ' : 'Cap ') + inr(r['Eligibility Criteria']))); tr.appendChild(tf);
-    tr.appendChild(h('td', 'px-3 py-3 whitespace-nowrap tabular-nums font-medium', inr(r['Net Amount Charged'])));
-    const s = h('td', 'pl-3 pr-5 py-3 whitespace-nowrap'); s.appendChild(h('span', 'zchip ' + (hxCancelled(r) ? 'zchip-bad' : /unbilled/i.test(r.Status || '') ? 'zchip-warn' : ''), r.Status || '—')); tr.appendChild(s);
+    const g = h('td', 'pl-5 pr-2.5 py-3'); const w = h('div', 'flex items-center gap-3'); w.appendChild(avatar(r['Guest Name'] || '?', 'w-8 h-8 text-xs')); const m = h('div', 'min-w-0 max-w-[170px]'); m.appendChild(h('p', 'font-semibold truncate', r['Guest Name'] || '—')); m.firstChild.title = r['Guest Name'] || '';
+    m.appendChild(h('p', 'text-xs text-zuna-500 truncate', [r.Grade, r['Emp Code']].filter(Boolean).join(' · ') || '—')); w.appendChild(m); g.appendChild(w); tr.appendChild(g);
+    const ho = h('td', 'px-2.5 py-3'); const hw = h('div', 'max-w-[200px] 2xl:max-w-[280px]'); hw.appendChild(h('p', 'font-medium truncate', r['Property Name'] || '—')); hw.lastChild.title = r['Property Name'] || ''; hw.appendChild(h('p', 'text-xs text-zuna-500 truncate', [r.City, r['Property Category']].filter(Boolean).join(' · '))); ho.appendChild(hw); tr.appendChild(ho);
+    tr.appendChild(h('td', 'hidden 2xl:table-cell px-2.5 py-3 whitespace-nowrap tabular-nums', r['Booked Date'] ? fShort(r['Booked Date']) : '—'));
+    const sy = h('td', 'px-2.5 py-3 whitespace-nowrap tabular-nums'); sy.appendChild(h('p', 'font-medium', (r['Check-In Date'] ? fShort(r['Check-In Date']) : '?') + ' → ' + (r['Check-Out Date'] ? fShort(r['Check-Out Date']) : '?'))); const n = num(r['Stay Days']);
+    const sub = h('p', 'text-xs text-zuna-400', n + (n === 1 ? ' night' : ' nights')); if (r['Booked Date']) sub.appendChild(h('span', '2xl:hidden', ' · booked ' + fShort(r['Booked Date']))); sy.appendChild(sub); tr.appendChild(sy);
+    const tf = h('td', 'px-2.5 py-3 whitespace-nowrap tabular-nums'); tf.appendChild(h('p', 'font-medium ' + (hxOver(r) ? 'text-amber-700' : ''), inr(r['Tariff Per Day'])));
+    if (num(r['Eligibility Criteria'])) { const cp = h('p', 'flex items-center gap-1 text-xs ' + (hxOver(r) ? 'text-amber-700 font-semibold' : 'text-zuna-400')); if (hxOver(r)) cp.appendChild(icon('triangle-alert', 'w-3 h-3')); cp.appendChild(document.createTextNode('Cap ' + inr(r['Eligibility Criteria']))); if (hxOver(r)) cp.title = 'Above the policy cap'; tf.appendChild(cp); } tr.appendChild(tf);
+    tr.appendChild(h('td', 'px-2.5 py-3 whitespace-nowrap tabular-nums font-medium', inr(r['Net Amount Charged'])));
+    const s = h('td', 'pl-2.5 pr-5 py-3 whitespace-nowrap'); s.appendChild(h('span', 'zchip ' + (hxCancelled(r) ? 'zchip-bad' : /unbilled/i.test(r.Status || '') ? 'zchip-warn' : ''), r.Status || '—')); tr.appendChild(s);
     tr.onclick = () => hxDrawer(r); tr.onkeydown = (e) => { if (e.key === 'Enter') hxDrawer(r); }; tb.appendChild(tr); });
   const ft = $('#hxFoot'); ft.replaceChildren(); ft.appendChild(h('span', null, rows.length ? 'Showing ' + Math.min(HX.show, rows.length) + ' of ' + rows.length + (rows.length === 1 ? ' booking' : ' bookings') : ''));
   if (rows.length > HX.show) { const more = h('button', 'btn !py-1 !px-3 text-xs', 'Show ' + Math.min(100, rows.length - HX.show) + ' more'); more.type = 'button'; more.onclick = () => { HX.show += 100; paintHotels(); }; ft.appendChild(more); }

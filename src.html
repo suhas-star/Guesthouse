@@ -1048,7 +1048,7 @@ const ghConsRow = (b) => { const p = props.find((x) => x.property === b.property
   return {'Booking Code': '', 'Entity Name': entity, 'Property Name': b.property, 'Property Category': 'Guest House', City: p.city || '', State: p.state || '', 'Emp Code': '', 'Guest Name': cleanName(b.guest), 'Booked Date': '',
     'Check-In Date': b.check_in, 'Check-Out Date': b.check_out, Designation: '', Grade: b.grade && b.grade !== 'Not stated' ? b.grade : '', 'Eligibility Criteria': policyCap(b.grade, p.city), 'Tariff Per Day': 0, 'Stay Days': +b.nights || 0, 'Total Tariff': 0,
     Taxes: '+ Taxes', 'Tariff Payment Mode': 'Bill to ' + (entity || 'client'), 'Room Type': [hasRoom(b) ? 'Room ' + b.room : '', rt && !/^room\b/i.test(rt) ? rt : ''].filter(Boolean).join(' - '), 'Booking Level': 'Room', Occupancy: b._occ || b.occupancy || 'Single', Status: 'Unbilled',
-    'Net Amount Charged': 0, 'GST Charges': 0, 'Cancellation Charges Total': 0, 'Transaction Fee': '', 'Transaction Fee GST Charged': '', 'Invoice No': '', 'WBS/ID or Cost Code': '', 'Concur Request Date': '', 'Purpose of Travel': '', 'Travel Req ID': b.concur_tr || '',
+    'Net Amount Charged': 0, 'GST Charges': 0, 'Cancellation Charges Total': 0, 'Transaction Fee': 100, 'Transaction Fee GST Charged': 18, 'Invoice No': '', 'WBS/ID or Cost Code': '', 'Concur Request Date': '', 'Purpose of Travel': '', 'Travel Req ID': b.concur_tr || '',
     'Base Location': b.base && b.base !== 'Not stated' ? b.base : '', 'Approving Manager': '', 'Request Policy': '', 'Employee Email ID': '', 'Contact Number': '', Remarks: b.note || ''}; };
 const openConsolidated = () => {
   const f = h('div', 'space-y-4'); const lw = addDays(monday(today), -7);

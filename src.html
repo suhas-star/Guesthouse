@@ -1029,10 +1029,6 @@ const hxFitKpis = () => $$('#hxKpis .kpi-num').forEach((v) => { v.style.fontSize
   if (w > avail) v.style.fontSize = Math.max(16, Math.floor(base * avail / w * 0.97)) + 'px'; });
 new ResizeObserver(() => { if (state.view === 'hotels') hxFitKpis(); }).observe($('#hxKpis'));
 const renderHotels = () => { if (HX.rows === null && !HX.loading) hxLoad(); else paintHotels(); };
-$('#hxXlsx').onclick = () => { const rows = hxFiltered(); if (!rows.length) { toast('No bookings to download'); return; }
-  const {k, dir} = HX.sort; rows.sort((a, b) => String(a[k] || '').localeCompare(String(b[k] || ''), undefined, {numeric: true}) * dir);
-  const tag = [HX.booked ? 'Booked_' + HX.booked.join('_to_') : '', HX.checkout ? 'Checkout_' + HX.checkout.join('_to_') : ''].filter(Boolean).join('_') || 'All';
-  window.__ltm.txExcel(HX.cols, rows, txName().replace(/[^A-Za-z0-9]+/g, '_') + '_' + tag + '.xlsx', 'Hotel transactions'); };
 
 /* ---------- CONSOLIDATED REPORT: guest house stays + hotel bookings, one sheet in the transaction report layout, by check-out date ---------- */
 const CONS_COLS = ['Booking Code', 'Entity Name', 'Property Name', 'Property Category', 'City', 'State', 'Emp Code', 'Guest Name', 'Booked Date', 'Check-In Date', 'Check-Out Date', 'Designation', 'Grade', 'Eligibility Criteria', 'Tariff Per Day', 'Stay Days', 'Total Tariff', 'Taxes', 'Tariff Payment Mode', 'Room Type', 'Booking Level', 'Occupancy', 'Status', 'Net Amount Charged', 'GST Charges', 'Cancellation Charges Total', 'Transaction Fee', 'Transaction Fee GST Charged', 'Invoice No', 'WBS/ID or Cost Code', 'Concur Request Date', 'Purpose of Travel', 'Travel Req ID', 'Base Location', 'Approving Manager', 'Request Policy', 'Employee Email ID', 'Contact Number', 'Remarks'];
@@ -1050,11 +1046,12 @@ const ghConsRow = (b) => { const p = props.find((x) => x.property === b.property
     Taxes: '+ Taxes', 'Tariff Payment Mode': 'Bill to ' + (entity || 'client'), 'Room Type': [hasRoom(b) ? 'Room ' + b.room : '', rt && !/^room\b/i.test(rt) ? rt : ''].filter(Boolean).join(' - '), 'Booking Level': 'Room', Occupancy: b._occ || b.occupancy || 'Single', Status: 'Unbilled',
     'Net Amount Charged': 0, 'GST Charges': 0, 'Cancellation Charges Total': 0, 'Transaction Fee': 100, 'Transaction Fee GST Charged': 18, 'Invoice No': '', 'WBS/ID or Cost Code': '', 'Concur Request Date': '', 'Purpose of Travel': '', 'Travel Req ID': b.concur_tr || '',
     'Base Location': b.base && b.base !== 'Not stated' ? b.base : '', 'Approving Manager': '', 'Request Policy': '', 'Employee Email ID': '', 'Contact Number': '', Remarks: b.note || ''}; };
-const openConsolidated = () => {
+// one window for both reports: the consolidated report (guest houses + hotels) and, with hotelsOnly, the hotel transaction report
+const openConsolidated = (hotelsOnly) => { hotelsOnly = hotelsOnly === true;
   const f = h('div', 'space-y-4'); const lw = addDays(monday(today), -7);
-  f.appendChild(h('p', 'text-sm text-zuna-600', 'Guest house stays and hotel bookings together in one Excel sheet, in the transaction report layout.'));
+  f.appendChild(h('p', 'text-sm text-zuna-600', hotelsOnly ? 'Hotel and apartment bookings as uploaded, in the transaction report layout.' : 'Guest house stays and hotel bookings together in one Excel sheet, in the transaction report layout.'));
   // pick stays by check-out date (as in LTM's sample) or by booking date
-  let basis = openConsolidated.basis || 'checkout'; const bw = h('div'); bw.appendChild(h('span', 'block text-xs font-semibold text-zuna-500 mb-1', 'Pick stays by'));
+  let basis = openConsolidated.basis || 'checkout'; const bw = h('div'); bw.appendChild(h('span', 'block text-xs font-semibold text-zuna-500 mb-1', hotelsOnly ? 'Pick bookings by' : 'Pick stays by'));
   const seg = h('div', 'grid grid-cols-2 gap-1 rounded-xl bg-zuna-50 p-1 ring-1 ring-zuna-100'); seg.setAttribute('role', 'tablist'); bw.appendChild(seg); f.appendChild(bw);
   const g = h('div', 'grid grid-cols-2 gap-3'), labs = [], fld = (v) => { const w = h('label', 'block'); const s = h('span', 'block text-xs font-semibold text-zuna-500 mb-1'); labs.push(s); w.appendChild(s); const i = h('input', 'w-full rounded-xl bg-white ring-1 ring-zuna-100 px-3 py-2.5 text-sm focus:outline-none focus:ring-2 focus:ring-mint-500'); i.type = 'date'; i.value = v; w.appendChild(i); g.appendChild(w); return i; };
   const a = fld(lw), z = fld(addDays(lw, 6)); f.appendChild(g);
@@ -1067,12 +1064,12 @@ const openConsolidated = () => {
   const q = h('div', 'flex flex-wrap gap-1.5'); [['Last week', lw, addDays(lw, 6)], ['This week', monday(today), addDays(monday(today), 6)], ['Last month', pm, mE(pm)], ['This month', mS(today), mE(today)]].forEach(([l, x, y]) => {
     const c = h('button', 'rounded-lg px-2.5 py-1 text-xs font-semibold bg-zuna-50 text-zuna-700 ring-1 ring-zuna-100 hover:ring-mint-500', l); c.type = 'button'; c.onclick = () => { a.value = x; z.value = y; refresh(); }; q.appendChild(c); }); f.appendChild(q);
   // what goes in
-  const inc = h('div', 'space-y-2'); inc.appendChild(h('span', 'block text-xs font-semibold text-zuna-500', 'Include')); f.appendChild(inc);
+  const inc = h('div', 'space-y-2'); inc.appendChild(h('span', 'block text-xs font-semibold text-zuna-500', 'Include')); if (!hotelsOnly) f.appendChild(inc);
   const opt = (l, ic) => { const r = h('label', 'flex items-center gap-3 rounded-xl ring-1 ring-zuna-100 bg-white px-3 py-2.5 cursor-pointer hover:ring-mint-500'); const cb = h('input', 'peer sr-only'); cb.type = 'checkbox'; cb.checked = true;
     const tick = h('span', 'grid place-items-center w-5 h-5 shrink-0 rounded-md ring-1 ring-zuna-200 bg-white text-transparent peer-checked:bg-mint-500 peer-checked:ring-mint-500 peer-checked:text-zuna-900'); tick.appendChild(icon('check', 'w-3.5 h-3.5'));
     const t = h('span', 'flex-1 min-w-0'); t.appendChild(h('span', 'block text-sm font-semibold', l)); const n = h('span', 'block text-xs text-zuna-500', '…'); t.appendChild(n); const i = h('span', 'grid place-items-center w-8 h-8 rounded-lg bg-zuna-50 text-zuna-600'); i.appendChild(icon(ic, 'w-4 h-4'));
     r.append(cb, tick, t, i); inc.appendChild(r); cb.onchange = paint; return [cb, n]; };
-  const [ghCb, ghN] = opt('Guest house stays', 'building-2'), [htCb, htN] = opt('Hotel bookings', 'hotel');
+  const [ghCb, ghN] = opt('Guest house stays', 'building-2'), [htCb, htN] = opt('Hotel bookings', 'hotel'); if (hotelsOnly) ghCb.checked = false;
   const sum = h('div', 'rounded-xl bg-mint-50 ring-1 ring-mint-200 px-3 py-2 text-sm font-semibold text-zuna-900 flex items-center gap-2'); f.appendChild(sum);
   const err = h('p', 'hidden text-xs font-semibold text-rose-600'); f.appendChild(err);
   let ghRows = [], htRows = [], loading = false, ticket = 0;
@@ -1080,10 +1077,10 @@ const openConsolidated = () => {
     ghN.textContent = ok ? ghRows.length + (ghRows.length === 1 ? ' stay' : ' stays') + (co ? ' checking out' : ' · by check-in date') : '—'; ghN.title = co ? '' : 'Guest house stays have no booking date, so their check-in date is used';
     htN.textContent = loading ? 'Loading…' : ok ? htRows.length + (htRows.length === 1 ? ' booking' : ' bookings') + (co ? ' checking out' : ' booked') : '—';
     const n = (ghCb.checked ? ghRows.length : 0) + (htCb.checked ? htRows.length : 0);
-    sum.replaceChildren(icon(BL[basis][1], 'w-4 h-4 text-mint-700 shrink-0'), document.createTextNode(ok ? BL[basis][2] + ' ' + (a.value === z.value ? fFull(a.value) : fShort(a.value) + ' – ' + fLong(z.value)) + ' · ' + n + ' rows' : 'Choose the dates')); }
+    sum.replaceChildren(icon(BL[basis][1], 'w-4 h-4 text-mint-700 shrink-0'), document.createTextNode(!ok ? 'Choose the dates' : BL[basis][2] + ' ' + (a.value === z.value ? fFull(a.value) : fShort(a.value) + ' – ' + fLong(z.value)) + ' · ' + (hotelsOnly ? (loading ? 'loading…' : n + (n === 1 ? ' booking' : ' bookings')) : n + ' rows'))); }
   async function refresh() { err.classList.add('hidden'); if (!a.value || !z.value || z.value < a.value) { ghRows = htRows = []; paint(); return; }
     const gk = basis === 'checkout' ? 'check_out' : 'check_in', hk = basis === 'checkout' ? 'Check-Out Date' : 'Booked Date';   // guest house stays carry no booking date: check-in is used instead
-    ghRows = bookings.filter((b) => b.status === 'Confirmed' && b[gk] >= a.value && b[gk] <= z.value).sort((x, y) => x[gk].localeCompare(y[gk]) || x.property.localeCompare(y.property)).map(ghConsRow);
+    ghRows = hotelsOnly ? [] : bookings.filter((b) => b.status === 'Confirmed' && b[gk] >= a.value && b[gk] <= z.value).sort((x, y) => x[gk].localeCompare(y[gk]) || x.property.localeCompare(y.property)).map(ghConsRow);
     loading = true; paint(); const my = ++ticket;
     const q = {client_id: DATA.client ? DATA.client.id : null}; if (basis === 'checkout') { q.checkout_from = a.value; q.checkout_to = z.value; } else { q.booked_from = a.value; q.booked_to = z.value; }
     try { const r = await fetch('/api/tx', {method: 'POST', headers: {'content-type': 'application/json'}, credentials: 'same-origin', body: JSON.stringify(q)});
@@ -1095,10 +1092,11 @@ const openConsolidated = () => {
   go.onclick = () => { if (!a.value || !z.value || z.value < a.value) { err.textContent = 'Choose the dates.'; err.classList.remove('hidden'); return; } if (loading) { toast('Still loading hotel bookings…'); return; }
     const rows = [...(htCb.checked ? htRows : []), ...(ghCb.checked ? ghRows : [])]; if (!rows.length) { err.textContent = 'No stays for these dates.'; err.classList.remove('hidden'); return; }
     const dmy = (s) => s.slice(8, 10) + '_' + s.slice(5, 7) + '_' + s.slice(0, 4);
-    window.__ltm.txExcel(CONS_COLS, rows, 'Consolidated_Datasheet-' + (basis === 'booked' ? 'Booked-' : '') + dmy(a.value) + '-' + dmy(z.value) + '.xlsx', 'Consolidated'); };
+    if (hotelsOnly) window.__ltm.txExcel(CONS_COLS, rows, txName().replace(/[^A-Za-z0-9]+/g, '_') + '-' + (basis === 'booked' ? 'Booked-' : 'Checkout-') + dmy(a.value) + '-' + dmy(z.value) + '.xlsx', 'Hotel transactions');
+    else window.__ltm.txExcel(CONS_COLS, rows, 'Consolidated_Datasheet-' + (basis === 'booked' ? 'Booked-' : '') + dmy(a.value) + '-' + dmy(z.value) + '.xlsx', 'Consolidated'); };
   const dock = h('div', 'sticky -bottom-5 -mx-5 px-5 pt-3 pb-5 bg-white border-t border-zuna-100 shadow-[0_-10px_20px_-14px_rgba(18,0,90,.35)]'); dock.appendChild(go); f.appendChild(dock);
-  openDrawer(consName(), 'Guest houses and hotels · by check-out or booking date', f); refresh(); };
-$('#hxCons').onclick = openConsolidated; $('#hxConsName').textContent = consName();
+  openDrawer(hotelsOnly ? txName() : consName(), hotelsOnly ? 'Hotel bookings · by booking or check-out date' : 'Guest houses and hotels · by check-out or booking date', f); refresh(); };
+$('#hxCons').onclick = () => openConsolidated(false); $('#hxXlsx').onclick = () => openConsolidated(true); $('#hxConsName').textContent = consName();
 const txName = () => ((DATA.client && DATA.client.name) || 'LTM') + ' Hotel transaction report';
 $('#hxXlsxName').textContent = txName();
 

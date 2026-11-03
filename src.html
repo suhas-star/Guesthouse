@@ -930,7 +930,7 @@ const hxDrawer = (r) => {
     tile('Net amount', money(r['Net Amount Charged'] || 0), 'incl. GST ' + money(r['GST Charges'] || 0)));
   w.appendChild(tiles);
   // sections
-  const SECT = [['Guest', 'user-round', ['Guest Name', 'Emp Code', 'Grade', 'Designation', 'Employee Email ID', 'Contact Number', 'Base Location']],
+  const SECT = [['Guest', 'user-round', ['Designation', 'Employee Email ID', 'Contact Number', 'Base Location']],
     ['Stay', 'bed-double', ['Room Type', 'Occupancy', 'Booking Level', 'Booking Code']],
     ['Billing', 'receipt', ['Total Tariff', 'Taxes', 'GST Charges', 'Net Amount Charged', 'Cancellation Charges Total', 'Transaction Fee', 'Transaction Fee GST Charged', 'Invoice No', 'Tariff Payment Mode']],
     ['Travel request', 'file-text', ['Travel Req ID', 'Concur Request Date', 'Purpose of Travel', 'Approving Manager', 'WBS/ID or Cost Code', 'Request Policy']],

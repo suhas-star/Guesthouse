@@ -245,8 +245,10 @@ check('old host redirects to PRIMARY_HOST', r.status === 301 && r.headers.get('l
       x = await A('tx/import', {client_id: acme, header: H, rows: [twin], filename: 'twin.xlsx'}); const upTwin = x.j.upload_id;
       x = await A('tx/stored', {client_id: acme}); const tw = x.j.rows.filter((r) => r.dup);
       check('stored bookings list groups same guest + stay dates under different invoices', x.j.dup_groups === 1 && tw.length === 2 && tw.every((r) => r.dup === tw[0].dup) && tw.some((r) => r.invoice === 'INV-OTHER'));
-      x = await A('tx/remove', {client_id: acme, code: 'INV-OTHER'});
       const T2 = async () => (await (await call('/api/tx', {method: 'POST', body: {}, cookie: meera})).json()).rows;
+      check('a possible duplicate is held: stored for the admin but hidden from the client', x.j.held === 1 && tw.find((r) => r.invoice === 'INV-OTHER').held === 1 && tw.find((r) => r.invoice === 'INV-TX1').held === 0 && !(await T2()).some((r) => r['Invoice No'] === 'INV-OTHER') && (await T2()).some((r) => r['Invoice No'] === 'INV-TX1'));
+      x = await A('tx/keep', {client_id: acme, code: 'INV-OTHER'}); check('Keep makes the booking visible to the client', x.status === 200 && (await T2()).some((r) => r['Invoice No'] === 'INV-OTHER'));
+      x = await A('tx/remove', {client_id: acme, code: 'INV-OTHER'});
       check('a removed booking disappears for the client', x.status === 200 && !(await T2()).some((r) => r['Invoice No'] === 'INV-OTHER'));
       x = await A('tx/stored', {client_id: acme}); const rid = x.j.removed[0] && x.j.removed[0].id;
       check('removed bookings are listed (kept for restore)', x.j.removed.length === 1 && x.j.removed[0].invoice === 'INV-OTHER' && x.j.dup_groups === 0);

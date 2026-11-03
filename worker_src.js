@@ -406,7 +406,7 @@ let schemaReady = false;
 async function ensureSchema(env) {
   if (schemaReady) return;
   for (const q of SCHEMA) await env.DB.prepare(q).run();
-  for (const c of ["users ADD COLUMN role TEXT", "users ADD COLUMN client_id INTEGER", "guesthouses ADD COLUMN state TEXT", "guesthouses ADD COLUMN country TEXT", "room_types ADD COLUMN bed_type TEXT", "clients ADD COLUMN legal_name TEXT", "users ADD COLUMN tx_access INTEGER", "tx_uploads ADD COLUMN hash TEXT", "tx_uploads ADD COLUMN file_id INTEGER"]) { try { await env.DB.prepare("ALTER TABLE " + c).run(); } catch (e) { /* exists */ } }
+  for (const c of ["users ADD COLUMN role TEXT", "users ADD COLUMN client_id INTEGER", "guesthouses ADD COLUMN state TEXT", "guesthouses ADD COLUMN country TEXT", "room_types ADD COLUMN bed_type TEXT", "clients ADD COLUMN legal_name TEXT", "users ADD COLUMN tx_access INTEGER", "tx_uploads ADD COLUMN hash TEXT", "tx_uploads ADD COLUMN file_id INTEGER", "transactions ADD COLUMN held INTEGER"]) { try { await env.DB.prepare("ALTER TABLE " + c).run(); } catch (e) { /* exists */ } }
   schemaReady = true;
 }
 const DEFAULT_GRADES = "M1,M2,M3,M4,M5,M6,M7,M8,P1,P2,P3,E1,E2,E3,E4,E5,E6,E7";
@@ -724,6 +724,9 @@ async function txImport(env, cid, b, user, dry) {
     const {results} = await env.DB.prepare("SELECT code, row, upload_id FROM transactions WHERE client_id = ? AND checkin IN (" + part.map(() => "?").join(",") + ")").bind(cid, ...part).all();
     results.forEach((x) => { const o = JSON.parse(x.row), hits = newStay.get(stayKey(o)); if (!hits) return; hits.filter((r) => txKey(r) !== x.code).forEach((r) => sameStay.push({guest: r["Guest Name"], check_in: r["Check-In Date"], check_out: r["Check-Out Date"], where: "portal", invoices: [txKey(r), x.code], hotels: [...new Set([r["Property Name"], o["Property Name"]])], upload_id: x.upload_id})); }); }
   summary.same_stay = sameStay.slice(0, 40); summary.same_stay_count = sameStay.length;
+  // new rows that look like duplicates are stored but held back from the client until an admin keeps or removes them
+  const holdSet = new Set(); sameStay.forEach((x) => (x.where === "portal" ? [x.invoices[0]] : x.invoices.slice(1)).forEach((k) => holdSet.add(k)));
+  summary.held = holdSet.size;
   // which earlier uploads already brought in the bookings that are in this file
   const known = new Map(); [...same, ...changed.map((c) => c.r)].forEach((r) => { const u = fromUp.get(txKey(r)) || 0; known.set(u, (known.get(u) || 0) + 1); });
   const ids = [...known.keys()].filter(Boolean), info = new Map();
@@ -740,8 +743,8 @@ async function txImport(env, cid, b, user, dry) {
     const fr = await env.DB.prepare("INSERT INTO files (client_id, mime, data, created) VALUES (NULL, ?, ?, ?)").bind(mime, f64, now).run(); fileId = fr.meta ? fr.meta.last_row_id : fr.lastInsertRowid; }
   const up = await env.DB.prepare("INSERT INTO tx_uploads (client_id, by_email, at, filename, rows, added, changed, unchanged, hash, file_id) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)").bind(cid, user.email, now, clean(b.filename, 160), all.length, added.length, changed.length, same.length, hash, fileId).run();
   const uid = up.meta ? up.meta.last_row_id : up.lastInsertRowid, st = [];
-  const put = (r) => env.DB.prepare("INSERT INTO transactions (client_id, code, booked, checkin, checkout, status, row, upload_id, updated) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?) ON CONFLICT(client_id, code) DO UPDATE SET booked = excluded.booked, checkin = excluded.checkin, checkout = excluded.checkout, status = excluded.status, row = excluded.row, upload_id = excluded.upload_id, updated = excluded.updated")
-    .bind(cid, txKey(r), r["Booked Date"] || "", r["Check-In Date"] || "", r["Check-Out Date"] || "", r.Status || "", JSON.stringify(r), uid, now);
+  const put = (r) => env.DB.prepare("INSERT INTO transactions (client_id, code, booked, checkin, checkout, status, row, upload_id, updated, held) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?) ON CONFLICT(client_id, code) DO UPDATE SET booked = excluded.booked, checkin = excluded.checkin, checkout = excluded.checkout, status = excluded.status, row = excluded.row, upload_id = excluded.upload_id, updated = excluded.updated")
+    .bind(cid, txKey(r), r["Booked Date"] || "", r["Check-In Date"] || "", r["Check-Out Date"] || "", r.Status || "", JSON.stringify(r), uid, now, holdSet.has(txKey(r)) ? 1 : 0);
   added.forEach((r) => { st.push(env.DB.prepare("INSERT INTO tx_versions (upload_id, code, prev) VALUES (?, ?, NULL)").bind(uid, txKey(r)), put(r)); });
   changed.forEach((c) => { st.push(env.DB.prepare("INSERT INTO tx_versions (upload_id, code, prev) VALUES (?, ?, ?)").bind(uid, txKey(c.r), c.prev), put(c.r)); });
   for (let i = 0; i < st.length; i += 80) await env.DB.batch(st.slice(i, i + 80));
@@ -761,12 +764,17 @@ async function ghCodes(env, bookings) {
 async function txUploads(env, cid) { const {results} = await env.DB.prepare("SELECT id, by_email, at, filename, rows, added, changed, unchanged, undone, file_id IS NOT NULL AS has_file FROM tx_uploads WHERE client_id = ? ORDER BY id DESC LIMIT 1000").bind(cid).all(); return results; }
 // all hotel bookings stored for a client (compact), with possible-duplicate groups: same guest and stay dates, different invoice
 async function txStored(env, cid) {
-  const {results} = await env.DB.prepare("SELECT t.code, t.row, t.upload_id, u.filename, u.at FROM transactions t LEFT JOIN tx_uploads u ON u.id = t.upload_id WHERE t.client_id = ? ORDER BY t.booked DESC, t.code").bind(cid).all();
-  const rows = results.map((x) => { const r = JSON.parse(x.row); return {code: x.code, guest: r["Guest Name"] || "", emp: r["Emp Code"] || "", hotel: r["Property Name"] || "", city: r.City || "", check_in: r["Check-In Date"] || "", check_out: r["Check-Out Date"] || "", booked: r["Booked Date"] || "", invoice: r["Invoice No"] || "", booking_code: r["Booking Code"] || "", net: +r["Net Amount Charged"] || 0, status: r.Status || "", file: x.filename || "", uploaded: x.at || "", stay: stayKey(r)}; });
+  const {results} = await env.DB.prepare("SELECT t.code, t.row, t.upload_id, t.held, u.filename, u.at FROM transactions t LEFT JOIN tx_uploads u ON u.id = t.upload_id WHERE t.client_id = ? ORDER BY t.booked DESC, t.code").bind(cid).all();
+  const rows = results.map((x) => { const r = JSON.parse(x.row); return {code: x.code, held: x.held ? 1 : 0, guest: r["Guest Name"] || "", emp: r["Emp Code"] || "", hotel: r["Property Name"] || "", city: r.City || "", check_in: r["Check-In Date"] || "", check_out: r["Check-Out Date"] || "", booked: r["Booked Date"] || "", invoice: r["Invoice No"] || "", booking_code: r["Booking Code"] || "", net: +r["Net Amount Charged"] || 0, status: r.Status || "", file: x.filename || "", uploaded: x.at || "", stay: stayKey(r)}; });
   const groups = new Map(); rows.forEach((r) => { if (!groups.has(r.stay)) groups.set(r.stay, []); groups.get(r.stay).push(r); });
   let g = 0; for (const list of groups.values()) if (list.length > 1) { g++; list.forEach((r) => { r.dup = g; }); }
   const {results: rem} = await env.DB.prepare("SELECT id, code, row, by_email, at FROM tx_removed WHERE client_id = ? AND restored IS NULL ORDER BY id DESC LIMIT 1000").bind(cid).all();
-  return json({rows: rows.map(({stay, ...r}) => r), dup_groups: g, removed: rem.map((x) => { const r = JSON.parse(x.row); return {id: x.id, code: x.code, guest: r["Guest Name"] || "", hotel: r["Property Name"] || "", check_in: r["Check-In Date"] || "", check_out: r["Check-Out Date"] || "", invoice: r["Invoice No"] || "", net: +r["Net Amount Charged"] || 0, by: x.by_email, at: x.at}; })});
+  return json({rows: rows.map(({stay, ...r}) => r), dup_groups: g, held: rows.filter((r) => r.held).length, removed: rem.map((x) => { const r = JSON.parse(x.row); return {id: x.id, code: x.code, guest: r["Guest Name"] || "", hotel: r["Property Name"] || "", check_in: r["Check-In Date"] || "", check_out: r["Check-Out Date"] || "", invoice: r["Invoice No"] || "", net: +r["Net Amount Charged"] || 0, by: x.by_email, at: x.at}; })});
+}
+// keep a booking that was held as a possible duplicate: the client sees it from now on
+async function txKeep(env, cid, code) {
+  const r = await env.DB.prepare("UPDATE transactions SET held = 0 WHERE client_id = ? AND code = ?").bind(cid, String(code || "")).run();
+  return (r.meta ? r.meta.changes : r.changes) ? json({ok: true}) : json({error: "That booking is not in the portal."}, 404);
 }
 // remove one hotel booking (it moves to tx_removed and can be restored)
 async function txRemove(env, cid, code, user) {
@@ -808,6 +816,7 @@ async function txList(env, cid, b) {
     if (f || t) { if (!iso.test(f || "") || !iso.test(t || "") || t < f) return json({error: "Choose a valid date range."}, 400);
       if ((Date.parse(t) - Date.parse(f)) / 864e5 > 400) return json({error: "Choose up to 13 months at a time."}, 400);
       w.push(col + " >= ? AND " + col + " <= ?"); args.push(f, t); } }
+  w.push("(held IS NULL OR held = 0)");   // possible duplicates stay hidden until an admin keeps them
   const {results} = await env.DB.prepare("SELECT row FROM transactions WHERE " + w.join(" AND ") + " ORDER BY booked DESC, code LIMIT 10001").bind(...args).all();
   const last = await env.DB.prepare("SELECT at FROM tx_uploads WHERE client_id = ? AND undone IS NULL ORDER BY id DESC LIMIT 1").bind(cid).first();
   return json({rows: results.slice(0, 10000).map((x) => JSON.parse(x.row)), more: results.length > 10000, updated: last ? last.at : null, cols: TX_COLS});
@@ -915,6 +924,7 @@ async function adminApi(req, env, user, path) {
       case "/api/admin/tx/file": return txFile(env, +b.client_id, b.id);
       case "/api/admin/tx/stored": return txStored(env, +b.client_id);
       case "/api/admin/tx/remove": return txRemove(env, +b.client_id, b.code, user);
+      case "/api/admin/tx/keep": return txKeep(env, +b.client_id, b.code);
       case "/api/admin/tx/restore": return txRestore(env, +b.client_id, b.id);
       case "/api/admin/booking":
       case "/api/admin/booking/delete":

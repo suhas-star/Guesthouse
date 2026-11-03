@@ -398,12 +398,13 @@ const SCHEMA = [
   "CREATE TABLE IF NOT EXISTS tx_uploads (id INTEGER PRIMARY KEY AUTOINCREMENT, client_id INTEGER NOT NULL, by_email TEXT, at TEXT, filename TEXT, rows INTEGER, added INTEGER, changed INTEGER, unchanged INTEGER, undone TEXT)",
   "CREATE TABLE IF NOT EXISTS tx_versions (upload_id INTEGER NOT NULL, code TEXT NOT NULL, prev TEXT)",
   "CREATE INDEX IF NOT EXISTS tx_versions_up ON tx_versions (upload_id)",
+  "CREATE TABLE IF NOT EXISTS gh_codes (id INTEGER PRIMARY KEY AUTOINCREMENT, key TEXT UNIQUE NOT NULL, created TEXT)",
 ];
 let schemaReady = false;
 async function ensureSchema(env) {
   if (schemaReady) return;
   for (const q of SCHEMA) await env.DB.prepare(q).run();
-  for (const c of ["users ADD COLUMN role TEXT", "users ADD COLUMN client_id INTEGER", "guesthouses ADD COLUMN state TEXT", "guesthouses ADD COLUMN country TEXT", "room_types ADD COLUMN bed_type TEXT", "clients ADD COLUMN legal_name TEXT", "users ADD COLUMN tx_access INTEGER", "tx_uploads ADD COLUMN hash TEXT"]) { try { await env.DB.prepare("ALTER TABLE " + c).run(); } catch (e) { /* exists */ } }
+  for (const c of ["users ADD COLUMN role TEXT", "users ADD COLUMN client_id INTEGER", "guesthouses ADD COLUMN state TEXT", "guesthouses ADD COLUMN country TEXT", "room_types ADD COLUMN bed_type TEXT", "clients ADD COLUMN legal_name TEXT", "users ADD COLUMN tx_access INTEGER", "tx_uploads ADD COLUMN hash TEXT", "tx_uploads ADD COLUMN file_id INTEGER"]) { try { await env.DB.prepare("ALTER TABLE " + c).run(); } catch (e) { /* exists */ } }
   schemaReady = true;
 }
 const DEFAULT_GRADES = "M1,M2,M3,M4,M5,M6,M7,M8,P1,P2,P3,E1,E2,E3,E4,E5,E6,E7";
@@ -650,7 +651,12 @@ async function restoreBooking(env, client, b) {
 const TX_COLS = ["Booking Code", "Entity Name", "Property Name", "Property Category", "City", "State", "Emp Code", "Guest Name", "Booked Date", "Check-In Date", "Check-Out Date", "Designation", "Grade", "Eligibility Criteria", "Tariff Per Day", "Stay Days", "Total Tariff", "Taxes", "Tariff Payment Mode", "Room Type", "Booking Level", "Occupancy", "Status", "Net Amount Charged", "GST Charges", "Cancellation Charges Total", "Transaction Fee", "Transaction Fee GST Charged", "Invoice No", "WBS/ID or Cost Code", "Concur Request Date", "Purpose of Travel", "Travel Req ID", "Base Location", "Approving Manager", "Request Policy", "Employee Email ID", "Contact Number", "Remarks"];
 const TX_DATES = new Set(["Booked Date", "Check-In Date", "Check-Out Date", "Concur Request Date"]);
 const TX_TEXT = new Set(["Booking Code", "Emp Code", "Contact Number", "Invoice No", "Travel Req ID", "WBS/ID or Cost Code"]);
-const TX_NEED = ["Booking Code", "Guest Name", "Booked Date", "Check-In Date", "Check-Out Date"];
+const TX_NEED = ["Guest Name", "Booked Date", "Check-In Date", "Check-Out Date"];
+// each hotel booking is matched by its Invoice No (unique per booking); rows without one fall back to the Booking Code
+const txKey = (r) => { const inv = String(r["Invoice No"] || "").trim(); if (inv) return inv; const bc = String(r["Booking Code"] || "").trim(); return bc ? "BC:" + bc : ""; };
+const txKeyLabel = (k) => k.startsWith("BC:") ? "booking code " + k.slice(3) : "invoice " + k;
+const nameKey = (s) => String(s || "").toLowerCase().replace(/^\s*(mr|mrs|ms|miss|dr)\b\.?/, "").replace(/[^a-z]/g, "");
+const stayKey = (r) => nameKey(r["Guest Name"]) + "|" + (r["Check-In Date"] || "") + "|" + (r["Check-Out Date"] || "");
 const hkey = (s) => String(s == null ? "" : s).toLowerCase().replace(/\s+/g, " ").trim();
 function txDate(v) {
   if (v == null || v === "") return "";
@@ -665,6 +671,7 @@ function txDate(v) {
 function txParse(header, data) {
   const idx = {}; (header || []).forEach((h, i) => { const k = hkey(h); const col = TX_COLS.find((c) => hkey(c) === k); if (col && !(col in idx)) idx[col] = i; });
   const missing = TX_NEED.filter((c) => !(c in idx));
+  if (!("Invoice No" in idx) && !("Booking Code" in idx)) missing.unshift("Invoice No");
   if (missing.length) return {error: "This doesn't look like the transaction report. Missing column" + (missing.length > 1 ? "s: " : ": ") + missing.join(", ") + "."};
   const rows = [], problems = [], seen = new Map(); let dupSame = 0, dupDiff = 0;
   (data || []).forEach((arr, n) => {
@@ -674,10 +681,11 @@ function txParse(header, data) {
       else if (TX_TEXT.has(c)) v = String(v).trim().slice(0, 120);   // IDs and phone numbers stay text (no 9.1E+12 in Excel)
       else v = typeof v === "number" ? v : String(v).trim().slice(0, 400);
       r[c] = v; }
-    const code = String(r["Booking Code"]).trim();
-    if (!code) { problems.push({line: n + 2, issue: "No Booking Code; row skipped"}); return; }
+    const code = txKey(r);
+    if (!code) { problems.push({line: n + 2, issue: "No Invoice No or Booking Code; row skipped"}); return; }
+    if (code.startsWith("BC:")) problems.push({line: n + 2, code: code.slice(3), issue: "No Invoice No; matched by Booking Code instead"});
     if (!r["Check-In Date"] || !r["Check-Out Date"] || r["Check-Out Date"] < r["Check-In Date"]) problems.push({line: n + 2, code, issue: "Check-out is before check-in"});
-    if (seen.has(code)) { const same = JSON.stringify(seen.get(code)) === JSON.stringify(r); same ? dupSame++ : dupDiff++; if (!same) problems.push({line: n + 2, code, issue: "Booking Code appears twice with different details; the later row is used"}); }
+    if (seen.has(code)) { const same = JSON.stringify(seen.get(code)) === JSON.stringify(r); same ? dupSame++ : dupDiff++; if (!same) problems.push({line: n + 2, code, issue: "The same " + txKeyLabel(code) + " appears twice with different details; the later row is used"}); }
     seen.set(code, r);
   });
   for (const r of seen.values()) rows.push(r);
@@ -688,25 +696,33 @@ async function txImport(env, cid, b, user, dry) {
   const p = txParse(b.header, b.rows); if (p.error) return json({error: p.error}, 400);
   if (!p.rows.length) return json({error: "No bookings found in this file."}, 400);
   if (p.rows.length > 20000) return json({error: "Upload up to 20,000 bookings at a time."}, 400);
-  const codes = p.rows.map((r) => String(r["Booking Code"]).trim()), old = new Map(), fromUp = new Map();
+  const codes = p.rows.map(txKey), old = new Map(), fromUp = new Map();
   for (let i = 0; i < codes.length; i += 90) { const part = codes.slice(i, i + 90);
     const {results} = await env.DB.prepare("SELECT code, row, upload_id FROM transactions WHERE client_id = ? AND code IN (" + part.map(() => "?").join(",") + ")").bind(cid, ...part).all();
     results.forEach((x) => { old.set(x.code, x.row); fromUp.set(x.code, x.upload_id); }); }
   // fingerprint of the file's content (row order ignored) to spot the very same report being uploaded again
-  const hash = await sha256(JSON.stringify(p.rows.slice().sort((x, y) => String(x["Booking Code"]).localeCompare(String(y["Booking Code"])))));
+  const hash = await sha256(JSON.stringify(p.rows.slice().sort((x, y) => txKey(x).localeCompare(txKey(y)))));
   const exact = await env.DB.prepare("SELECT id, filename, at, by_email FROM tx_uploads WHERE client_id = ? AND hash = ? AND undone IS NULL ORDER BY id DESC LIMIT 1").bind(cid, hash).first();
   const added = [], changed = [], same = [];
-  p.rows.forEach((r) => { const code = String(r["Booking Code"]).trim(), was = old.get(code), now = JSON.stringify(r);
+  p.rows.forEach((r) => { const code = txKey(r), was = old.get(code), now = JSON.stringify(r);
     if (!was) added.push(r); else if (was === now) same.push(r); else { const o = JSON.parse(was); changed.push({r, prev: was, fields: TX_COLS.filter((c) => String(o[c] ?? "") !== String(r[c] ?? "")).map((c) => ({col: c, from: o[c] ?? "", to: r[c] ?? ""}))}); } });
   const all = p.rows, sum = (k) => all.reduce((t, r) => t + (+r[k] || 0), 0);
   const summary = {rows: all.length, added: added.length, changed: changed.length, unchanged: same.length, dup_same: p.dupSame, dup_diff: p.dupDiff, problems: p.problems.slice(0, 50), problem_count: p.problems.length,
     over_policy: all.filter((r) => txFlags(r).over).length, cancelled: all.filter((r) => txFlags(r).cancelled).length, no_emp: all.filter((r) => !String(r["Emp Code"]).trim()).length,
     booked_from: all.reduce((m, r) => r["Booked Date"] && (!m || r["Booked Date"] < m) ? r["Booked Date"] : m, ""), booked_to: all.reduce((m, r) => r["Booked Date"] > m ? r["Booked Date"] : m, ""),
     net: Math.round(sum("Net Amount Charged") * 100) / 100,
-    changes: changed.slice(0, 25).map((c) => ({code: c.r["Booking Code"], guest: c.r["Guest Name"], fields: c.fields.slice(0, 6)})),
-    sample_new: added.slice(0, 5).map((r) => ({code: r["Booking Code"], guest: r["Guest Name"], hotel: r["Property Name"], booked: r["Booked Date"]}))};
+    changes: changed.slice(0, 25).map((c) => ({code: txKey(c.r), guest: c.r["Guest Name"], fields: c.fields.slice(0, 6)})),
+    sample_new: added.slice(0, 5).map((r) => ({code: txKey(r), guest: r["Guest Name"], hotel: r["Property Name"], booked: r["Booked Date"]}))};
+  // possible duplicates: same guest name and stay dates under a different invoice (already in the portal, or twice in this file)
+  const sameStay = [], newStay = new Map(); added.forEach((r) => { const k = stayKey(r); if (!newStay.has(k)) newStay.set(k, []); newStay.get(k).push(r); });
+  for (const [, list] of newStay) if (list.length > 1) sameStay.push({guest: list[0]["Guest Name"], check_in: list[0]["Check-In Date"], check_out: list[0]["Check-Out Date"], where: "file", invoices: list.map(txKey), hotels: [...new Set(list.map((x) => x["Property Name"]))]});
+  const cis = [...new Set(added.map((r) => r["Check-In Date"]).filter(Boolean))];
+  for (let i = 0; i < cis.length; i += 90) { const part = cis.slice(i, i + 90);
+    const {results} = await env.DB.prepare("SELECT code, row, upload_id FROM transactions WHERE client_id = ? AND checkin IN (" + part.map(() => "?").join(",") + ")").bind(cid, ...part).all();
+    results.forEach((x) => { const o = JSON.parse(x.row), hits = newStay.get(stayKey(o)); if (!hits) return; hits.filter((r) => txKey(r) !== x.code).forEach((r) => sameStay.push({guest: r["Guest Name"], check_in: r["Check-In Date"], check_out: r["Check-Out Date"], where: "portal", invoices: [txKey(r), x.code], hotels: [...new Set([r["Property Name"], o["Property Name"]])], upload_id: x.upload_id})); }); }
+  summary.same_stay = sameStay.slice(0, 40); summary.same_stay_count = sameStay.length;
   // which earlier uploads already brought in the bookings that are in this file
-  const known = new Map(); [...same, ...changed.map((c) => c.r)].forEach((r) => { const u = fromUp.get(String(r["Booking Code"]).trim()) || 0; known.set(u, (known.get(u) || 0) + 1); });
+  const known = new Map(); [...same, ...changed.map((c) => c.r)].forEach((r) => { const u = fromUp.get(txKey(r)) || 0; known.set(u, (known.get(u) || 0) + 1); });
   const ids = [...known.keys()].filter(Boolean), info = new Map();
   if (ids.length) { const {results} = await env.DB.prepare("SELECT id, filename, at, by_email FROM tx_uploads WHERE id IN (" + ids.slice(0, 90).map(() => "?").join(",") + ")").bind(...ids.slice(0, 90)).all(); results.forEach((u) => info.set(u.id, u)); }
   summary.already = same.length + changed.length;
@@ -715,16 +731,37 @@ async function txImport(env, cid, b, user, dry) {
   if (dry) return json({ok: true, preview: summary});
   if (!added.length && !changed.length) return json({error: "Nothing new in this file: every booking in it is already in the portal" + (exact ? " (same report as " + (exact.filename || "an earlier upload") + ")" : "") + "."}, 409);
   const now = new Date().toISOString();
-  const up = await env.DB.prepare("INSERT INTO tx_uploads (client_id, by_email, at, filename, rows, added, changed, unchanged, hash) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)").bind(cid, user.email, now, clean(b.filename, 160), all.length, added.length, changed.length, same.length, hash).run();
+  // keep the original file, so it can be downloaded again from the upload history at any time
+  let fileId = null; const f64 = String(b.file_b64 || "");
+  if (f64 && f64.length <= 1900000 && /^[A-Za-z0-9+/=]+$/.test(f64)) { const mime = /\.csv$/i.test(b.filename || "") ? "text/csv" : "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet";
+    const fr = await env.DB.prepare("INSERT INTO files (client_id, mime, data, created) VALUES (NULL, ?, ?, ?)").bind(mime, f64, now).run(); fileId = fr.meta ? fr.meta.last_row_id : fr.lastInsertRowid; }
+  const up = await env.DB.prepare("INSERT INTO tx_uploads (client_id, by_email, at, filename, rows, added, changed, unchanged, hash, file_id) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)").bind(cid, user.email, now, clean(b.filename, 160), all.length, added.length, changed.length, same.length, hash, fileId).run();
   const uid = up.meta ? up.meta.last_row_id : up.lastInsertRowid, st = [];
   const put = (r) => env.DB.prepare("INSERT INTO transactions (client_id, code, booked, checkin, checkout, status, row, upload_id, updated) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?) ON CONFLICT(client_id, code) DO UPDATE SET booked = excluded.booked, checkin = excluded.checkin, checkout = excluded.checkout, status = excluded.status, row = excluded.row, upload_id = excluded.upload_id, updated = excluded.updated")
-    .bind(cid, String(r["Booking Code"]).trim(), r["Booked Date"] || "", r["Check-In Date"] || "", r["Check-Out Date"] || "", r.Status || "", JSON.stringify(r), uid, now);
-  added.forEach((r) => { st.push(env.DB.prepare("INSERT INTO tx_versions (upload_id, code, prev) VALUES (?, ?, NULL)").bind(uid, String(r["Booking Code"]).trim()), put(r)); });
-  changed.forEach((c) => { st.push(env.DB.prepare("INSERT INTO tx_versions (upload_id, code, prev) VALUES (?, ?, ?)").bind(uid, String(c.r["Booking Code"]).trim(), c.prev), put(c.r)); });
+    .bind(cid, txKey(r), r["Booked Date"] || "", r["Check-In Date"] || "", r["Check-Out Date"] || "", r.Status || "", JSON.stringify(r), uid, now);
+  added.forEach((r) => { st.push(env.DB.prepare("INSERT INTO tx_versions (upload_id, code, prev) VALUES (?, ?, NULL)").bind(uid, txKey(r)), put(r)); });
+  changed.forEach((c) => { st.push(env.DB.prepare("INSERT INTO tx_versions (upload_id, code, prev) VALUES (?, ?, ?)").bind(uid, txKey(c.r), c.prev), put(c.r)); });
   for (let i = 0; i < st.length; i += 80) await env.DB.batch(st.slice(i, i + 80));
   return json({ok: true, upload_id: uid, result: summary});
 }
-async function txUploads(env, cid) { const {results} = await env.DB.prepare("SELECT id, by_email, at, filename, rows, added, changed, unchanged, undone FROM tx_uploads WHERE client_id = ? ORDER BY id DESC LIMIT 12").bind(cid).all(); return results; }
+// guest house booking codes: each stay (guest house + guest + check-in) gets a permanent code ZUNA00001, ZUNA00002 … the first time it is seen
+async function ghCodes(env, bookings) {
+  const keyOf = (b) => (b.property || "") + "|" + guestKey(b), keys = [...new Set(bookings.map(keyOf))], ids = new Map();
+  const load = async (list) => { for (let i = 0; i < list.length; i += 90) { const part = list.slice(i, i + 90);
+    const {results} = await env.DB.prepare("SELECT id, key FROM gh_codes WHERE key IN (" + part.map(() => "?").join(",") + ")").bind(...part).all(); results.forEach((r) => ids.set(r.key, r.id)); } };
+  await load(keys); const missing = keys.filter((k) => !ids.has(k));
+  if (missing.length) { const now = new Date().toISOString(), st = missing.map((k) => env.DB.prepare("INSERT OR IGNORE INTO gh_codes (key, created) VALUES (?, ?)").bind(k, now));
+    for (let i = 0; i < st.length; i += 80) await env.DB.batch(st.slice(i, i + 80)); await load(missing); }
+  bookings.forEach((b) => { const id = ids.get(keyOf(b)); if (id) b.booking_code = "ZUNA" + String(id).padStart(5, "0"); });
+}
+// every upload ever made for the client (newest first), with whether its original file is kept
+async function txUploads(env, cid) { const {results} = await env.DB.prepare("SELECT id, by_email, at, filename, rows, added, changed, unchanged, undone, file_id IS NOT NULL AS has_file FROM tx_uploads WHERE client_id = ? ORDER BY id DESC LIMIT 1000").bind(cid).all(); return results; }
+async function txFile(env, cid, id) {
+  const u = await env.DB.prepare("SELECT filename, file_id FROM tx_uploads WHERE id = ? AND client_id = ?").bind(+id, cid).first();
+  if (!u || !u.file_id) return json({error: "The original file for this upload was not kept."}, 404);
+  const f = await env.DB.prepare("SELECT mime, data FROM files WHERE id = ?").bind(u.file_id).first(); if (!f) return json({error: "File not found."}, 404);
+  return json({name: u.filename || "transaction-report.xlsx", mime: f.mime, data: f.data});
+}
 async function txUndo(env, cid, id) {
   const last = await env.DB.prepare("SELECT id FROM tx_uploads WHERE client_id = ? AND undone IS NULL ORDER BY id DESC LIMIT 1").bind(cid).first();
   if (!last || last.id !== +id) return json({error: "Only the latest upload can be undone."}, 400);
@@ -846,6 +883,7 @@ async function adminApi(req, env, user, path) {
       }
       case "/api/admin/tx/uploads": return json({uploads: await txUploads(env, +b.client_id)});
       case "/api/admin/tx/undo": return txUndo(env, +b.client_id, b.id);
+      case "/api/admin/tx/file": return txFile(env, +b.client_id, b.id);
       case "/api/admin/booking":
       case "/api/admin/booking/delete":
       case "/api/admin/booking/restore": {
@@ -884,6 +922,7 @@ async function dashboard(env, user, url) {
     }
     if (user.manager && !user.admin) data.users = await clientUsers(env, client.id);   // Users & access view, shown without a page load
   }
+  await ghCodes(env, data.bookings || []);
   const payload = JSON.stringify(data).replace(/</g, "\\u003c");
   const userJs = JSON.stringify({name: user.name || "", email: user.email, admin: !!user.admin, manager: !!user.manager, tx: !!user.tx}).replace(/</g, "\\u003c");
   let page = TEMPLATE.replace("__DATA__", () => payload).replace("__USER__", () => userJs);

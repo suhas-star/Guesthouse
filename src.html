@@ -375,7 +375,7 @@ const bookingDrawer = (b) => {
   const top = h('div', 'flex items-center gap-3'); top.appendChild(avatar(b.guest, 'w-12 h-12 text-base')); const t = h('div', 'space-y-1'); t.appendChild(badge(st)); t.appendChild(h('p', 'text-xs text-zuna-500', b.property)); top.appendChild(t); box.appendChild(top);
   box.appendChild(stat3([[fShort(b.check_in), 'Check-in'], [fShort(b.check_out), 'Check-out'], [b.nights, +b.nights === 1 ? 'Night' : 'Nights']]));
   if (b._clash.length) box.insertBefore(warnBox('Mixed-gender room sharing', clashText(b) + '. ' + RULE), box.firstChild);
-  box.appendChild(kv([['Gender', b._g], ['Occupancy', b._occ + (b._mates.length ? ' · with ' + b._mates.map((o) => cleanName(o.guest) + ' (' + o._g + ')').join(', ') : '')], ['Grade', b.grade], ['Base location', b.base], ['Room', b.room], ['Concur TR', b.concur_tr], ['Remarks', b.note]]));
+  box.appendChild(kv([['Booking code', b.booking_code], ['Gender', b._g], ['Occupancy', b._occ + (b._mates.length ? ' · with ' + b._mates.map((o) => cleanName(o.guest) + ' (' + o._g + ')').join(', ') : '')], ['Grade', b.grade], ['Base location', b.base], ['Room', b.room], ['Concur TR', b.concur_tr], ['Remarks', b.note]]));
   openDrawer(cleanName(b.guest), fFull(b.check_in) + ' → ' + fShort(b.check_out), box);
 };
 
@@ -1045,7 +1045,7 @@ const policyCap = (grade, city) => { const P = DATA.policy; if (!P || !grade) re
 // a guest house stay in the same 39 columns (no tariff: company guest house, billed to the client)
 const ghConsRow = (b) => { const p = props.find((x) => x.property === b.property) || {}, entity = (DATA.client && (DATA.client.legal_name || DATA.client.name)) || '';
   const types = p.room_types || [], rt = types.length === 1 ? types[0].name : (types.find((t) => String(t.room_nos || '').includes(String(b.room || '').replace(/^.*-/, ''))) || {}).name;
-  return {'Booking Code': '', 'Entity Name': entity, 'Property Name': b.property, 'Property Category': 'Guest House', City: p.city || '', State: p.state || '', 'Emp Code': '', 'Guest Name': cleanName(b.guest), 'Booked Date': '',
+  return {'Booking Code': b.booking_code || '', 'Entity Name': entity, 'Property Name': b.property, 'Property Category': 'Guest House', City: p.city || '', State: p.state || '', 'Emp Code': '', 'Guest Name': cleanName(b.guest), 'Booked Date': '',
     'Check-In Date': b.check_in, 'Check-Out Date': b.check_out, Designation: '', Grade: b.grade && b.grade !== 'Not stated' ? b.grade : '', 'Eligibility Criteria': policyCap(b.grade, p.city), 'Tariff Per Day': 0, 'Stay Days': +b.nights || 0, 'Total Tariff': 0,
     Taxes: '+ Taxes', 'Tariff Payment Mode': 'Bill to ' + (entity || 'client'), 'Room Type': [hasRoom(b) ? 'Room ' + b.room : '', rt && !/^room\b/i.test(rt) ? rt : ''].filter(Boolean).join(' - '), 'Booking Level': 'Room', Occupancy: b._occ || b.occupancy || 'Single', Status: 'Unbilled',
     'Net Amount Charged': 0, 'GST Charges': 0, 'Cancellation Charges Total': 0, 'Transaction Fee': 100, 'Transaction Fee GST Charged': 18, 'Invoice No': '', 'WBS/ID or Cost Code': '', 'Concur Request Date': '', 'Purpose of Travel': '', 'Travel Req ID': b.concur_tr || '',

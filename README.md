@@ -224,8 +224,13 @@ Tables: `clients`, `guesthouses`, `room_types`, `contacts`, `photos`, `files` (c
 Admin → client → **Hotel reports**: drop the transaction report (.xlsx or .csv, 39-column layout). The file is read in
 the browser and checked before anything is saved; the preview shows new / updated / unchanged / repeated rows, rows
 above the policy cap, cancellations and any problems. Rows are stored exactly as uploaded (dates made ISO) in
-`transactions`, keyed by client + **Booking Code**: a later upload updates a booking, nothing is duplicated, and bookings
-missing from a later file are kept. Every upload is logged in `tx_uploads`; the latest one can be undone (previous
+`transactions`, keyed by client + **Invoice No** (Booking Code when a row has no invoice): a later upload updates a booking,
+nothing is duplicated, and bookings missing from a later file are kept. The preview names any earlier upload that
+already holds the same bookings, recognises the very same report (content fingerprint), and flags rows with the same
+guest name and stay dates under a different invoice. The original file of every upload is kept (`files`, via
+`tx_uploads.file_id`) and can be downloaded again from the upload history.
+
+Guest house stays get a permanent booking code (`ZUNA00001` …, table `gh_codes`), used in the consolidated report. Every upload is logged in `tx_uploads`; the latest one can be undone (previous
 versions are kept in `tx_versions`).
 
 Clients see the rows under **Hotel bookings** (`POST /api/tx`, filtered by booked date and/or check-out date) with

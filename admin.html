@@ -519,7 +519,7 @@ const rupee = (v) => '₹' + Number(v || 0).toLocaleString('en-IN', {maximumFrac
 const fDT = (s) => new Date(s).toLocaleString('en-IN', {day: 'numeric', month: 'short', year: 'numeric', hour: 'numeric', minute: '2-digit'});
 const renderTx = (D, c) => {
   const st = TXS[c.id] = TXS[c.id] || {};
-  D.appendChild(h('p', 'text-sm text-zuna-500 mb-3', 'Upload the hotel transaction report as received (.xlsx or .csv). Bookings are matched by Booking Code: new ones are added, changed ones are updated, nothing is duplicated and nothing is removed. ' + c.name + ' admins see them under Hotel bookings.'));
+  D.appendChild(h('p', 'text-sm text-zuna-500 mb-3', 'Upload the hotel transaction report as received (.xlsx or .csv). Bookings are matched by Invoice No: new ones are added, changed ones are updated, nothing is duplicated and nothing is removed. Every upload and its original file are kept. ' + c.name + ' admins see them under Hotel bookings.'));
   const grid = h('div', 'grid xl:grid-cols-[minmax(0,1fr)_340px] gap-4 items-start'); D.appendChild(grid);
   const left = h('div', 'card p-5 space-y-4 min-w-0'), right = h('div', 'card p-5 min-w-0'); grid.append(left, right);
   // drop zone
@@ -550,31 +550,59 @@ const renderTx = (D, c) => {
       p.changes.forEach((ch) => { const r = h('div', 'text-xs'); r.appendChild(h('p', 'font-semibold', ch.code + ' · ' + ch.guest)); ch.fields.forEach((x) => r.appendChild(h('p', 'text-zuna-600 pl-3', x.col + ': ' + (x.from === '' ? '(blank)' : x.from) + ' → ' + (x.to === '' ? '(blank)' : x.to)))); box.appendChild(r); }); out.appendChild(box); }
     if (p.problems.length) { const box = h('div', 'rounded-xl ring-1 ring-rose-200 bg-rose-50/60 p-3 space-y-1'); box.appendChild(h('p', 'text-xs font-bold text-rose-700', 'Check these rows' + (p.problem_count > p.problems.length ? ' (first ' + p.problems.length + ' of ' + p.problem_count + ')' : '')));
       p.problems.forEach((x) => box.appendChild(h('p', 'text-xs text-rose-800', 'Row ' + x.line + (x.code ? ' · ' + x.code : '') + ': ' + x.issue))); out.appendChild(box); }
+    // possible duplicates: same guest name and stay dates under a different invoice
+    if (p.same_stay && p.same_stay.length) { const box = h('div', 'rounded-xl ring-1 ring-amber-200 bg-amber-50/70 p-3 space-y-1.5');
+      const t = h('p', 'flex items-center gap-1.5 text-xs font-bold text-amber-900'); t.append(icon('triangle-alert', 'w-3.5 h-3.5'), document.createTextNode('Possible duplicates: same guest and stay dates, different invoice (' + p.same_stay_count + ')')); box.appendChild(t);
+      p.same_stay.forEach((x) => { const r = h('div', 'text-xs text-amber-900'); r.appendChild(h('p', 'font-semibold', x.guest + ' · ' + fD(x.check_in) + ' → ' + fD(x.check_out)));
+        r.appendChild(h('p', 'text-amber-800 pl-3', x.where === 'portal' ? 'New invoice ' + x.invoices[0] + ' · already in the portal as invoice ' + x.invoices[1] : 'In this file ' + x.invoices.length + ' times: ' + x.invoices.join(', ')));
+        if (x.hotels && x.hotels.length) r.appendChild(h('p', 'text-amber-700 pl-3', x.hotels.join(' / '))); box.appendChild(r); });
+      box.appendChild(h('p', 'text-[11px] text-amber-800 pt-1', 'These will still be imported, since a guest can genuinely have two bookings. Check them with the hotel desk if they look wrong.')); out.appendChild(box); }
     const n = p.added + p.changed, acts = h('div', 'flex flex-wrap justify-end gap-2 pt-1');
     const cancel = h('button', 'btn', 'Cancel'); cancel.onclick = () => { st.file = st.preview = null; fi.value = ''; showPreview(); };
     const go = ib('button', 'btn-primary', n ? 'Import ' + n + (n === 1 ? ' booking' : ' bookings') : 'Nothing new to import', 'upload'); go.disabled = !n;
     go.onclick = async () => { go.disabled = true; const pr = progressRow(f.name); acts.before(pr.el);
-      try { const r = await apiUp('tx/import', {client_id: c.id, header: f.header, rows: f.rows, filename: f.name}, (x) => pr.set(x)); pr.done(true);
+      try { const b64 = await new Promise((res) => { const rd = new FileReader(); rd.onload = () => res(String(rd.result).split(',')[1] || ''); rd.onerror = () => res(''); rd.readAsDataURL(f.blob); });   // the original file is kept with the upload
+        const r = await apiUp('tx/import', {client_id: c.id, header: f.header, rows: f.rows, filename: f.name, file_b64: b64}, (x) => pr.set(x)); pr.done(true);
         st.file = st.preview = null; st.hist = null; fi.value = ''; ZUI.celebrate('Report imported', r.result.added + ' new · ' + r.result.changed + ' updated'); showPreview(); loadHist(); } catch (er) { pr.done(false); toast(er.message, true); go.disabled = false; } };
     acts.append(cancel, go); out.appendChild(acts); };
   const pick = async (F) => { if (!F) return; if (!/\.(xlsx|csv)$/i.test(F.name)) { toast('Choose an .xlsx or .csv file.', true); return; }
     out.replaceChildren(h('p', 'text-sm text-zuna-500', 'Checking ' + F.name + '…'));
-    try { const s = await ZUI.readSheet(F); const r = await api('tx/preview', {client_id: c.id, header: s.header, rows: s.rows}); st.file = {name: F.name, header: s.header, rows: s.rows}; st.preview = r.preview; showPreview(); }
+    try { const s = await ZUI.readSheet(F); const r = await api('tx/preview', {client_id: c.id, header: s.header, rows: s.rows}); st.file = {name: F.name, header: s.header, rows: s.rows, blob: F}; st.preview = r.preview; showPreview(); }
     catch (er) { st.file = st.preview = null; fi.value = ''; const b = h('div', 'rounded-xl ring-1 ring-rose-200 bg-rose-50 p-3 text-sm font-medium text-rose-700'); b.textContent = er.message; out.replaceChildren(b); } };
   fi.onchange = () => pick(fi.files[0]); dropZone(dz, (fs) => pick(fs[0])); showPreview();
   // history
-  right.appendChild(h('p', 'text-sm font-bold mb-1', 'Upload history')); right.appendChild(h('p', 'text-xs text-zuna-500 mb-3', 'The latest upload can be undone.'));
+  const hh = h('div', 'flex items-baseline gap-2 mb-1'); const htl = h('p', 'text-sm font-bold', 'Upload history'); const hcount = h('span', 'text-xs text-zuna-500'); hh.append(htl, hcount); right.appendChild(hh);
+  right.appendChild(h('p', 'text-xs text-zuna-500 mb-3', 'Every upload and its original file are kept. The latest upload can be undone.'));
   const list = h('div', 'space-y-2'); right.appendChild(list);
-  const paintHist = () => { list.replaceChildren(); const hs = st.hist || [];
+  // download the original file of an upload
+  const original = async (u) => { try { const r = await api('tx/file', {client_id: c.id, id: u.id}); const bin = atob(r.data), u8 = new Uint8Array(bin.length); for (let i = 0; i < bin.length; i++) u8[i] = bin.charCodeAt(i);
+      const url = URL.createObjectURL(new Blob([u8], {type: r.mime})), a = document.createElement('a'); a.href = url; a.download = r.name; document.body.appendChild(a); a.click(); a.remove(); setTimeout(() => URL.revokeObjectURL(url), 4000); toast('Downloading ' + r.name); } catch (er) { toast(er.message, true); } };
+  const undo = async (u) => { if (!(await ZUI.confirm({title: 'Undo this upload?', message: [(u.added || 0) + ' new bookings are removed and ' + (u.changed || 0) + ' updated bookings go back to how they were.', 'Clients stop seeing these changes straight away. The file stays in the history.'], ok: 'Undo upload', tone: 'danger', hold: true}))) return;
+    try { await api('tx/undo', {client_id: c.id, id: u.id}); toast('Upload undone'); closeModal(); loadHist(); } catch (er) { toast(er.message, true); } };
+  const histCard = (u, latest) => { const r = h('div', 'rounded-xl ring-1 ring-zuna-100 p-3 ' + (u.undone ? 'opacity-60' : ''));
+    const t = h('div', 'flex items-start gap-2'); const m = h('div', 'min-w-0 flex-1'); m.append(h('p', 'text-sm font-semibold truncate', u.filename || 'Upload'), h('p', 'text-[11px] text-zuna-500', fDT(u.at) + ' · ' + (u.by_email || ''))); t.appendChild(m);
+    if (u.undone) t.appendChild(h('span', 'zchip zchip-muted', 'Undone'));
+    else if (u === latest) { const un = ib('button', 'btn !py-1 !px-2 text-xs', 'Undo', 'undo-2'); un.onclick = () => undo(u); t.appendChild(un); }
+    const foot = h('div', 'flex items-center gap-2 mt-1.5'); foot.appendChild(h('p', 'flex-1 text-xs text-zuna-600', u.rows + ' rows · ' + u.added + ' new · ' + u.changed + ' updated · ' + u.unchanged + ' unchanged'));
+    if (u.has_file) { const d = h('button', 'grid place-items-center w-7 h-7 rounded-lg text-zuna-500 hover:bg-zuna-50 hover:text-zuna-900'); d.type = 'button'; d.title = 'Download the original file'; d.setAttribute('aria-label', 'Download the original file ' + (u.filename || '')); d.appendChild(icon('download', 'w-4 h-4')); d.onclick = () => original(u); foot.appendChild(d); }
+    r.append(t, foot); return r; };
+  // every upload, searchable and paged
+  const allUploads = () => { const hs = st.hist || [], latest = hs.find((u) => !u.undone), w = h('div', 'space-y-3');
+    const q = inp('', 'Search file name or uploaded by'); q.type = 'search'; w.appendChild(q); const box = h('div'); w.appendChild(box); const S2 = {sort: {k: 'at', dir: -1}, page: 1};
+    const cols = [{k: 'at', label: 'Uploaded', sort: (u) => u.at, render: (u) => [h('p', 'font-medium whitespace-nowrap', fDT(u.at)), h('p', 'text-[11px] text-zuna-500', u.by_email || '')]},
+      {k: 'file', label: 'File', sort: (u) => (u.filename || '').toLowerCase(), render: (u) => h('p', 'max-w-[240px] truncate', u.filename || 'Upload')},
+      {k: 'counts', label: 'Bookings', sort: (u) => u.rows, render: (u) => h('p', 'text-xs whitespace-nowrap', u.rows + ' rows · ' + u.added + ' new · ' + u.changed + ' updated')},
+      {k: 'state', label: 'Status', sort: (u) => (u.undone ? '1' : '0'), render: (u) => h('span', 'zchip ' + (u.undone ? 'zchip-muted' : ''), u.undone ? 'Undone' : 'Imported')},
+      {k: 'act', label: '', actions: true, render: (u) => { const g = h('div', 'flex justify-end gap-1.5');
+        if (u.has_file) { const d = ib('button', 'btn !py-1 !px-2 text-xs', 'Original', 'download'); d.onclick = () => original(u); g.appendChild(d); }
+        if (!u.undone && u === latest) { const un = ib('button', 'btn !py-1 !px-2 text-xs text-rose-600', 'Undo', 'undo-2'); un.onclick = () => undo(u); g.appendChild(un); } return g; }}];
+    const paint = () => { const s = q.value.trim().toLowerCase(); box.replaceChildren(dataTable({cols, rows: hs.filter((u) => !s || ((u.filename || '') + ' ' + (u.by_email || '')).toLowerCase().includes(s)), st: S2, noun: 'uploads', empty: 'No uploads match.'})); };
+    q.oninput = () => { S2.page = 1; paint(); }; paint(); modal('All uploads · ' + c.name, w); };
+  const paintHist = () => { list.replaceChildren(); const hs = st.hist || []; hcount.textContent = hs.length ? '(' + hs.length + ')' : '';
     if (!hs.length) { list.appendChild(h('p', 'text-sm text-zuna-500', 'No uploads yet.')); return; }
     const latest = hs.find((u) => !u.undone);
-    hs.forEach((u) => { const r = h('div', 'rounded-xl ring-1 ring-zuna-100 p-3 ' + (u.undone ? 'opacity-60' : ''));
-      const t = h('div', 'flex items-start gap-2'); const m = h('div', 'min-w-0 flex-1'); m.append(h('p', 'text-sm font-semibold truncate', u.filename || 'Upload'), h('p', 'text-[11px] text-zuna-500', fDT(u.at) + ' · ' + (u.by_email || '')));
-      t.appendChild(m); if (u.undone) t.appendChild(h('span', 'zchip zchip-muted', 'Undone'));
-      else if (u === latest) { const un = ib('button', 'btn !py-1 !px-2 text-xs', 'Undo', 'undo-2'); un.onclick = async () => {
-          if (!(await ZUI.confirm({title: 'Undo this upload?', message: [(u.added || 0) + ' new bookings are removed and ' + (u.changed || 0) + ' updated bookings go back to how they were.', 'Clients stop seeing these changes straight away.'], ok: 'Undo upload', tone: 'danger', hold: true}))) return;
-          try { await api('tx/undo', {client_id: c.id, id: u.id}); toast('Upload undone'); loadHist(); } catch (er) { toast(er.message, true); } }; t.appendChild(un); }
-      r.append(t, h('p', 'text-xs text-zuna-600 mt-1.5', u.rows + ' rows · ' + u.added + ' new · ' + u.changed + ' updated · ' + u.unchanged + ' unchanged')); list.appendChild(r); }); };
+    hs.slice(0, 5).forEach((u) => list.appendChild(histCard(u, latest)));
+    if (hs.length > 5) { const all = ib('button', 'btn w-full justify-center text-xs', 'View all ' + hs.length + ' uploads', 'file-spreadsheet'); all.onclick = allUploads; list.appendChild(all); } };
   const loadHist = async () => { try { st.hist = (await api('tx/uploads', {client_id: c.id})).uploads; } catch (er) { st.hist = []; } if (list.isConnected) paintHist(); };
   if (st.hist) paintHist(); else { list.appendChild(h('p', 'text-sm text-zuna-500', 'Loading…')); loadHist(); }
 };

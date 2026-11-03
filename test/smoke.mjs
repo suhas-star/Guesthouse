@@ -181,7 +181,15 @@ check('old host redirects to PRIMARY_HOST', r.status === 301 && r.headers.get('l
     const pg2 = await (await call('/', {cookie: asha})).text(); const d2 = JSON.parse(pg2.match(/window\.__LTMGH_DATA = (.*?);\nconst REPORT_DATE/s)[1]);
     check('policy caps are not sent to users without hotel access', !d2.policy);
     const pg3 = await (await call('/', {cookie: admin})).text(); const d3 = JSON.parse(pg3.match(/window\.__LTMGH_DATA = (.*?);\nconst REPORT_DATE/s)[1]);
-    check('policy caps (for the consolidated report) reach users with hotel access', d3.policy && d3.policy.caps.length === 2 && d3.policy.zones.length === 1 && d3.policy.zones[0][0] === 'Pune'); }
+    check('policy caps (for the consolidated report) reach users with hotel access', d3.policy && d3.policy.caps.length === 2 && d3.policy.zones.length === 1 && d3.policy.zones[0][0] === 'Pune');
+    // guest house booking codes
+    await A('booking', {client_id: acme, row: {property: 'Acme House', title: 'Mr.', name: 'Code Test', check_in: '2026-12-01', check_out: '2026-12-03', room: 'Z1', status: 'Confirmed'}});
+    await A('booking', {client_id: acme, row: {property: 'Acme House', title: 'Ms.', name: 'Code Test Two', check_in: '2026-12-05', check_out: '2026-12-06', room: 'Z1', status: 'Confirmed'}});
+    const codesOf = async () => { const pg = await (await call('/', {cookie: admin})).text(); const d = JSON.parse(pg.match(/window\.__LTMGH_DATA = (.*?);\nconst REPORT_DATE/s)[1]); return Object.fromEntries(d.bookings.map((b) => [b.guest, b.booking_code])); };
+    const c1 = await codesOf(), c2 = await codesOf(), vals = Object.values(c1);
+    check('every guest house stay gets a ZUNA booking code', vals.length >= 2 && vals.every((v) => /^ZUNA\d{5}$/.test(v)));
+    check('booking codes are unique and stay the same on every visit', new Set(vals).size === vals.length && JSON.stringify(c1) === JSON.stringify(c2));
+    await A('booking/delete', {client_id: acme, guest: 'Code Test', check_in: '2026-12-01'}); await A('booking/delete', {client_id: acme, guest: 'Code Test Two', check_in: '2026-12-05'}); }
   // client admins
   x = await A('user', {client_id: acme, name: 'Meera Nair', email: 'meera@acme.example', role: 'client_admin'});
   const meera = (await call('/api/login', {method: 'POST', body: {email: 'meera@acme.example', password: x.j.password}})).headers.get('set-cookie').split(';')[0];
@@ -197,11 +205,11 @@ check('old host redirects to PRIMARY_HOST', r.status === 301 && r.headers.get('l
   { const H = ['Booking Code', 'Entity Name', 'Property Name', 'Property Category', 'City', 'State', 'Emp Code', 'Guest Name ', 'Booked Date', 'Check-In Date ', 'Check-Out Date ', 'Grade', 'Eligibility Criteria', 'Tariff Per Day', 'Stay Days ', 'Total Tariff ', 'Status', 'Net Amount Charged', 'GST Charges', 'Invoice No'];
     const row = (code, guest, booked, ci, co, tariff, status = 'Billed') => [code, 'Acme Industries', 'Lakeside Inn', 'Hotel', 'Pune', 'Maharashtra', 'E' + code, guest, booked, ci, co, 'M5', 6500, tariff, 2, tariff * 2, status, tariff * 2.36, tariff * 0.36, 'INV-' + code];
     const rows = [row('TX1', 'Ravi Menon', '2026-10-19', '2026-10-20', '2026-10-22', 5000), row('TX2', 'Sara Khan', '21/10/2026', '2026-10-24', '2026-10-26', 7000), row('TX2', 'Sara Khan', '21/10/2026', '2026-10-24', '2026-10-26', 7000), row('TX3', 'Dev Rao', 46326, '2026-11-01', '2026-11-03', 4000)];
-    x = await A('tx/preview', {client_id: acme, header: ['Name', 'Amount'], rows: [['a', 1]]}); check('transaction upload: wrong file is refused with the missing columns named', x.status === 400 && /Booking Code/.test(x.j.error));
+    x = await A('tx/preview', {client_id: acme, header: ['Name', 'Amount'], rows: [['a', 1]]}); check('transaction upload: wrong file is refused with the missing columns named', x.status === 400 && /Invoice No/.test(x.j.error));
     x = await A('tx/preview', {client_id: acme, header: H, rows}); const pv = x.j.preview || {};
     check('transaction preview: 3 new, identical duplicate folded, 1 over policy, dates read in any format', x.status === 200 && pv.added === 3 && pv.dup_same === 1 && pv.over_policy === 1 && pv.booked_from === '2026-10-19' && pv.booked_to === '2026-10-31');
     check('preview writes nothing', DB.raw.prepare('SELECT COUNT(*) n FROM transactions').get().n === 0);
-    x = await A('tx/import', {client_id: acme, header: H, rows, filename: 'week1.xlsx'}); const up1 = x.j.upload_id;
+    x = await A('tx/import', {client_id: acme, header: H, rows, filename: 'week1.xlsx', file_b64: 'UEsDBBQ='}); const up1 = x.j.upload_id;
     check('transaction import stores 3 bookings', x.status === 200 && DB.raw.prepare('SELECT COUNT(*) n FROM transactions WHERE client_id = ?').get(acme).n === 3);
     const T = async (cookie, body = {}) => { const y = await call('/api/tx', {method: 'POST', body, cookie}); return {status: y.status, j: await y.json()}; };
     check('viewer without access cannot see hotel bookings', (await T(asha)).status === 403);
@@ -217,12 +225,24 @@ check('old host redirects to PRIMARY_HOST', r.status === 301 && r.headers.get('l
       x = await A('tx/import', {client_id: acme, header: H, rows: shuffled, filename: 'again.xlsx'});
       check('importing a report with nothing new is refused and leaves no upload behind', x.status === 409 && DB.raw.prepare('SELECT COUNT(*) n FROM tx_uploads WHERE client_id = ?').get(acme).n === 1);
       x = await A('tx/preview', {client_id: acme, header: H, rows: [rows[0], ['TX9', 'Acme Industries', 'Lakeside Inn', 'Hotel', 'Pune', 'Maharashtra', 'E9', 'New Guest', '2026-10-30', '2026-10-31', '2026-11-02', 'M5', 6500, 4000, 2, 8000, 'Billed', 9440, 1440, 'INV-TX9']]});
-      check('overlapping report: says how many are already in and only the new one is imported', x.j.preview.added === 1 && x.j.preview.already === 1 && !x.j.preview.exact); }
+      check('overlapping report: says how many are already in and only the new one is imported', x.j.preview.added === 1 && x.j.preview.already === 1 && !x.j.preview.exact);
+      // matched by invoice number; same guest + same stay dates under another invoice is flagged
+      const twin = rows[0].slice(); twin[0] = 'TX1-B'; twin[19] = 'INV-OTHER';   // same guest and dates as TX1, new booking code and invoice
+      x = await A('tx/preview', {client_id: acme, header: H, rows: [twin]});
+      check('same guest and stay dates under a different invoice is flagged as a possible duplicate', x.j.preview.added === 1 && x.j.preview.same_stay_count === 1 && x.j.preview.same_stay[0].where === 'portal' && x.j.preview.same_stay[0].invoices.includes('INV-TX1'));
+      const recode = rows[0].slice(); recode[0] = 'NEW-BOOKING-CODE';   // same invoice, different booking code -> same booking (invoice is the key)
+      x = await A('tx/preview', {client_id: acme, header: H, rows: [recode]});
+      check('a row is matched by its invoice number, not its booking code', x.j.preview.added === 0 && x.j.preview.changed === 1);
+      const noInv = rows[3].slice(); noInv[19] = ''; noInv[0] = 'ONLY-BC';
+      x = await A('tx/preview', {client_id: acme, header: H, rows: [twin, twin.map((v, i) => i === 19 ? 'INV-THIRD' : v), noInv]});
+      check('within the file: same guest and dates twice is flagged; a row without invoice falls back to booking code and is noted', x.j.preview.same_stay.some((s) => s.where === 'file') && x.j.preview.problems.some((p) => /No Invoice No/.test(p.issue)));
+      x = await A('tx/uploads', {client_id: acme}); check('upload history keeps the original file of each upload', x.j.uploads[0].has_file === 1 || x.j.uploads[0].has_file === true);
+      x = await A('tx/file', {client_id: acme, id: x.j.uploads[0].id}); check('the original file can be downloaded again', x.status === 200 && x.j.name === 'week1.xlsx' && x.j.data === 'UEsDBBQ='); }
     rows[1][16] = 'Cancelled'; rows[2][16] = 'Cancelled';
     x = await A('tx/import', {client_id: acme, header: H, rows, filename: 'week1-again.xlsx'}); const up2 = x.j.upload_id;
     check('re-upload updates by Booking Code (no duplicates): 1 changed, 2 unchanged', x.j.result.changed === 1 && x.j.result.unchanged === 2 && x.j.result.added === 0 && DB.raw.prepare('SELECT COUNT(*) n FROM transactions WHERE client_id = ?').get(acme).n === 3);
     check('only the latest upload can be undone', (await A('tx/undo', {client_id: acme, id: up1})).status === 400);
-    x = await A('tx/undo', {client_id: acme, id: up2}); const st = JSON.parse(DB.raw.prepare("SELECT row FROM transactions WHERE code = 'TX2'").get().row).Status;
+    x = await A('tx/undo', {client_id: acme, id: up2}); const st = JSON.parse(DB.raw.prepare("SELECT row FROM transactions WHERE code = 'INV-TX2'").get().row).Status;
     check('undo restores the earlier version', x.status === 200 && st === 'Billed');
     x = await A('tx/undo', {client_id: acme, id: up1}); check('undoing the first upload removes its bookings', x.status === 200 && DB.raw.prepare('SELECT COUNT(*) n FROM transactions WHERE client_id = ?').get(acme).n === 0);
     x = await A('tx/uploads', {client_id: acme}); check('upload history lists both uploads as undone', x.j.uploads.length === 2 && x.j.uploads.every((u) => u.undone));

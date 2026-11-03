@@ -936,11 +936,26 @@ const hxDrawer = (r) => {
     ['Travel request', 'file-text', ['Travel Req ID', 'Concur Request Date', 'Purpose of Travel', 'Approving Manager', 'WBS/ID or Cost Code', 'Request Policy']],
     ['Company', 'building-2', ['Entity Name', 'Remarks']]];
   const LBL = {'Employee Email ID': 'Email', 'Contact Number': 'Phone', 'Net Amount Charged': 'Net amount', 'Cancellation Charges Total': 'Cancellation charges', 'Transaction Fee GST Charged': 'Fee GST', 'Tariff Payment Mode': 'Payment', 'WBS/ID or Cost Code': 'WBS / cost code', 'Travel Req ID': 'TR ID', 'Emp Code': 'Employee code', 'Entity Name': 'Billed entity'};
+  // section shortcuts: show what is further down, jump to it, and light up the section being read
+  const jump = h('div', 'sticky -top-5 z-10 -mx-5 px-5 py-2.5 bg-white/95 backdrop-blur border-b border-zuna-100 flex flex-nowrap gap-1.5 overflow-x-auto [scrollbar-width:none]'); jump.setAttribute('aria-label', 'Sections'); w.appendChild(jump);
+  const secs = [];
   SECT.forEach(([title, ic2, cols]) => { const items = cols.filter(has); if (!items.length) return;
-    const sec = h('section', 'rounded-2xl ring-1 ring-zuna-100 bg-white overflow-hidden'); const hd = h('div', 'flex items-center gap-2 px-4 py-2.5 bg-zuna-50/70 border-b border-zuna-100 text-xs font-bold text-zuna-700'); hd.append(icon(ic2, 'w-4 h-4 text-mint-600'), document.createTextNode(title)); sec.appendChild(hd);
+    const sec = h('section', 'rounded-2xl ring-1 ring-zuna-100 bg-white overflow-hidden scroll-mt-16');
+    const chip = h('button', 'inline-flex items-center gap-1 rounded-full px-2 py-1 text-xs font-semibold ring-1 ring-zuna-100 text-zuna-600 bg-white hover:ring-mint-500 transition-colors'); chip.type = 'button'; chip.classList.add('shrink-0', 'whitespace-nowrap'); chip.append(icon(ic2, 'w-3.5 h-3.5'), document.createTextNode(title === 'Travel request' ? 'Travel' : title));
+    chip.onclick = () => { const d = $('#dBody'); d.scrollTo({top: sec.offsetTop - jump.offsetHeight - 8, behavior: 'smooth'}); }; jump.appendChild(chip); secs.push([sec, chip]); const hd = h('div', 'flex items-center gap-2 px-4 py-2.5 bg-zuna-50/70 border-b border-zuna-100 text-xs font-bold text-zuna-700'); hd.append(icon(ic2, 'w-4 h-4 text-mint-600'), document.createTextNode(title)); sec.appendChild(hd);
     const dl = h('dl', 'divide-y divide-zuna-50'); items.forEach((c) => { const row = h('div', 'grid grid-cols-[130px_minmax(0,1fr)] gap-3 px-4 py-2 text-sm'); const v = /Date$/.test(c) ? dt(c) : /Tariff|Amount|Charges|Fee/.test(c) && c !== 'Tariff Payment Mode' ? money(r[c]) : String(r[c]);
       row.append(h('dt', 'text-zuna-500', LBL[c] || c), h('dd', 'font-medium break-words', v)); dl.appendChild(row); }); sec.appendChild(dl); w.appendChild(sec); });
-  openDrawer(r['Guest Name'] || 'Booking', [r.Grade, r['Emp Code'] ? 'Emp ' + r['Emp Code'] : ''].filter(Boolean).join(' · '), w); };
+  // "more below" hint: a soft fade with a button, gone once the end is reached
+  const more = h('div', 'sticky -bottom-5 z-10 -mx-5 -mb-5 pt-10 pb-4 flex justify-center pointer-events-none bg-gradient-to-t from-white via-white/90 to-transparent transition-opacity');
+  const mb = h('button', 'pointer-events-auto inline-flex items-center gap-1.5 rounded-full bg-zuna-900 text-white px-3.5 py-1.5 text-xs font-semibold shadow-lg hover:bg-zuna-800'); mb.type = 'button'; mb.append(document.createTextNode('More details'), icon('chevron-down', 'w-3.5 h-3.5'));
+  mb.onclick = () => { const d = $('#dBody'); d.scrollBy({top: d.clientHeight * 0.7, behavior: 'smooth'}); }; more.appendChild(mb); w.appendChild(more);
+  openDrawer(r['Guest Name'] || 'Booking', [r.Grade, r['Emp Code'] ? 'Emp ' + r['Emp Code'] : ''].filter(Boolean).join(' · '), w);
+  const d = $('#dBody'); d.scrollTop = 0;
+  const spy = () => { if (!w.isConnected) { d.removeEventListener('scroll', spy); return; }
+    const end = d.scrollTop + d.clientHeight >= d.scrollHeight - 12; more.style.opacity = end ? '0' : '1'; mb.tabIndex = end ? -1 : 0;
+    const y = d.scrollTop + jump.offsetHeight + 24; let cur = secs[0]; secs.forEach((x) => { if (x[0].offsetTop <= y) cur = x; }); if (end) cur = secs[secs.length - 1];
+    secs.forEach(([, c]) => { const on = cur && c === cur[1] && d.scrollTop > 40; c.classList.toggle('!bg-zuna-900', on); c.classList.toggle('!text-white', on); c.classList.toggle('!ring-zuna-900', on); }); };
+  d.addEventListener('scroll', spy, {passive: true}); requestAnimationFrame(spy); };
 const paintHotels = () => {
   hxBar(); const all = HX.rows || [], rows = hxFiltered();
   const uniq = (k) => [...new Set(all.map((r) => r[k]).filter(Boolean))].sort();

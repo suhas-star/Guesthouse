@@ -176,7 +176,12 @@ check('old host redirects to PRIMARY_HOST', r.status === 301 && r.headers.get('l
     await A('booking/delete', {client_id: acme, guest: 'Neha Iyer', check_in: '2026-11-04'}); }
   x = await A('client', {id: acme, name: 'Acme', legal_name: 'Acme Industries Limited', grades: ['E1', 'E2']});
   { const pg = await (await call('/', {cookie: asha})).text(); const dd = JSON.parse(pg.match(/window\.__LTMGH_DATA = (.*?);\nconst REPORT_DATE/s)[1]);
-    check('client company name (for the GH Report) reaches the dashboard', dd.client.legal_name === 'Acme Industries Limited'); }
+    check('client company name (for the GH Report) reaches the dashboard', dd.client.legal_name === 'Acme Industries Limited');
+    DB.raw.prepare("INSERT INTO datasets (id, json, updated_at) VALUES (?, ?, '2026-11-01')").run('policy:' + acme, JSON.stringify({hotel_caps: [{group: 'L1-L8', zone: 'Zone 1', hotel_per_night: 6500}, {group: 'E1 & above', zone: 'Mumbai', hotel_per_night: 10000}], city_zones: [{city: 'Pune', zone: 'Zone 1'}, {city: 'All other cities in India', zone: 'Zone 2'}]}));
+    const pg2 = await (await call('/', {cookie: asha})).text(); const d2 = JSON.parse(pg2.match(/window\.__LTMGH_DATA = (.*?);\nconst REPORT_DATE/s)[1]);
+    check('policy caps are not sent to users without hotel access', !d2.policy);
+    const pg3 = await (await call('/', {cookie: admin})).text(); const d3 = JSON.parse(pg3.match(/window\.__LTMGH_DATA = (.*?);\nconst REPORT_DATE/s)[1]);
+    check('policy caps (for the consolidated report) reach users with hotel access', d3.policy && d3.policy.caps.length === 2 && d3.policy.zones.length === 1 && d3.policy.zones[0][0] === 'Pune'); }
   // client admins
   x = await A('user', {client_id: acme, name: 'Meera Nair', email: 'meera@acme.example', role: 'client_admin'});
   const meera = (await call('/api/login', {method: 'POST', body: {email: 'meera@acme.example', password: x.j.password}})).headers.get('set-cookie').split(';')[0];

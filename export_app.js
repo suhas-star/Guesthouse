@@ -338,13 +338,13 @@
   const dl = (f) => { const url = URL.createObjectURL(f.data), a = document.createElement('a'); a.href = url; a.download = f.filename; document.body.appendChild(a); a.click(); a.remove(); setTimeout(() => URL.revokeObjectURL(url), 4000); L.toast('Downloading ' + f.filename); };
   L.weeklyReport = weeklyReport;
   // hotel bookings: the filtered rows in the transaction report's own column layout
-  L.txExcel = (cols, rows, filename) => { const cells = [];
+  L.txExcel = (cols, rows, filename, sheet = 'Hotel bookings') => { const cells = [];
     cols.forEach((c, i) => cells.push({r: 1, c: i, v: c, s: 3}));
     rows.forEach((r, k) => cols.forEach((c, i) => { let v = r[c]; if (v === '' || v == null) return;
       if (/Date$/.test(c) && /^\d{4}-\d{2}-\d{2}$/.test(v)) v = DMY(v);
       cells.push({r: k + 2, c: i, v, s: typeof v === 'number' && !Number.isInteger(v) ? 4 : 0}); }));
     const widths = cols.map((c) => /Guest|Property Name|Manager|Email|Purpose|Payment|WBS/.test(c) ? 28 : /Date/.test(c) ? 13 : 15);
-    dl({filename, data: sheetZip('Hotel bookings', cells, [], widths, {x: 0, y: 1})}); };
+    dl({filename, data: sheetZip(sheet, cells, [], widths, {x: 0, y: 1})}); };
   // one guest house -> Excel; all guest houses -> zip folder of the individual Excel files
   const ghReport = async (from, to, which, kind) => {
     const sel = Array.isArray(which) ? which : which === '*' ? L.props.filter((x) => +x.rooms > 0).map((x) => x.property) : [which];

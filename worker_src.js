@@ -867,6 +867,10 @@ async function dashboard(env, user, url) {
     data.bookings = (data.bookings || []).filter((b) => names.has(b.property));
     data.client = {id: client.id, name: client.name, legal_name: client.legal_name || "", logo: client.logo_file ? "/files/" + client.logo_file : ""};
     if (user.admin) data.clients = clients.map((c) => ({id: c.id, name: c.name}));
+    if (user.tx) {   // travel policy caps (hotel rate per night by grade group and city zone) for the consolidated report's Eligibility column
+      const pol = await env.DB.prepare("SELECT json FROM datasets WHERE id = ?").bind("policy:" + client.id).first();
+      if (pol) { const P = jparse(pol.json, {}); data.policy = {caps: (P.hotel_caps || []).map((c) => ({group: c.group, zone: c.zone, cap: c.hotel_per_night})), zones: (P.city_zones || []).filter((z) => !/other/i.test(z.city)).map((z) => [z.city, z.zone])}; }
+    }
     if (user.manager && !user.admin) data.users = await clientUsers(env, client.id);   // Users & access view, shown without a page load
   }
   const payload = JSON.stringify(data).replace(/</g, "\\u003c");

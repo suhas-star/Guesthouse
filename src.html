@@ -218,7 +218,7 @@ if(document.readyState!=='loading')setTimeout(hide,150);else document.addEventLi
         <div class="card">
           <div class="card-h">
             <div><h2 class="card-t">Hotel bookings</h2><p class="card-s" id="hxSub">Click a booking for full details</p></div>
-            <div class="ml-auto"><button type="button" class="btn-primary" id="hxXlsx"><i data-i="download" class="w-4 h-4"></i>Excel</button></div>
+            <div class="ml-auto flex flex-wrap gap-2"><button type="button" class="btn-primary" id="hxCons"><i data-i="file-spreadsheet" class="w-4 h-4"></i><span id="hxConsName">Consolidated report</span></button><button type="button" class="btn-primary" id="hxXlsx"><i data-i="download" class="w-4 h-4"></i>Excel</button></div>
           </div>
           <div id="hxBar" class="px-5 py-3 flex flex-wrap items-center gap-2 border-b border-zuna-50"></div>
           <div class="overflow-x-auto"><table class="w-full text-sm"><thead><tr id="hxHead" class="text-left text-xs font-semibold text-zuna-500 bg-zuna-50/70"></tr></thead><tbody id="hxBody" class="divide-y divide-zuna-50"></tbody></table></div>
@@ -1033,6 +1033,61 @@ $('#hxXlsx').onclick = () => { const rows = hxFiltered(); if (!rows.length) { to
   const {k, dir} = HX.sort; rows.sort((a, b) => String(a[k] || '').localeCompare(String(b[k] || ''), undefined, {numeric: true}) * dir);
   const tag = [HX.booked ? 'Booked_' + HX.booked.join('_to_') : '', HX.checkout ? 'Checkout_' + HX.checkout.join('_to_') : ''].filter(Boolean).join('_') || 'All';
   window.__ltm.txExcel(HX.cols, rows, ((DATA.client && DATA.client.name) || 'Client').replace(/[^A-Za-z0-9]+/g, '_') + '_Hotel_Bookings_' + tag + '.xlsx'); };
+
+/* ---------- CONSOLIDATED REPORT: guest house stays + hotel bookings, one sheet in the transaction report layout, by check-out date ---------- */
+const CONS_COLS = ['Booking Code', 'Entity Name', 'Property Name', 'Property Category', 'City', 'State', 'Emp Code', 'Guest Name', 'Booked Date', 'Check-In Date', 'Check-Out Date', 'Designation', 'Grade', 'Eligibility Criteria', 'Tariff Per Day', 'Stay Days', 'Total Tariff', 'Taxes', 'Tariff Payment Mode', 'Room Type', 'Booking Level', 'Occupancy', 'Status', 'Net Amount Charged', 'GST Charges', 'Cancellation Charges Total', 'Transaction Fee', 'Transaction Fee GST Charged', 'Invoice No', 'WBS/ID or Cost Code', 'Concur Request Date', 'Purpose of Travel', 'Travel Req ID', 'Base Location', 'Approving Manager', 'Request Policy', 'Employee Email ID', 'Contact Number', 'Remarks'];
+const consName = () => ((DATA.client && DATA.client.name) || 'LTM') + ' Consolidated report';
+// hotel rate cap from the client's travel policy: grade group (E grades vs L1-L8) x city zone; Mumbai has its own cap for E grades
+const policyCap = (grade, city) => { const P = DATA.policy; if (!P || !grade) return ''; const g = String(grade).trim();
+  const grp = /^E\d/i.test(g) ? 'E1 & above' : /^[PML]\d/i.test(g) ? 'L1-L8' : null; if (!grp) return '';
+  const c = String(city || '').trim().toLowerCase(), z = (P.zones.find(([n]) => n.toLowerCase() === c) || [])[1] || 'Zone 2';
+  const zone = grp === 'E1 & above' && c === 'mumbai' ? 'Mumbai' : z; const hit = P.caps.find((x) => x.group === grp && x.zone === zone); return hit ? hit.cap : ''; };
+// a guest house stay in the same 39 columns (no tariff: company guest house, billed to the client)
+const ghConsRow = (b) => { const p = props.find((x) => x.property === b.property) || {}, entity = (DATA.client && (DATA.client.legal_name || DATA.client.name)) || '';
+  const types = p.room_types || [], rt = types.length === 1 ? types[0].name : (types.find((t) => String(t.room_nos || '').includes(String(b.room || '').replace(/^.*-/, ''))) || {}).name;
+  return {'Booking Code': '', 'Entity Name': entity, 'Property Name': b.property, 'Property Category': 'Guest House', City: p.city || '', State: p.state || '', 'Emp Code': '', 'Guest Name': cleanName(b.guest), 'Booked Date': '',
+    'Check-In Date': b.check_in, 'Check-Out Date': b.check_out, Designation: '', Grade: b.grade && b.grade !== 'Not stated' ? b.grade : '', 'Eligibility Criteria': policyCap(b.grade, p.city), 'Tariff Per Day': 0, 'Stay Days': +b.nights || 0, 'Total Tariff': 0,
+    Taxes: '+ Taxes', 'Tariff Payment Mode': 'Bill to ' + (entity || 'client'), 'Room Type': [hasRoom(b) ? 'Room ' + b.room : '', rt && !/^room\b/i.test(rt) ? rt : ''].filter(Boolean).join(' - '), 'Booking Level': 'Room', Occupancy: b._occ || b.occupancy || 'Single', Status: 'Unbilled',
+    'Net Amount Charged': 0, 'GST Charges': 0, 'Cancellation Charges Total': 0, 'Transaction Fee': '', 'Transaction Fee GST Charged': '', 'Invoice No': '', 'WBS/ID or Cost Code': '', 'Concur Request Date': '', 'Purpose of Travel': '', 'Travel Req ID': b.concur_tr || '',
+    'Base Location': b.base && b.base !== 'Not stated' ? b.base : '', 'Approving Manager': '', 'Request Policy': '', 'Employee Email ID': '', 'Contact Number': '', Remarks: b.note || ''}; };
+const openConsolidated = () => {
+  const f = h('div', 'space-y-4'); const lw = addDays(monday(today), -7);
+  f.appendChild(h('p', 'text-sm text-zuna-600', 'Guest house stays and hotel bookings together in one Excel sheet, in the transaction report layout. Stays are picked by check-out date.'));
+  const g = h('div', 'grid grid-cols-2 gap-3'), fld = (l, v) => { const w = h('label', 'block'); w.appendChild(h('span', 'block text-xs font-semibold text-zuna-500 mb-1', l)); const i = h('input', 'w-full rounded-xl bg-white ring-1 ring-zuna-100 px-3 py-2.5 text-sm focus:outline-none focus:ring-2 focus:ring-mint-500'); i.type = 'date'; i.value = v; w.appendChild(i); g.appendChild(w); return i; };
+  const a = fld('Check-out from', lw), z = fld('Check-out to', addDays(lw, 6)); f.appendChild(g);
+  const mS = (d) => d.slice(0, 8) + '01', mE = (s) => { const d = D(s); return iso(new Date(Date.UTC(d.getUTCFullYear(), d.getUTCMonth() + 1, 0))); }, pm = (() => { const d = D(today); return iso(new Date(Date.UTC(d.getUTCFullYear(), d.getUTCMonth() - 1, 1))); })();
+  const q = h('div', 'flex flex-wrap gap-1.5'); [['Last week', lw, addDays(lw, 6)], ['This week', monday(today), addDays(monday(today), 6)], ['Last month', pm, mE(pm)], ['This month', mS(today), mE(today)]].forEach(([l, x, y]) => {
+    const c = h('button', 'rounded-lg px-2.5 py-1 text-xs font-semibold bg-zuna-50 text-zuna-700 ring-1 ring-zuna-100 hover:ring-mint-500', l); c.type = 'button'; c.onclick = () => { a.value = x; z.value = y; refresh(); }; q.appendChild(c); }); f.appendChild(q);
+  // what goes in
+  const inc = h('div', 'space-y-2'); inc.appendChild(h('span', 'block text-xs font-semibold text-zuna-500', 'Include')); f.appendChild(inc);
+  const opt = (l, ic) => { const r = h('label', 'flex items-center gap-3 rounded-xl ring-1 ring-zuna-100 bg-white px-3 py-2.5 cursor-pointer hover:ring-mint-500'); const cb = h('input', 'peer sr-only'); cb.type = 'checkbox'; cb.checked = true;
+    const tick = h('span', 'grid place-items-center w-5 h-5 shrink-0 rounded-md ring-1 ring-zuna-200 bg-white text-transparent peer-checked:bg-mint-500 peer-checked:ring-mint-500 peer-checked:text-zuna-900'); tick.appendChild(icon('check', 'w-3.5 h-3.5'));
+    const t = h('span', 'flex-1 min-w-0'); t.appendChild(h('span', 'block text-sm font-semibold', l)); const n = h('span', 'block text-xs text-zuna-500', '…'); t.appendChild(n); const i = h('span', 'grid place-items-center w-8 h-8 rounded-lg bg-zuna-50 text-zuna-600'); i.appendChild(icon(ic, 'w-4 h-4'));
+    r.append(cb, tick, t, i); inc.appendChild(r); cb.onchange = paint; return [cb, n]; };
+  const [ghCb, ghN] = opt('Guest house stays', 'building-2'), [htCb, htN] = opt('Hotel bookings', 'hotel');
+  const sum = h('div', 'rounded-xl bg-mint-50 ring-1 ring-mint-200 px-3 py-2 text-sm font-semibold text-zuna-900 flex items-center gap-2'); f.appendChild(sum);
+  const err = h('p', 'hidden text-xs font-semibold text-rose-600'); f.appendChild(err);
+  let ghRows = [], htRows = [], loading = false, ticket = 0;
+  function paint() { const ok = a.value && z.value && z.value >= a.value;
+    ghN.textContent = ok ? ghRows.length + (ghRows.length === 1 ? ' stay' : ' stays') + ' checking out' : '—'; htN.textContent = loading ? 'Loading…' : ok ? htRows.length + (htRows.length === 1 ? ' booking' : ' bookings') + ' checking out' : '—';
+    const n = (ghCb.checked ? ghRows.length : 0) + (htCb.checked ? htRows.length : 0);
+    sum.replaceChildren(icon('log-out', 'w-4 h-4 text-mint-700 shrink-0'), document.createTextNode(ok ? 'Check-out ' + (a.value === z.value ? fFull(a.value) : fShort(a.value) + ' – ' + fLong(z.value)) + ' · ' + n + ' rows' : 'Choose the check-out dates')); }
+  async function refresh() { err.classList.add('hidden'); if (!a.value || !z.value || z.value < a.value) { ghRows = htRows = []; paint(); return; }
+    ghRows = bookings.filter((b) => b.status === 'Confirmed' && b.check_out >= a.value && b.check_out <= z.value).sort((x, y) => x.check_out.localeCompare(y.check_out) || x.property.localeCompare(y.property)).map(ghConsRow);
+    loading = true; paint(); const my = ++ticket;
+    try { const r = await fetch('/api/tx', {method: 'POST', headers: {'content-type': 'application/json'}, credentials: 'same-origin', body: JSON.stringify({client_id: DATA.client ? DATA.client.id : null, checkout_from: a.value, checkout_to: z.value})});
+      const j = await r.json().catch(() => ({})); if (!r.ok) throw new Error(j.error || 'Could not load hotel bookings.'); if (my !== ticket) return; htRows = (j.rows || []).slice().sort((x, y) => String(x['Check-Out Date']).localeCompare(String(y['Check-Out Date'])) || String(x['Property Name']).localeCompare(String(y['Property Name']))); }
+    catch (e) { if (my !== ticket) return; htRows = []; err.textContent = e.message; err.classList.remove('hidden'); }
+    loading = false; paint(); }
+  a.addEventListener('change', refresh); z.addEventListener('change', refresh);
+  const go = h('button', 'btn-primary w-full justify-center !py-2.5 !text-sm'); go.append(icon('download', 'w-4 h-4'), document.createTextNode('Download Excel'));
+  go.onclick = () => { if (!a.value || !z.value || z.value < a.value) { err.textContent = 'Choose the check-out dates.'; err.classList.remove('hidden'); return; } if (loading) { toast('Still loading hotel bookings…'); return; }
+    const rows = [...(htCb.checked ? htRows : []), ...(ghCb.checked ? ghRows : [])]; if (!rows.length) { err.textContent = 'No stays check out on these dates.'; err.classList.remove('hidden'); return; }
+    const dmy = (s) => s.slice(8, 10) + '_' + s.slice(5, 7) + '_' + s.slice(0, 4);
+    window.__ltm.txExcel(CONS_COLS, rows, 'Consolidated_Datasheet-' + dmy(a.value) + '-' + dmy(z.value) + '.xlsx', 'Consolidated'); };
+  const dock = h('div', 'sticky -bottom-5 -mx-5 px-5 pt-3 pb-5 bg-white border-t border-zuna-100 shadow-[0_-10px_20px_-14px_rgba(18,0,90,.35)]'); dock.appendChild(go); f.appendChild(dock);
+  openDrawer(consName(), 'Guest houses and hotels · by check-out date', f); refresh(); };
+$('#hxCons').onclick = openConsolidated; $('#hxConsName').textContent = consName();
 
 /* ---------- routing ---------- */
 const TITLES = {overview: 'Overview', rack: 'Room rack', calendar: 'Night-wise availability', bookings: 'Stay register', hotels: 'Hotel bookings', houses: 'Guest house directory', users: 'Users & access'};

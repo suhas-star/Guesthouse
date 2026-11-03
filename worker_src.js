@@ -403,7 +403,7 @@ let schemaReady = false;
 async function ensureSchema(env) {
   if (schemaReady) return;
   for (const q of SCHEMA) await env.DB.prepare(q).run();
-  for (const c of ["users ADD COLUMN role TEXT", "users ADD COLUMN client_id INTEGER", "guesthouses ADD COLUMN state TEXT", "guesthouses ADD COLUMN country TEXT", "room_types ADD COLUMN bed_type TEXT", "clients ADD COLUMN legal_name TEXT", "users ADD COLUMN tx_access INTEGER"]) { try { await env.DB.prepare("ALTER TABLE " + c).run(); } catch (e) { /* exists */ } }
+  for (const c of ["users ADD COLUMN role TEXT", "users ADD COLUMN client_id INTEGER", "guesthouses ADD COLUMN state TEXT", "guesthouses ADD COLUMN country TEXT", "room_types ADD COLUMN bed_type TEXT", "clients ADD COLUMN legal_name TEXT", "users ADD COLUMN tx_access INTEGER", "tx_uploads ADD COLUMN hash TEXT"]) { try { await env.DB.prepare("ALTER TABLE " + c).run(); } catch (e) { /* exists */ } }
   schemaReady = true;
 }
 const DEFAULT_GRADES = "M1,M2,M3,M4,M5,M6,M7,M8,P1,P2,P3,E1,E2,E3,E4,E5,E6,E7";
@@ -688,10 +688,13 @@ async function txImport(env, cid, b, user, dry) {
   const p = txParse(b.header, b.rows); if (p.error) return json({error: p.error}, 400);
   if (!p.rows.length) return json({error: "No bookings found in this file."}, 400);
   if (p.rows.length > 20000) return json({error: "Upload up to 20,000 bookings at a time."}, 400);
-  const codes = p.rows.map((r) => String(r["Booking Code"]).trim()), old = new Map();
+  const codes = p.rows.map((r) => String(r["Booking Code"]).trim()), old = new Map(), fromUp = new Map();
   for (let i = 0; i < codes.length; i += 90) { const part = codes.slice(i, i + 90);
-    const {results} = await env.DB.prepare("SELECT code, row FROM transactions WHERE client_id = ? AND code IN (" + part.map(() => "?").join(",") + ")").bind(cid, ...part).all();
-    results.forEach((x) => old.set(x.code, x.row)); }
+    const {results} = await env.DB.prepare("SELECT code, row, upload_id FROM transactions WHERE client_id = ? AND code IN (" + part.map(() => "?").join(",") + ")").bind(cid, ...part).all();
+    results.forEach((x) => { old.set(x.code, x.row); fromUp.set(x.code, x.upload_id); }); }
+  // fingerprint of the file's content (row order ignored) to spot the very same report being uploaded again
+  const hash = await sha256(JSON.stringify(p.rows.slice().sort((x, y) => String(x["Booking Code"]).localeCompare(String(y["Booking Code"])))));
+  const exact = await env.DB.prepare("SELECT id, filename, at, by_email FROM tx_uploads WHERE client_id = ? AND hash = ? AND undone IS NULL ORDER BY id DESC LIMIT 1").bind(cid, hash).first();
   const added = [], changed = [], same = [];
   p.rows.forEach((r) => { const code = String(r["Booking Code"]).trim(), was = old.get(code), now = JSON.stringify(r);
     if (!was) added.push(r); else if (was === now) same.push(r); else { const o = JSON.parse(was); changed.push({r, prev: was, fields: TX_COLS.filter((c) => String(o[c] ?? "") !== String(r[c] ?? "")).map((c) => ({col: c, from: o[c] ?? "", to: r[c] ?? ""}))}); } });
@@ -702,9 +705,17 @@ async function txImport(env, cid, b, user, dry) {
     net: Math.round(sum("Net Amount Charged") * 100) / 100,
     changes: changed.slice(0, 25).map((c) => ({code: c.r["Booking Code"], guest: c.r["Guest Name"], fields: c.fields.slice(0, 6)})),
     sample_new: added.slice(0, 5).map((r) => ({code: r["Booking Code"], guest: r["Guest Name"], hotel: r["Property Name"], booked: r["Booked Date"]}))};
+  // which earlier uploads already brought in the bookings that are in this file
+  const known = new Map(); [...same, ...changed.map((c) => c.r)].forEach((r) => { const u = fromUp.get(String(r["Booking Code"]).trim()) || 0; known.set(u, (known.get(u) || 0) + 1); });
+  const ids = [...known.keys()].filter(Boolean), info = new Map();
+  if (ids.length) { const {results} = await env.DB.prepare("SELECT id, filename, at, by_email FROM tx_uploads WHERE id IN (" + ids.slice(0, 90).map(() => "?").join(",") + ")").bind(...ids.slice(0, 90)).all(); results.forEach((u) => info.set(u.id, u)); }
+  summary.already = same.length + changed.length;
+  summary.exact = exact ? {filename: exact.filename, at: exact.at, by: exact.by_email} : null;
+  summary.from = [...known.entries()].sort((a, b) => b[1] - a[1]).slice(0, 5).map(([id, n]) => { const u = info.get(id); return u ? {filename: u.filename, at: u.at, by: u.by_email, count: n} : {filename: "an earlier upload", at: null, by: null, count: n}; });
   if (dry) return json({ok: true, preview: summary});
+  if (!added.length && !changed.length) return json({error: "Nothing new in this file: every booking in it is already in the portal" + (exact ? " (same report as " + (exact.filename || "an earlier upload") + ")" : "") + "."}, 409);
   const now = new Date().toISOString();
-  const up = await env.DB.prepare("INSERT INTO tx_uploads (client_id, by_email, at, filename, rows, added, changed, unchanged) VALUES (?, ?, ?, ?, ?, ?, ?, ?)").bind(cid, user.email, now, clean(b.filename, 160), all.length, added.length, changed.length, same.length).run();
+  const up = await env.DB.prepare("INSERT INTO tx_uploads (client_id, by_email, at, filename, rows, added, changed, unchanged, hash) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)").bind(cid, user.email, now, clean(b.filename, 160), all.length, added.length, changed.length, same.length, hash).run();
   const uid = up.meta ? up.meta.last_row_id : up.lastInsertRowid, st = [];
   const put = (r) => env.DB.prepare("INSERT INTO transactions (client_id, code, booked, checkin, checkout, status, row, upload_id, updated) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?) ON CONFLICT(client_id, code) DO UPDATE SET booked = excluded.booked, checkin = excluded.checkin, checkout = excluded.checkout, status = excluded.status, row = excluded.row, upload_id = excluded.upload_id, updated = excluded.updated")
     .bind(cid, String(r["Booking Code"]).trim(), r["Booked Date"] || "", r["Check-In Date"] || "", r["Check-Out Date"] || "", r.Status || "", JSON.stringify(r), uid, now);

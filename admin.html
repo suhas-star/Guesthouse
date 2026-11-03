@@ -532,6 +532,16 @@ const renderTx = (D, c) => {
   const flag = (n, l, tone) => n ? h('span', 'zchip ' + tone, n + ' ' + l) : null;
   const showPreview = () => { const p = st.preview, f = st.file; out.replaceChildren(); if (!p) return;
     const hd = h('div', 'flex flex-wrap items-baseline gap-x-3 gap-y-1'); hd.append(h('p', 'font-bold', f.name), h('p', 'text-xs text-zuna-500', p.rows + ' bookings · booked ' + (p.booked_from === p.booked_to ? fD(p.booked_from) : fD(p.booked_from) + ' – ' + fD(p.booked_to)) + ' · net ' + rupee(p.net))); out.appendChild(hd);
+    // already uploaded? say so plainly, and from which earlier file
+    if (p.already) { const fresh = p.added + p.changed, allOld = !fresh, box = h('div', 'flex gap-3 rounded-xl p-3.5 ring-1 ' + (allOld ? 'bg-amber-50 ring-amber-200' : 'bg-zuna-50 ring-zuna-100'));
+      const ic = h('span', 'grid place-items-center w-8 h-8 rounded-lg shrink-0 ' + (allOld ? 'bg-amber-100 text-amber-700' : 'bg-white text-zuna-600 ring-1 ring-zuna-100')); ic.appendChild(icon(allOld ? 'triangle-alert' : 'file-spreadsheet', 'w-4 h-4')); box.appendChild(ic);
+      const m = h('div', 'min-w-0 text-sm space-y-1');
+      const when = (x) => x.at ? fDT(x.at) + (x.by ? ' by ' + x.by : '') : '';
+      if (p.exact) m.appendChild(h('p', 'font-bold text-amber-900', 'This exact report was already uploaded on ' + when(p.exact) + (p.exact.filename ? ' (' + p.exact.filename + ')' : '') + '.'));
+      else m.appendChild(h('p', 'font-bold ' + (allOld ? 'text-amber-900' : 'text-zuna-800'), allOld ? 'Every booking in this file is already in the portal.' : p.already + ' of ' + p.rows + ' bookings are already in the portal.'));
+      if (p.from && p.from.length) { const ul = h('ul', 'text-xs ' + (allOld ? 'text-amber-800' : 'text-zuna-600') + ' space-y-0.5'); p.from.forEach((x) => ul.appendChild(h('li', null, '• ' + x.count + ' from ' + x.filename + (x.at ? ', ' + when(x) : '')))); m.appendChild(ul); }
+      m.appendChild(h('p', 'text-xs ' + (allOld ? 'text-amber-800' : 'text-zuna-600'), allOld ? 'Nothing to import, and nothing will be duplicated.' : 'Only the ' + p.added + ' new and ' + p.changed + ' updated bookings will be imported; the rest are skipped, so nothing is duplicated.'));
+      box.appendChild(m); out.appendChild(box); }
     const tiles = h('div', 'grid grid-cols-2 sm:grid-cols-4 gap-2');
     tiles.append(tile(p.added, 'New bookings', 'bg-mint-50 ring-mint-200'), tile(p.changed, 'Updated', p.changed ? 'bg-amber-50 ring-amber-200' : ''), tile(p.unchanged, 'Already up to date'), tile(p.dup_same + p.dup_diff, 'Repeated in the file')); out.appendChild(tiles);
     const flags = h('div', 'flex flex-wrap gap-2'); [flag(p.over_policy, 'above policy cap', 'zchip-warn'), flag(p.cancelled, 'cancelled', 'zchip-muted'), flag(p.no_emp, 'without Emp Code', 'zchip-muted'), flag(p.problem_count, p.problem_count === 1 ? 'problem' : 'problems', 'zchip-bad')].filter(Boolean).forEach((x) => flags.appendChild(x));

@@ -211,6 +211,13 @@ check('old host redirects to PRIMARY_HOST', r.status === 301 && r.headers.get('l
     check('client admin gives a viewer access', (await M('user/access', {email: 'asha@acme.example', tx: true})).status === 200);
     x = await T(asha, {client_id: other}); check("viewer with access sees own client's bookings only", x.status === 200 && x.j.rows.length === 3);
     check("client admin cannot switch access for another client's user", (await M('user/access', {email: 'zed@other.example', tx: true})).status === 400);
+    { const shuffled = [rows[3], rows[0], rows[1]];   // the same report again, rows in another order
+      x = await A('tx/preview', {client_id: acme, header: H, rows: shuffled}); const pv2 = x.j.preview;
+      check('same report again: recognised as already uploaded, with the earlier file named', pv2.added === 0 && pv2.changed === 0 && pv2.already === 3 && pv2.exact && pv2.exact.filename === 'week1.xlsx' && pv2.from[0].count === 3 && pv2.from[0].filename === 'week1.xlsx');
+      x = await A('tx/import', {client_id: acme, header: H, rows: shuffled, filename: 'again.xlsx'});
+      check('importing a report with nothing new is refused and leaves no upload behind', x.status === 409 && DB.raw.prepare('SELECT COUNT(*) n FROM tx_uploads WHERE client_id = ?').get(acme).n === 1);
+      x = await A('tx/preview', {client_id: acme, header: H, rows: [rows[0], ['TX9', 'Acme Industries', 'Lakeside Inn', 'Hotel', 'Pune', 'Maharashtra', 'E9', 'New Guest', '2026-10-30', '2026-10-31', '2026-11-02', 'M5', 6500, 4000, 2, 8000, 'Billed', 9440, 1440, 'INV-TX9']]});
+      check('overlapping report: says how many are already in and only the new one is imported', x.j.preview.added === 1 && x.j.preview.already === 1 && !x.j.preview.exact); }
     rows[1][16] = 'Cancelled'; rows[2][16] = 'Cancelled';
     x = await A('tx/import', {client_id: acme, header: H, rows, filename: 'week1-again.xlsx'}); const up2 = x.j.upload_id;
     check('re-upload updates by Booking Code (no duplicates): 1 changed, 2 unchanged', x.j.result.changed === 1 && x.j.result.unchanged === 2 && x.j.result.added === 0 && DB.raw.prepare('SELECT COUNT(*) n FROM transactions WHERE client_id = ?').get(acme).n === 3);

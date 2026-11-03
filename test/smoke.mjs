@@ -237,7 +237,22 @@ check('old host redirects to PRIMARY_HOST', r.status === 301 && r.headers.get('l
       x = await A('tx/preview', {client_id: acme, header: H, rows: [twin, twin.map((v, i) => i === 19 ? 'INV-THIRD' : v), noInv]});
       check('within the file: same guest and dates twice is flagged; a row without invoice falls back to booking code and is noted', x.j.preview.same_stay.some((s) => s.where === 'file') && x.j.preview.problems.some((p) => /No Invoice No/.test(p.issue)));
       x = await A('tx/uploads', {client_id: acme}); check('upload history keeps the original file of each upload', x.j.uploads[0].has_file === 1 || x.j.uploads[0].has_file === true);
-      x = await A('tx/file', {client_id: acme, id: x.j.uploads[0].id}); check('the original file can be downloaded again', x.status === 200 && x.j.name === 'week1.xlsx' && x.j.data === 'UEsDBBQ='); }
+      x = await A('tx/file', {client_id: acme, id: x.j.uploads[0].id}); check('the original file can be downloaded again', x.status === 200 && x.j.name === 'week1.xlsx' && x.j.data === 'UEsDBBQ=');
+      // skip chosen duplicates, list stored bookings with duplicate groups, remove and restore
+      const before = DB.raw.prepare('SELECT COUNT(*) n FROM transactions WHERE client_id = ?').get(acme).n;
+      x = await A('tx/import', {client_id: acme, header: H, rows: [twin, rows[0]], filename: 'twin.xlsx', skip: ['INV-OTHER']});
+      check('a duplicate the team chose to skip is not imported', x.status === 409 && DB.raw.prepare('SELECT COUNT(*) n FROM transactions WHERE client_id = ?').get(acme).n === before);
+      x = await A('tx/import', {client_id: acme, header: H, rows: [twin], filename: 'twin.xlsx'}); const upTwin = x.j.upload_id;
+      x = await A('tx/stored', {client_id: acme}); const tw = x.j.rows.filter((r) => r.dup);
+      check('stored bookings list groups same guest + stay dates under different invoices', x.j.dup_groups === 1 && tw.length === 2 && tw.every((r) => r.dup === tw[0].dup) && tw.some((r) => r.invoice === 'INV-OTHER'));
+      x = await A('tx/remove', {client_id: acme, code: 'INV-OTHER'});
+      const T2 = async () => (await (await call('/api/tx', {method: 'POST', body: {}, cookie: meera})).json()).rows;
+      check('a removed booking disappears for the client', x.status === 200 && !(await T2()).some((r) => r['Invoice No'] === 'INV-OTHER'));
+      x = await A('tx/stored', {client_id: acme}); const rid = x.j.removed[0] && x.j.removed[0].id;
+      check('removed bookings are listed (kept for restore)', x.j.removed.length === 1 && x.j.removed[0].invoice === 'INV-OTHER' && x.j.dup_groups === 0);
+      x = await A('tx/restore', {client_id: acme, id: rid}); check('a removed booking can be restored', x.status === 200 && (await T2()).some((r) => r['Invoice No'] === 'INV-OTHER'));
+      check('restoring twice is refused', (await A('tx/restore', {client_id: acme, id: rid})).status === 404);
+      await A('tx/undo', {client_id: acme, id: upTwin}); }
     rows[1][16] = 'Cancelled'; rows[2][16] = 'Cancelled';
     x = await A('tx/import', {client_id: acme, header: H, rows, filename: 'week1-again.xlsx'}); const up2 = x.j.upload_id;
     check('re-upload updates by Booking Code (no duplicates): 1 changed, 2 unchanged', x.j.result.changed === 1 && x.j.result.unchanged === 2 && x.j.result.added === 0 && DB.raw.prepare('SELECT COUNT(*) n FROM transactions WHERE client_id = ?').get(acme).n === 3);
@@ -245,7 +260,7 @@ check('old host redirects to PRIMARY_HOST', r.status === 301 && r.headers.get('l
     x = await A('tx/undo', {client_id: acme, id: up2}); const st = JSON.parse(DB.raw.prepare("SELECT row FROM transactions WHERE code = 'INV-TX2'").get().row).Status;
     check('undo restores the earlier version', x.status === 200 && st === 'Billed');
     x = await A('tx/undo', {client_id: acme, id: up1}); check('undoing the first upload removes its bookings', x.status === 200 && DB.raw.prepare('SELECT COUNT(*) n FROM transactions WHERE client_id = ?').get(acme).n === 0);
-    x = await A('tx/uploads', {client_id: acme}); check('upload history lists both uploads as undone', x.j.uploads.length === 2 && x.j.uploads.every((u) => u.undone));
+    x = await A('tx/uploads', {client_id: acme}); check('upload history lists every upload as undone', x.j.uploads.length === 3 && x.j.uploads.every((u) => u.undone));
     await M('user/access', {email: 'asha@acme.example', tx: false}); check('access can be switched off again', (await T(asha)).status === 403); }
   check('client admin cannot use the Zuna admin API', (await call('/api/admin/state', {method: 'POST', body: {}, cookie: meera})).status === 403);
   { const rr = await call('/manage', {cookie: meera}); check('/manage opens Users & access inside the dashboard', rr.status === 302 && rr.headers.get('location').endsWith('/#users')); }

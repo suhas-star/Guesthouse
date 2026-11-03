@@ -553,17 +553,23 @@ const renderTx = (D, c) => {
     // possible duplicates: same guest name and stay dates under a different invoice
     if (p.same_stay && p.same_stay.length) { const box = h('div', 'rounded-xl ring-1 ring-amber-200 bg-amber-50/70 p-3 space-y-1.5');
       const t = h('p', 'flex items-center gap-1.5 text-xs font-bold text-amber-900'); t.append(icon('triangle-alert', 'w-3.5 h-3.5'), document.createTextNode('Possible duplicates: same guest and stay dates, different invoice (' + p.same_stay_count + ')')); box.appendChild(t);
-      p.same_stay.forEach((x) => { const r = h('div', 'text-xs text-amber-900'); r.appendChild(h('p', 'font-semibold', x.guest + ' · ' + fD(x.check_in) + ' → ' + fD(x.check_out)));
-        r.appendChild(h('p', 'text-amber-800 pl-3', x.where === 'portal' ? 'New invoice ' + x.invoices[0] + ' · already in the portal as invoice ' + x.invoices[1] : 'In this file ' + x.invoices.length + ' times: ' + x.invoices.join(', ')));
-        if (x.hotels && x.hotels.length) r.appendChild(h('p', 'text-amber-700 pl-3', x.hotels.join(' / '))); box.appendChild(r); });
-      box.appendChild(h('p', 'text-[11px] text-amber-800 pt-1', 'These will still be imported, since a guest can genuinely have two bookings. Check them with the hotel desk if they look wrong.')); out.appendChild(box); }
-    const n = p.added + p.changed, acts = h('div', 'flex flex-wrap justify-end gap-2 pt-1');
-    const cancel = h('button', 'btn', 'Cancel'); cancel.onclick = () => { st.file = st.preview = null; fi.value = ''; showPreview(); };
-    const go = ib('button', 'btn-primary', n ? 'Import ' + n + (n === 1 ? ' booking' : ' bookings') : 'Nothing new to import', 'upload'); go.disabled = !n;
+      st.skip = st.skip || new Set();
+      const skipBox = (inv, label) => { const l = h('label', 'inline-flex items-center gap-1.5 mr-3 mt-0.5 rounded-md px-1.5 py-0.5 cursor-pointer hover:bg-amber-100'); const cb = h('input', 'accent-rose-600'); cb.type = 'checkbox'; cb.checked = st.skip.has(inv);
+        cb.onchange = () => { cb.checked ? st.skip.add(inv) : st.skip.delete(inv); syncGo(); }; l.append(cb, h('span', 'font-semibold', label)); return l; };
+      p.same_stay.forEach((x) => { const r = h('div', 'text-xs text-amber-900 rounded-lg bg-white/60 ring-1 ring-amber-100 px-2.5 py-2'); r.appendChild(h('p', 'font-semibold', x.guest + ' · ' + fD(x.check_in) + ' → ' + fD(x.check_out)));
+        r.appendChild(h('p', 'text-amber-800', x.where === 'portal' ? 'New invoice ' + x.invoices[0] + ' · already in the portal as invoice ' + x.invoices[1] : 'In this file ' + x.invoices.length + ' times: ' + x.invoices.join(', ')));
+        if (x.hotels && x.hotels.length) r.appendChild(h('p', 'text-amber-700', x.hotels.join(' / ')));
+        const sk = h('div', 'mt-1 text-rose-700'); (x.where === 'portal' ? [x.invoices[0]] : x.invoices).forEach((inv) => sk.appendChild(skipBox(inv, 'Skip ' + inv))); r.appendChild(sk); box.appendChild(r); });
+      box.appendChild(h('p', 'text-[11px] text-amber-800 pt-1', 'Rows you tick are not imported. Unticked ones are imported, since a guest can genuinely have two bookings; you can still remove any booking later below.')); out.appendChild(box); }
+    const acts = h('div', 'flex flex-wrap justify-end gap-2 pt-1');
+    const cancel = h('button', 'btn', 'Cancel'); cancel.onclick = () => { st.file = st.preview = st.skip = null; fi.value = ''; showPreview(); };
+    const go = ib('button', 'btn-primary', '', 'upload');
+    function syncGo() { const k = st.skip ? st.skip.size : 0, n = p.added - k + p.changed; go.lastChild.textContent = n ? 'Import ' + n + (n === 1 ? ' booking' : ' bookings') + (k ? ' (' + k + ' skipped)' : '') : 'Nothing new to import'; go.disabled = !n; }
+    syncGo();
     go.onclick = async () => { go.disabled = true; const pr = progressRow(f.name); acts.before(pr.el);
       try { const b64 = await new Promise((res) => { const rd = new FileReader(); rd.onload = () => res(String(rd.result).split(',')[1] || ''); rd.onerror = () => res(''); rd.readAsDataURL(f.blob); });   // the original file is kept with the upload
-        const r = await apiUp('tx/import', {client_id: c.id, header: f.header, rows: f.rows, filename: f.name, file_b64: b64}, (x) => pr.set(x)); pr.done(true);
-        st.file = st.preview = null; st.hist = null; fi.value = ''; ZUI.celebrate('Report imported', r.result.added + ' new · ' + r.result.changed + ' updated'); showPreview(); loadHist(); } catch (er) { pr.done(false); toast(er.message, true); go.disabled = false; } };
+        const r = await apiUp('tx/import', {client_id: c.id, header: f.header, rows: f.rows, filename: f.name, file_b64: b64, skip: st.skip ? [...st.skip] : []}, (x) => pr.set(x)); pr.done(true);
+        st.file = st.preview = st.skip = null; st.hist = null; st.stored = null; fi.value = ''; loadStored(); ZUI.celebrate('Report imported', r.result.added + ' new · ' + r.result.changed + ' updated'); showPreview(); loadHist(); } catch (er) { pr.done(false); toast(er.message, true); go.disabled = false; } };
     acts.append(cancel, go); out.appendChild(acts); };
   const pick = async (F) => { if (!F) return; if (!/\.(xlsx|csv)$/i.test(F.name)) { toast('Choose an .xlsx or .csv file.', true); return; }
     out.replaceChildren(h('p', 'text-sm text-zuna-500', 'Checking ' + F.name + '…'));
@@ -605,6 +611,47 @@ const renderTx = (D, c) => {
     if (hs.length > 5) { const all = ib('button', 'btn w-full justify-center text-xs', 'View all ' + hs.length + ' uploads', 'file-spreadsheet'); all.onclick = allUploads; list.appendChild(all); } };
   const loadHist = async () => { try { st.hist = (await api('tx/uploads', {client_id: c.id})).uploads; } catch (er) { st.hist = []; } if (list.isConnected) paintHist(); };
   if (st.hist) paintHist(); else { list.appendChild(h('p', 'text-sm text-zuna-500', 'Loading…')); loadHist(); }
+  // every hotel booking stored for this client: search, possible duplicates, remove / restore
+  const sc = h('div', 'card mt-4 overflow-hidden'); D.appendChild(sc);
+  const sh = h('div', 'flex flex-wrap items-center gap-3 px-5 pt-5 pb-3'); const stt = h('div', 'min-w-0'); stt.append(h('p', 'text-sm font-bold', 'Bookings in the portal'), h('p', 'text-xs text-zuna-500', 'Everything uploaded so far. Removed bookings disappear for ' + c.name + ' straight away and can be restored.')); sh.appendChild(stt);
+  const tabs2 = h('div', 'flex gap-1 rounded-xl bg-zuna-50 p-1 ring-1 ring-zuna-100 ml-auto'); sh.appendChild(tabs2);
+  const sq = inp('', 'Search guest, invoice, hotel or employee code'); sq.type = 'search'; sq.classList.add('!w-72'); sh.appendChild(sq); sc.appendChild(sh);
+  const sbody = h('div', 'px-5 pb-5'); sc.appendChild(sbody);
+  st.view = st.view || 'all'; st.sst = st.sst || {sort: {k: 'stay', dir: -1}, page: 1};
+  const span2 = (a, b) => { if (!a || !b) return (a ? fD(a) : '?') + ' → ' + (b ? fD(b) : '?'); const x = fD(a), y = fD(b); return a.slice(0, 4) === b.slice(0, 4) ? x.replace(/\s\d{4}$/, '') + ' → ' + y : x + ' → ' + y; };   // 26 Oct → 27 Oct 2026
+  const money2 = (v) => '₹' + Number(v || 0).toLocaleString('en-IN', {maximumFractionDigits: 2});
+  const removeTx = async (r) => { if (!(await ZUI.confirm({title: 'Remove this booking?', message: [r.guest + ' · ' + r.hotel, fD(r.check_in) + ' → ' + fD(r.check_out) + ' · invoice ' + (r.invoice || r.code), c.name + ' stops seeing it straight away. You can restore it from Removed.'], ok: 'Remove booking', tone: 'danger', hold: true}))) return;
+    try { await api('tx/remove', {client_id: c.id, code: r.code}); toast('Booking removed · ' + (r.invoice || r.code)); loadStored(); } catch (er) { toast(er.message, true); } };
+  const restoreTx = async (r) => { try { await api('tx/restore', {client_id: c.id, id: r.id}); toast('Booking restored · ' + (r.invoice || r.code)); loadStored(); } catch (er) { toast(er.message, true); } };
+  const guestCell = (r) => { const w = h('div', 'min-w-0'); const n1 = h('p', 'font-semibold truncate max-w-[160px]', r.guest || '—'); n1.title = r.guest || ''; w.appendChild(n1); w.appendChild(h('p', 'text-[11px] text-zuna-500', r.emp ? 'Emp ' + r.emp : '')); return w; };
+  const paintStored = () => { const S3 = st.stored; tabs2.replaceChildren(); sbody.replaceChildren();
+    if (!S3) { sbody.appendChild(h('p', 'px-5 pb-5 text-sm text-zuna-500', 'Loading…')); return; }
+    const dupRows = S3.rows.filter((r) => r.dup);
+    [['all', 'All', S3.rows.length], ['dup', 'Possible duplicates', S3.dup_groups], ['removed', 'Removed', S3.removed.length]].forEach(([k, l, n]) => { const b = h('button', 'flex items-center gap-1.5 rounded-lg px-3 py-1.5 text-xs font-semibold transition-all ' + (st.view === k ? 'bg-zuna-900 text-white shadow' : 'text-zuna-600 hover:bg-white') + (k === 'dup' && n && st.view !== k ? ' !text-amber-700' : ''));
+      b.type = 'button'; b.append(document.createTextNode(l), h('span', 'rounded-full px-1.5 text-[11px] font-bold ' + (st.view === k ? 'bg-mint-500 text-zuna-900' : k === 'dup' && n ? 'bg-amber-100 text-amber-800' : 'bg-zuna-100 text-zuna-600'), String(n))); b.onclick = () => { st.view = k; st.sst = {sort: k === 'dup' ? {k: 'guest', dir: 1} : k === 'removed' ? {k: 'at', dir: -1} : {k: 'stay', dir: -1}, page: 1}; paintStored(); }; tabs2.appendChild(b); });
+    const q = sq.value.trim().toLowerCase(), match = (r) => !q || [r.guest, r.invoice, r.code, r.hotel, r.emp, r.booking_code].join(' ').toLowerCase().includes(q);
+    if (st.view === 'removed') {
+      const cols = [{k: 'guest', label: 'Guest', sort: (r) => r.guest.toLowerCase(), render: guestCell},
+        {k: 'hotel', label: 'Hotel', sort: (r) => r.hotel, render: (r) => h('p', 'truncate max-w-[220px]', r.hotel)},
+        {k: 'stay', label: 'Stay', sort: (r) => r.check_in, render: (r) => h('p', 'whitespace-nowrap', span2(r.check_in, r.check_out))},
+        {k: 'inv', label: 'Invoice', sort: (r) => r.invoice, render: (r) => h('p', 'font-medium whitespace-nowrap', r.invoice || r.code)},
+        {k: 'at', label: 'Removed', sort: (r) => r.at, render: (r) => [h('p', 'whitespace-nowrap', fDT(r.at)), h('p', 'text-[11px] text-zuna-500', r.by || '')]},
+        {k: 'act', label: '', actions: true, render: (r) => { const b = ib('button', 'btn !py-1 !px-2 text-xs text-mint-700', 'Restore', 'undo-2'); b.onclick = () => restoreTx(r); return b; }}];
+      sbody.appendChild(dataTable({cols, rows: S3.removed.filter(match), st: st.sst, noun: 'removed bookings', empty: 'Nothing has been removed.'})); return; }
+    const cols = [
+      {k: 'guest', label: st.view === 'dup' ? 'Group · guest' : 'Guest', sort: (r) => st.view === 'dup' ? String(r.dup).padStart(5, '0') + r.guest.toLowerCase() : r.guest.toLowerCase(), render: (r) => { const w = guestCell(r);
+        if (r.dup && st.view === 'dup') { const g = h('span', 'inline-grid place-items-center mr-1.5 min-w-6 h-5 px-1 rounded-md bg-amber-100 text-amber-800 text-[10px] font-bold align-middle', '#' + r.dup); g.title = 'Bookings with the same number are the same guest and stay dates'; w.firstChild.prepend(g); }
+        else if (r.dup) { const t = h('span', 'zchip zchip-warn mt-1', 'Same stay'); t.title = 'Another booking has the same guest and stay dates'; w.appendChild(t); } return w; }},
+      {k: 'hotel', label: 'Hotel', sort: (r) => r.hotel, render: (r) => { const t = h('p', 'truncate max-w-[150px]', r.hotel); t.title = r.hotel; return [t, h('p', 'text-[11px] text-zuna-500', r.city)]; }},
+      {k: 'stay', label: 'Stay', sort: (r) => r.check_in, render: (r) => [h('p', 'whitespace-nowrap', span2(r.check_in, r.check_out)), h('p', 'text-[11px] text-zuna-500', r.booked ? 'booked ' + fD(r.booked) : '')]},
+      {k: 'inv', label: 'Invoice', sort: (r) => r.invoice, render: (r) => { const w = h('div'); w.title = [r.booking_code ? 'Booking code ' + r.booking_code : '', r.file ? 'Uploaded in ' + r.file + (r.uploaded ? ', ' + fDT(r.uploaded) : '') : ''].filter(Boolean).join('\n'); w.append(h('p', 'font-medium whitespace-nowrap', r.invoice || '—'), h('p', 'text-[11px] text-zuna-500 whitespace-nowrap', r.uploaded ? 'uploaded ' + fD(r.uploaded.slice(0, 10)) : '')); return w; }},
+      {k: 'net', label: 'Net · status', sort: (r) => r.net, render: (r) => { const w = h('div', 'space-y-1'); w.append(h('p', 'whitespace-nowrap tabular-nums', money2(r.net)), h('span', 'zchip ' + (/cancel/i.test(r.status) ? 'zchip-bad' : ''), r.status || '—')); return w; }},
+      {k: 'act', label: '', actions: true, render: (r) => { const b = h('button', 'grid place-items-center w-8 h-8 rounded-lg ring-1 ring-zuna-100 text-rose-600 hover:bg-rose-50 hover:ring-rose-200'); b.type = 'button'; b.title = 'Remove this booking'; b.setAttribute('aria-label', 'Remove booking ' + (r.invoice || r.code)); b.appendChild(icon('trash-2', 'w-4 h-4')); b.onclick = () => removeTx(r); return b; }}];
+    const list2 = (st.view === 'dup' ? dupRows : S3.rows).filter(match);
+    sbody.appendChild(dataTable({cols, rows: list2, st: st.sst, noun: st.view === 'dup' ? 'bookings in duplicate groups' : 'bookings', empty: st.view === 'dup' ? 'No possible duplicates: no two bookings share the same guest and stay dates.' : 'No hotel bookings yet.'})); };
+  sq.oninput = () => { st.sst.page = 1; paintStored(); };
+  function loadStored() { api('tx/stored', {client_id: c.id}).then((r) => { st.stored = r; if (sc.isConnected) paintStored(); }).catch((er) => { sbody.replaceChildren(h('p', 'px-5 pb-5 text-sm text-rose-600', er.message)); }); }
+  if (st.stored) paintStored(); else { paintStored(); loadStored(); }
 };
 
 const renderUsers = (D, c) => {

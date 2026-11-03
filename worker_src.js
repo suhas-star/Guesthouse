@@ -399,6 +399,8 @@ const SCHEMA = [
   "CREATE TABLE IF NOT EXISTS tx_versions (upload_id INTEGER NOT NULL, code TEXT NOT NULL, prev TEXT)",
   "CREATE INDEX IF NOT EXISTS tx_versions_up ON tx_versions (upload_id)",
   "CREATE TABLE IF NOT EXISTS gh_codes (id INTEGER PRIMARY KEY AUTOINCREMENT, key TEXT UNIQUE NOT NULL, created TEXT)",
+  // hotel bookings removed by the Zuna team (kept so they can be restored)
+  "CREATE TABLE IF NOT EXISTS tx_removed (id INTEGER PRIMARY KEY AUTOINCREMENT, client_id INTEGER NOT NULL, code TEXT NOT NULL, row TEXT NOT NULL, upload_id INTEGER, by_email TEXT, at TEXT, restored TEXT)",
 ];
 let schemaReady = false;
 async function ensureSchema(env) {
@@ -694,6 +696,7 @@ function txParse(header, data) {
 const txFlags = (r) => { const t = +r["Tariff Per Day"] || 0, e = +String(r["Eligibility Criteria"]).replace(/,/g, "") || 0; return {over: !!(e && t > e), cancelled: /cancel/i.test(r.Status || "")}; };
 async function txImport(env, cid, b, user, dry) {
   const p = txParse(b.header, b.rows); if (p.error) return json({error: p.error}, 400);
+  if (Array.isArray(b.skip) && b.skip.length) { const sk = new Set(b.skip.map(String)); p.rows = p.rows.filter((r) => !sk.has(txKey(r))); }   // rows the team chose not to import
   if (!p.rows.length) return json({error: "No bookings found in this file."}, 400);
   if (p.rows.length > 20000) return json({error: "Upload up to 20,000 bookings at a time."}, 400);
   const codes = p.rows.map(txKey), old = new Map(), fromUp = new Map();
@@ -756,6 +759,32 @@ async function ghCodes(env, bookings) {
 }
 // every upload ever made for the client (newest first), with whether its original file is kept
 async function txUploads(env, cid) { const {results} = await env.DB.prepare("SELECT id, by_email, at, filename, rows, added, changed, unchanged, undone, file_id IS NOT NULL AS has_file FROM tx_uploads WHERE client_id = ? ORDER BY id DESC LIMIT 1000").bind(cid).all(); return results; }
+// all hotel bookings stored for a client (compact), with possible-duplicate groups: same guest and stay dates, different invoice
+async function txStored(env, cid) {
+  const {results} = await env.DB.prepare("SELECT t.code, t.row, t.upload_id, u.filename, u.at FROM transactions t LEFT JOIN tx_uploads u ON u.id = t.upload_id WHERE t.client_id = ? ORDER BY t.booked DESC, t.code").bind(cid).all();
+  const rows = results.map((x) => { const r = JSON.parse(x.row); return {code: x.code, guest: r["Guest Name"] || "", emp: r["Emp Code"] || "", hotel: r["Property Name"] || "", city: r.City || "", check_in: r["Check-In Date"] || "", check_out: r["Check-Out Date"] || "", booked: r["Booked Date"] || "", invoice: r["Invoice No"] || "", booking_code: r["Booking Code"] || "", net: +r["Net Amount Charged"] || 0, status: r.Status || "", file: x.filename || "", uploaded: x.at || "", stay: stayKey(r)}; });
+  const groups = new Map(); rows.forEach((r) => { if (!groups.has(r.stay)) groups.set(r.stay, []); groups.get(r.stay).push(r); });
+  let g = 0; for (const list of groups.values()) if (list.length > 1) { g++; list.forEach((r) => { r.dup = g; }); }
+  const {results: rem} = await env.DB.prepare("SELECT id, code, row, by_email, at FROM tx_removed WHERE client_id = ? AND restored IS NULL ORDER BY id DESC LIMIT 1000").bind(cid).all();
+  return json({rows: rows.map(({stay, ...r}) => r), dup_groups: g, removed: rem.map((x) => { const r = JSON.parse(x.row); return {id: x.id, code: x.code, guest: r["Guest Name"] || "", hotel: r["Property Name"] || "", check_in: r["Check-In Date"] || "", check_out: r["Check-Out Date"] || "", invoice: r["Invoice No"] || "", net: +r["Net Amount Charged"] || 0, by: x.by_email, at: x.at}; })});
+}
+// remove one hotel booking (it moves to tx_removed and can be restored)
+async function txRemove(env, cid, code, user) {
+  const t = await env.DB.prepare("SELECT code, row, upload_id FROM transactions WHERE client_id = ? AND code = ?").bind(cid, String(code || "")).first();
+  if (!t) return json({error: "That booking is not in the portal."}, 404);
+  await env.DB.batch([env.DB.prepare("INSERT INTO tx_removed (client_id, code, row, upload_id, by_email, at) VALUES (?, ?, ?, ?, ?, ?)").bind(cid, t.code, t.row, t.upload_id, user.email, new Date().toISOString()),
+    env.DB.prepare("DELETE FROM transactions WHERE client_id = ? AND code = ?").bind(cid, t.code)]);
+  return json({ok: true});
+}
+async function txRestore(env, cid, id) {
+  const x = await env.DB.prepare("SELECT code, row, upload_id FROM tx_removed WHERE id = ? AND client_id = ? AND restored IS NULL").bind(+id, cid).first();
+  if (!x) return json({error: "Nothing to restore."}, 404);
+  if (await env.DB.prepare("SELECT 1 FROM transactions WHERE client_id = ? AND code = ?").bind(cid, x.code).first()) return json({error: "A booking with this invoice was uploaded again since it was removed, so there is nothing to restore."}, 409);
+  const r = JSON.parse(x.row), now = new Date().toISOString();
+  await env.DB.batch([env.DB.prepare("INSERT INTO transactions (client_id, code, booked, checkin, checkout, status, row, upload_id, updated) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)").bind(cid, x.code, r["Booked Date"] || "", r["Check-In Date"] || "", r["Check-Out Date"] || "", r.Status || "", x.row, x.upload_id, now),
+    env.DB.prepare("UPDATE tx_removed SET restored = ? WHERE id = ?").bind(now, +id)]);
+  return json({ok: true});
+}
 async function txFile(env, cid, id) {
   const u = await env.DB.prepare("SELECT filename, file_id FROM tx_uploads WHERE id = ? AND client_id = ?").bind(+id, cid).first();
   if (!u || !u.file_id) return json({error: "The original file for this upload was not kept."}, 404);
@@ -884,6 +913,9 @@ async function adminApi(req, env, user, path) {
       case "/api/admin/tx/uploads": return json({uploads: await txUploads(env, +b.client_id)});
       case "/api/admin/tx/undo": return txUndo(env, +b.client_id, b.id);
       case "/api/admin/tx/file": return txFile(env, +b.client_id, b.id);
+      case "/api/admin/tx/stored": return txStored(env, +b.client_id);
+      case "/api/admin/tx/remove": return txRemove(env, +b.client_id, b.code, user);
+      case "/api/admin/tx/restore": return txRestore(env, +b.client_id, b.id);
       case "/api/admin/booking":
       case "/api/admin/booking/delete":
       case "/api/admin/booking/restore": {

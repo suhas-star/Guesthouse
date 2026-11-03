@@ -247,7 +247,8 @@ html.sb-anim .glass-zone .card, html.sb-anim header, html.sb-anim .backdrop-blur
 }
 
 /* sidebar footer actions: icon with its name underneath */
-.sb-act { display: flex; flex-direction: column; align-items: center; justify-content: center; gap: 3px; min-height: 44px; padding: 5px 2px; border-radius: 10px; color: #cdc5ec; font-size: 11px; font-weight: 600; line-height: 1.1; transition: background-color .15s, color .15s; }
+.sb-act { display: flex; flex-direction: column; align-items: center; justify-content: center; gap: 4px; min-height: 42px; padding: 6px 2px 5px; border-radius: 10px; color: #b9b0e0; font-size: 10px; font-weight: 500; letter-spacing: .01em; line-height: 1; transition: background-color .15s, color .15s; }
+.sb-act svg { width: 16px; height: 16px; stroke-width: 1.75; }
 .sb-act:hover { background: rgba(255,255,255,.1); color: #fff; }
 .sb-act[data-active] { background: #02C988; color: #12005A; }
 /* menu group headings (Guest houses / Hotels); a thin divider when the sidebar is narrow */

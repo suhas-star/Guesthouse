@@ -54,7 +54,7 @@ if(document.readyState!=='loading')setTimeout(hide,150);else document.addEventLi
       </div>
       <div id="sbActs" class="mt-2.5 grid grid-cols-3 gap-1 sb-actions">
         <button type="button" id="usersBtn" data-tip="Users & access" aria-label="Users & access" class="sb-act"><i data-i="users" class="w-[18px] h-[18px]"></i><span class="sb-label">Users</span></button>
-        <button type="button" id="themeBtn" data-tip="Dark mode" aria-label="Switch to dark mode" aria-pressed="false" class="sb-act"><i data-i="moon" class="w-[18px] h-[18px]"></i><span class="sb-label">Dark mode</span></button>
+        <button type="button" id="themeBtn" data-tip="Dark mode" aria-label="Switch to dark mode" aria-pressed="false" class="sb-act"><i data-i="moon" class="w-[18px] h-[18px]"></i><span class="sb-label">Theme</span></button>
         <button id="sbToggle" type="button" data-tip="Collapse sidebar" aria-label="Collapse sidebar" aria-expanded="true" class="sb-act hidden lg:flex"><i data-i="panel-left-close" class="w-[18px] h-[18px]"></i><span class="sb-label">Collapse</span></button>
         <a href="/logout" id="logoutBtn" data-tip="Log out" aria-label="Log out" class="sb-act"><i data-i="log-out" class="w-[18px] h-[18px]"></i><span class="sb-label">Log out</span></a>
       </div>
@@ -1049,7 +1049,7 @@ hydrateIcons();
   const endY = () => { if (y0 == null) return; y0 = null; dr.style.transition = ''; const fast = dy > 40 && dy / Math.max(1, Date.now() - t0) > .5;
     if (dy > 110 || fast) { closeDrawer(); setTimeout(() => dr.style.setProperty('--drag', '0px'), 350); } else dr.style.setProperty('--drag', '0px'); };
   ['#dHandle', '#dHead'].forEach((sel) => { const n = $(sel); n.addEventListener('touchstart', startY, {passive: true}); n.addEventListener('touchmove', moveY, {passive: false}); n.addEventListener('touchend', endY); n.addEventListener('touchcancel', endY); }); }
-{ const tb = $('#themeBtn'); const sync = () => { const dk = ZUI.theme.get() === 'dark'; tb.replaceChildren(icon(dk ? 'sun' : 'moon', 'w-[18px] h-[18px]'), h('span', 'sb-label', dk ? 'Light mode' : 'Dark mode')); tb.dataset.tip = dk ? 'Light mode' : 'Dark mode'; tb.setAttribute('aria-label', dk ? 'Switch to light mode' : 'Switch to dark mode'); tb.setAttribute('aria-pressed', dk ? 'true' : 'false'); };
+{ const tb = $('#themeBtn'); const sync = () => { const dk = ZUI.theme.get() === 'dark'; tb.replaceChildren(icon(dk ? 'sun' : 'moon', 'w-4 h-4'), h('span', 'sb-label', 'Theme')); tb.dataset.tip = dk ? 'Light mode' : 'Dark mode'; tb.setAttribute('aria-label', dk ? 'Switch to light mode' : 'Switch to dark mode'); tb.setAttribute('aria-pressed', dk ? 'true' : 'false'); };
   tb.onclick = () => { ZUI.theme.set(ZUI.theme.get() === 'dark' ? 'light' : 'dark'); sync(); render(); toast(ZUI.theme.get() === 'dark' ? 'Dark mode on' : 'Light mode on'); }; sync(); }
 if (USER.tx) { $('#navHotels').classList.remove('hidden'); $('#navHotelsH').classList.remove('hidden'); }   // hotel bookings: admins, client admins and users given access
 const hs = location.hash.slice(1); if (TITLES[hs] && (hs !== 'users' || (USER.manager && !USER.admin)) && (hs !== 'hotels' || USER.tx)) state.view = hs;

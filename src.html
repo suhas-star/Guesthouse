@@ -214,7 +214,7 @@ if(document.readyState!=='loading')setTimeout(hide,150);else document.addEventLi
 
       <!-- HOTEL BOOKINGS (transaction reports uploaded by the Zuna team) -->
       <section data-view="hotels" class="view hidden space-y-4">
-        <div class="glass-zone"><div id="hxKpis" class="grid grid-cols-2 md:grid-cols-3 2xl:grid-cols-6 gap-3"></div></div>
+        <div class="glass-zone"><div id="hxKpis" class="grid grid-cols-2 md:grid-cols-3 xl:grid-cols-6 gap-3"></div></div>
         <div class="card">
           <div class="card-h">
             <div><h2 class="card-t">Hotel bookings</h2><p class="card-s" id="hxSub">Click a booking for full details</p></div>
@@ -960,15 +960,16 @@ const paintHotels = () => {
     c.appendChild(h('p', 'text-xs truncate ' + (hero ? 'text-zuna-200' : warn ? 'text-amber-700 font-semibold' : 'text-zuna-400'), sub));
     if (spark && spark.length > 1) { const s = h('div', '-mx-1 -mb-2 mt-1'); c.appendChild(s); requestAnimationFrame(() => { charts[id] = sparkline(s, spark, MINT); }); }
     if (onClick) { c.classList.add('cursor-pointer'); c.tabIndex = 0; c.onclick = onClick; c.onkeydown = (e) => { if (e.key === 'Enter') onClick(); }; }
-    K.appendChild(c); };
+    K.appendChild(c); v.dataset.final = HX.loading && !HX.rows ? '…' : fmt(val); };
   const show = (st) => () => { HX.status = HX.status === st ? '' : st; HX.show = 50; paintHotels(); };
   const lakh = (v) => v >= 1e7 ? '₹' + (v / 1e7).toFixed(2) + ' Cr' : v >= 1e5 ? '₹' + (v / 1e5).toFixed(2) + ' L' : inr(v);   // big totals in lakh / crore so they fit the card
   card('hx1', 'Net spend', spend, lakh, inr(spend) + ' incl. GST', 'indian-rupee', byDay((r) => num(r['Net Amount Charged'])), null, true);
   card('hx2', 'Bookings', rows.length, int, live.length + ' active', 'list-checks', byDay(() => 1));
   card('hx3', 'Room nights', nights, int, 'excluding cancelled', 'bed-double');
-  card('hx4', 'Avg. tariff / night', nights ? tariff / nights : 0, inr, 'before tax', 'trending-up');
-  card('hx5', 'Above policy cap', over, int, over ? (HX.status === 'over' ? 'Showing these · clear →' : 'View these →') : 'All within cap', 'triangle-alert', null, over ? show('over') : null, false, over > 0);
+  card('hx4', 'Avg. tariff', nights ? tariff / nights : 0, inr, 'per night, before tax', 'trending-up');
+  card('hx5', 'Above cap', over, int, over ? (HX.status === 'over' ? 'Showing these · clear →' : 'View these →') : 'All within cap', 'triangle-alert', null, over ? show('over') : null, false, over > 0);
   card('hx6', 'Cancelled', canc, int, canc ? (HX.status === 'cancelled' ? 'Showing these · clear →' : 'View these →') : 'None', 'circle-x', null, canc ? show('cancelled') : null);
+  requestAnimationFrame(hxFitKpis);
   // table
   const hd = $('#hxHead'); if (!hd.childElementCount) HX_COLS.forEach(([k, l], i) => { const th = h('th', 'th ' + (i === 0 ? 'pl-5 ' : '') + (i === HX_COLS.length - 1 ? 'pr-5 ' : '') + (k === 'Booked Date' ? 'hidden 2xl:table-cell' : ''), l); th.dataset.k = k; if (k === 'Grade') th.dataset.c = 'grade'; if (k === 'Status') th.dataset.c = 'status'; th.scope = 'col'; th.onclick = () => { HX.sort = {k, dir: HX.sort.k === k ? -HX.sort.dir : (k === 'Booked Date' || k === 'Check-In Date' ? -1 : 1)}; paintHotels(); }; hd.appendChild(th); });
   if (!hd.querySelector('.hx-view')) { const th = h('th', 'th hx-view pr-5'); th.scope = 'col'; th.appendChild(h('span', 'sr-only', 'Details')); hd.appendChild(th); }
@@ -1006,6 +1007,12 @@ const paintHotels = () => {
 const hxFit = () => { const tb = $('#hxBody'), box = tb.closest('.overflow-x-auto'), t = tb.closest('table'); if (!box.clientWidth) return;
   t.classList.remove('hx-c1', 'hx-c2'); for (const c of ['hx-c1', 'hx-c2']) { if (box.scrollWidth <= box.clientWidth + 1) break; t.classList.add(c); } };
 new ResizeObserver(() => { if (state.view === 'hotels') hxFit(); }).observe($('#hxBody').closest('.overflow-x-auto'));
+// cards keep the Overview size; a number that is too wide for its card is drawn a little smaller instead
+const hxFitKpis = () => $$('#hxKpis .kpi-num').forEach((v) => { v.style.fontSize = ''; if (!v.clientWidth) return;
+  const pr = h('span', v.className.replace('whitespace-nowrap', '') + ' absolute invisible whitespace-nowrap', v.dataset.final || v.textContent); v.parentNode.appendChild(pr);
+  const w = pr.scrollWidth, avail = v.clientWidth, base = parseFloat(getComputedStyle(v).fontSize); pr.remove();
+  if (w > avail) v.style.fontSize = Math.max(16, Math.floor(base * avail / w * 0.97)) + 'px'; });
+new ResizeObserver(() => { if (state.view === 'hotels') hxFitKpis(); }).observe($('#hxKpis'));
 const renderHotels = () => { if (HX.rows === null && !HX.loading) hxLoad(); else paintHotels(); };
 $('#hxXlsx').onclick = () => { const rows = hxFiltered(); if (!rows.length) { toast('No bookings to download'); return; }
   const {k, dir} = HX.sort; rows.sort((a, b) => String(a[k] || '').localeCompare(String(b[k] || ''), undefined, {numeric: true}) * dir);

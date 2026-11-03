@@ -174,7 +174,7 @@ if(document.readyState!=='loading')setTimeout(hide,150);else document.addEventLi
             <div class="ml-auto flex items-center gap-2 w-full sm:w-auto">
             <div id="coBox" class="relative shrink-0">
               <div id="coBtnWrap" class="flex items-center rounded-xl bg-white ring-1 ring-zuna-100 hover:ring-mint-500 transition-shadow">
-                <button type="button" id="coBtn" class="flex items-center gap-2 pl-3 pr-3 py-2 text-sm font-semibold text-zuna-700 whitespace-nowrap rounded-xl" aria-haspopup="dialog" aria-expanded="false"><i data-i="log-out" class="w-4 h-4 text-mint-600"></i><span id="coBtnTxt">Check-out dates</span><i data-i="chevron-down" class="w-3.5 h-3.5 text-zuna-400"></i></button>
+                <button type="button" id="coBtn" class="flex items-center gap-2 pl-3 pr-3 py-2 text-sm font-semibold text-zuna-700 whitespace-nowrap rounded-xl" aria-haspopup="dialog" aria-expanded="false"><i data-i="log-out" class="w-4 h-4 text-mint-600"></i><span id="coBtnTxt">Check-out</span><i data-i="chevron-down" class="w-3.5 h-3.5 text-zuna-400"></i></button>
                 <button type="button" id="coClear" class="hidden -ml-1 mr-1 grid place-items-center w-7 h-7 rounded-lg text-zuna-500 hover:bg-zuna-50 hover:text-zuna-900" title="Clear check-out dates" aria-label="Clear check-out dates"><i data-i="x" class="w-4 h-4"></i></button>
               </div>
               <div id="coPop" class="hidden absolute right-0 top-full mt-2 z-40 w-[320px] max-w-[calc(100vw-2rem)] rounded-2xl bg-white ring-1 ring-zuna-100 shadow-xl p-4 space-y-3" role="dialog" aria-label="Show stays by check-out date">
@@ -188,7 +188,7 @@ if(document.readyState!=='loading')setTimeout(hide,150);else document.addEventLi
                 <div class="flex gap-2 pt-1"><button type="button" id="coReset" class="btn flex-1 justify-center">Clear</button><button type="button" id="coApply" class="btn-primary flex-1 justify-center">Apply</button></div>
               </div>
             </div>
-            <label class="relative flex-1 sm:flex-none sm:w-72"><i data-i="search" class="w-4 h-4 absolute left-3 top-1/2 -translate-y-1/2 text-zuna-400"></i><input id="bsearch" type="search" placeholder="Search guest, grade, room…" class="w-full pl-9 pr-3 py-2 rounded-xl ring-1 ring-zuna-100 bg-white text-sm placeholder:text-zuna-300 focus:outline-none focus:ring-2 focus:ring-mint-500"></label>
+            <label class="relative flex-1 sm:flex-none sm:w-48 2xl:w-72"><i data-i="search" class="w-4 h-4 absolute left-3 top-1/2 -translate-y-1/2 text-zuna-400"></i><input id="bsearch" type="search" placeholder="Search guests…" title="Search by guest, grade, room or TR" class="w-full pl-9 pr-3 py-2 rounded-xl ring-1 ring-zuna-100 bg-white text-sm placeholder:text-zuna-300 focus:outline-none focus:ring-2 focus:ring-mint-500"></label>
             </div>
           </div>
           <div class="overflow-x-auto">
@@ -221,7 +221,7 @@ if(document.readyState!=='loading')setTimeout(hide,150);else document.addEventLi
 <aside id="drawer" inert role="dialog" aria-modal="true" aria-labelledby="dTitle" class="fixed top-0 right-0 z-[60] h-full w-full sm:w-[440px] bg-white shadow-2xl translate-x-full transition-transform duration-300 flex flex-col border-l-4 border-mint-500" aria-hidden="true">
   <div id="dHandle" class="sheet-handle" aria-hidden="true"><span></span></div>
   <div id="dHead" class="flex items-start gap-3 p-5 border-b border-zuna-100"><div class="min-w-0"><h3 id="dTitle" class="text-lg font-bold">—</h3><p id="dSub" class="text-xs text-zuna-500"></p></div><button id="dClose" class="iconbtn ml-auto" aria-label="Close"><i data-i="x" class="w-4 h-4"></i></button></div>
-  <div id="dBody" class="p-5 overflow-y-auto space-y-5"></div>
+  <div id="dBody" class="flex-1 min-h-0 p-5 overflow-y-auto overscroll-contain space-y-5"></div>
 </aside>
 
 <!-- Tailwind component classes (kept here so the build sees them) -->
@@ -661,14 +661,14 @@ $$('th[data-k]').forEach((th) => th.onclick = () => { const k = th.dataset.k; st
 $('#bsearch').addEventListener('input', (e) => { state.bsearch = e.target.value; renderBookings(); });
 // check-out filter: one compact button that opens a small panel with the two calendars
 { const f = $('#coFrom'), t = $('#coTo'), clr = $('#coClear'), btn = $('#coBtn'), pop = $('#coPop'), wrap = $('#coBtnWrap'), er = $('#coErr');
-  const paint = () => { const on = coOn(); $('#coBtnTxt').textContent = on ? 'Check-out ' + (state.cofrom === state.coto ? fShort(state.cofrom) : fShort(state.cofrom) + ' – ' + fShort(state.coto)) : 'Check-out dates';
+  const paint = () => { const on = coOn(); $('#coBtnTxt').textContent = on ? 'Check-out ' + (state.cofrom === state.coto ? fShort(state.cofrom) : fShort(state.cofrom) + ' – ' + fShort(state.coto)) : 'Check-out';
     clr.classList.toggle('hidden', !on); btn.classList.toggle('pr-2', on); btn.lastElementChild && btn.lastElementChild.classList.toggle('hidden', on);
     wrap.classList.toggle('!ring-2', on); wrap.classList.toggle('!ring-mint-500', on); wrap.classList.toggle('bg-mint-50', on); wrap.classList.toggle('bg-white', !on); };
   const close = () => { pop.classList.add('hidden'); btn.setAttribute('aria-expanded', 'false'); };
   const quick = () => { if ($('#coQuick').childElementCount) return; const lw = addDays(monday(today), -7);
     [['Last week', lw, addDays(lw, 6)], ['This week', monday(today), addDays(monday(today), 6)], ['Yesterday', addDays(today, -1), addDays(today, -1)], ['Today', today, today]].forEach(([l, a, b]) => {
       const c = h('button', 'rounded-lg px-2.5 py-1 text-xs font-semibold bg-zuna-50 text-zuna-700 ring-1 ring-zuna-100 hover:ring-mint-500', l); c.type = 'button'; c.onclick = () => { f.value = a; t.value = b; }; $('#coQuick').appendChild(c); }); };
-  const open = () => { quick(); f.value = state.cofrom || ''; t.value = state.coto || ''; er.classList.add('hidden'); pop.classList.remove('hidden'); btn.setAttribute('aria-expanded', 'true'); setTimeout(() => (f._zcal || f).click(), 40); };
+  const open = () => { quick(); f.value = state.cofrom || ''; t.value = state.coto || ''; er.classList.add('hidden'); pop.classList.remove('hidden'); btn.setAttribute('aria-expanded', 'true'); };   // calendars open only when a date is clicked
   btn.onclick = () => pop.classList.contains('hidden') ? open() : close();
   const set =(a, b) => { state.cofrom = a; state.coto = b; paint(); render(); };
   $('#coApply').onclick = () => { if (!f.value || !t.value || t.value < f.value) { er.textContent = !f.value || !t.value ? 'Choose both dates.' : 'The second date must be on or after the first.'; er.classList.remove('hidden'); return; }
@@ -1028,7 +1028,9 @@ const openWeekly = (onGo) => {
     if (nightsBetween(a, b) > 91) { err.textContent = 'Choose up to 92 nights.'; err.classList.remove('hidden'); return; }
     if (!picked.size) { err.textContent = 'Tick at least one guest house.'; err.classList.remove('hidden'); return; }
     err.classList.add('hidden'); onGo(a, b, ghs.map((x) => x.property).filter((n) => picked.has(n)), LBL[mode]); };
-  f.appendChild(go); const w = h('div', 'p-5'); w.appendChild(f);
+  // the download button stays pinned to the bottom of the panel, even on short screens
+  const dock = h('div', 'sticky -bottom-5 -mx-5 px-5 pt-3 pb-5 bg-white border-t border-zuna-100 shadow-[0_-10px_20px_-14px_rgba(18,0,90,.35)]'); dock.appendChild(go); f.appendChild(dock);
+  const w = h('div'); w.appendChild(f);
   openDrawer(ghReportName(), 'Daily, weekly, monthly, any dates or by check-out', w); pick(mode); syncGo();
 };
 $$('[data-ghname]').forEach((e) => { e.textContent = ghReportName(); });

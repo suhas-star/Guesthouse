@@ -278,15 +278,21 @@
       {name: 'xl/styles.xml', data: WEEK_STYLES},
       {name: 'xl/worksheets/sheet1.xml', data: xml}]);
   };
-  const weeklyReport = (from, to, p = L.P()) => {
+  const weeklyReport = (from, to, p = L.P(), opt = {}) => {
     const {roomNames, grid, placed} = L.rackGrid(p);
+    // check-out basis: only stays that check out between from and to; the nights run from the earliest of their check-ins
+    const co = opt.checkout ? [from, to] : null, keep = (b) => !co || (b.check_out >= co[0] && b.check_out <= co[1]);
+    if (co) { const mine = [...new Set(grid.flatMap((g) => Object.values(g).flat()))].filter(keep);
+      from = mine.length ? mine.reduce((m, b) => b.check_in < m ? b.check_in : m, mine[0].check_in) : co[0];
+      to = mine.length ? L.addDays(mine.reduce((m, b) => b.check_out > m ? b.check_out : m, mine[0].check_out), -1) : co[1];
+      if (L.addDays(from, 92) <= to) from = L.addDays(to, -91); }
     const nights = []; for (let n = from; n <= to; n = L.addDays(n, 1)) nights.push(n);
-    const who = (ri, n) => (grid[ri] && grid[ri][n]) || [];
+    const who = (ri, n) => ((grid[ri] && grid[ri][n]) || []).filter(keep);
     // beds per room: one, or as many guests as ever shared that room in these nights
     const beds = roomNames.map((_, ri) => Math.max(1, ...nights.map((n) => who(ri, n).length)));
     const totalBeds = beds.reduce((a, b) => a + b, 0), D = nights.length;
     const client = L.client || {}, circle = client.legal_name || client.name || 'LTM Limited';
-    const title = (client.name ? client.name + ' ' : '') + p.property + (p.city ? '-' + p.city : '') + ' - ' + (from === to ? DMY(from) : DMY(from) + ' to ' + DMY(to));
+    const title = (client.name ? client.name + ' ' : '') + p.property + (p.city ? '-' + p.city : '') + ' - ' + (co ? 'Check-out ' + (co[0] === co[1] ? DMY(co[0]) : DMY(co[0]) + ' to ' + DMY(co[1])) : from === to ? DMY(from) : DMY(from) + ' to ' + DMY(to));
     const short = (r) => { const m = /-(\w+)$/.exec(r); return m ? m[1] : r; };
     const name = (b) => L.cleanName(b.guest) + (placed.has(b) ? ' *' : '');
     const cells = [], merges = [], put = (r, c, v, s) => cells.push({r, c, v, s});
@@ -321,7 +327,9 @@
     put(tr, bedOcc, sumBeds); put(tr, bedOcc + 1, totalBeds * D - sumBeds); put(tr, bedOcc + 2, totalBeds * D ? Math.round(sumBeds / (totalBeds * D) * 10000) / 100 : 0, 4);
     put(tr, roomOcc, sumRooms); put(tr, roomOcc + 1, roomNames.length * D - sumRooms); put(tr, roomOcc + 2, roomNames.length * D ? Math.round(sumRooms / (roomNames.length * D) * 10000) / 100 : 0, 4);
     [...guests.values()].sort((a, b) => a.name.localeCompare(b.name)).forEach((g, k) => { put(4 + k, master, g.name); put(4 + k, master + 1, circle); put(4 + k, master + 2, g.band); put(4 + k, master + 3, g.nights, 5); });
-    if (placed.size && [...placed].some((b) => b.check_in <= to && b.check_out > from)) put(tr + 4, 0, '* Room not yet confirmed by the guest house; shown in the first free room.');
+    const star = placed.size && [...placed].some((b) => keep(b) && b.check_in <= to && b.check_out > from);
+    if (star) put(tr + 4, 0, '* Room not yet confirmed by the guest house; shown in the first free room.');
+    if (co) put(tr + (star ? 5 : 4), 0, 'Only stays checking out ' + (co[0] === co[1] ? 'on ' + DMY(co[0]) : 'between ' + DMY(co[0]) + ' and ' + DMY(co[1])) + '; nights shown from the earliest check-in.');
     const widths = []; for (let k = 0; k <= master + 3; k++) widths.push(k === 0 ? 21 : k === 1 ? 18 : (k >= C0 && k < totalCol) ? 20 : k === totalCol ? 16 : k === bedOcc || k === roomOcc ? 20 : k === master ? 20 : k === master + 1 ? 20 : k === master + 3 ? 25 : 13);
     const fileTitle = title.replace(/\//g, '_').replace(/[^A-Za-z0-9_-]+/g, '_').replace(/_+/g, '_');
     return {filename: fileTitle + '.xlsx', data: sheetZip('Sheet', cells, merges, widths)};
@@ -331,8 +339,9 @@
   // one guest house -> Excel; all guest houses -> zip folder of the individual Excel files
   const ghReport = async (from, to, which, kind) => {
     const sel = Array.isArray(which) ? which : which === '*' ? L.props.filter((x) => +x.rooms > 0).map((x) => x.property) : [which];
-    if (sel.length === 1) return weeklyReport(from, to, L.props.find((x) => x.property === sel[0]) || L.P());
-    const files = []; for (const p of L.props.filter((x) => sel.includes(x.property))) { const r = weeklyReport(from, to, p); files.push({name: r.filename, data: new Uint8Array(await r.data.arrayBuffer())}); }
+    const opt = {checkout: kind === 'Check-out'};
+    if (sel.length === 1) return weeklyReport(from, to, L.props.find((x) => x.property === sel[0]) || L.P(), opt);
+    const files = []; for (const p of L.props.filter((x) => sel.includes(x.property))) { const r = weeklyReport(from, to, p, opt); files.push({name: r.filename, data: new Uint8Array(await r.data.arrayBuffer())}); }
     const name = (L.ghReportName() + (kind && kind !== 'Custom dates' ? ' - ' + kind : '') + ' - ' + (from === to ? DMY(from) : DMY(from) + ' to ' + DMY(to))).replace(/\//g, '_').replace(/[^A-Za-z0-9_-]+/g, '_').replace(/_+/g, '_');
     return {filename: name + '.zip', data: zip(files)};
   };

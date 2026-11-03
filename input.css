@@ -327,3 +327,10 @@ html.dark .zchip-muted { --b: #221a49; --f: #c9c2ec; --e: #4a4370; }
 @keyframes zpSpin { to { transform: rotate(360deg); } }
 html.dark .zp-ind { background: #161033; box-shadow: 0 8px 20px -6px rgba(0,0,0,.6), 0 0 0 1px #2a2257; }
 @media (prefers-reduced-motion: reduce) { .z-rise, .zt, .zt-out { animation: none !important; } .zt-bar { animation-duration: 1ms !important; animation-delay: 0s; } }
+/* hotel bookings table: compact steps (set by hxFit when the table would overflow) */
+.hx-gr-in, .hx-st-in { display: none; }
+table.hx-c1 [data-c="status"] { display: none; }
+table.hx-c1 .hx-st-in { display: block; }
+table.hx-c1 .hx-vt { display: none; }
+table.hx-c2 [data-c="grade"] { display: none; }
+table.hx-c2 .hx-gr-in { display: inline-flex; }

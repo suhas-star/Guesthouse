@@ -214,7 +214,7 @@ if(document.readyState!=='loading')setTimeout(hide,150);else document.addEventLi
 
       <!-- HOTEL BOOKINGS (transaction reports uploaded by the Zuna team) -->
       <section data-view="hotels" class="view hidden space-y-4">
-        <div class="glass-zone"><div id="hxKpis" class="grid grid-cols-2 md:grid-cols-3 xl:grid-cols-6 gap-3"></div></div>
+        <div class="glass-zone"><div id="hxKpis" class="grid grid-cols-2 md:grid-cols-3 2xl:grid-cols-6 gap-3"></div></div>
         <div class="card">
           <div class="card-h">
             <div><h2 class="card-t">Hotel bookings</h2><p class="card-s" id="hxSub">Click a booking for full details</p></div>
@@ -956,7 +956,7 @@ const paintHotels = () => {
     const c = h('div', 'card press p-4 flex flex-col gap-1 overflow-hidden hover:-translate-y-0.5 hover:shadow-md ' + (hero ? 'bg-gradient-to-br from-zuna-900 to-zuna-700 text-white ring-0' : warn ? '!ring-amber-300 ring-1' : ''));
     const top = h('div', 'flex items-center justify-between gap-2'); top.appendChild(h('p', 'text-xs font-semibold truncate ' + (hero ? 'text-zuna-200' : 'text-zuna-500'), lbl));
     const i = h('span', 'grid place-items-center w-7 h-7 rounded-lg shrink-0 ' + (hero ? 'bg-mint-500 text-zuna-900' : warn ? 'bg-amber-50 text-amber-600' : 'bg-zuna-50 text-zuna-600')); i.appendChild(icon(ic, 'w-4 h-4')); top.appendChild(i); c.appendChild(top);
-    const v = h('p', 'kpi-num tabular-nums' + (hero ? ' kpi-hero' : '')); c.appendChild(v); if (HX.loading && !HX.rows) v.textContent = '…'; else countUp(v, val, fmt, id);
+    const v = h('p', 'kpi-num tabular-nums whitespace-nowrap' + (hero ? ' kpi-hero' : '')); c.appendChild(v); if (HX.loading && !HX.rows) v.textContent = '…'; else countUp(v, val, fmt, id);
     c.appendChild(h('p', 'text-xs truncate ' + (hero ? 'text-zuna-200' : warn ? 'text-amber-700 font-semibold' : 'text-zuna-400'), sub));
     if (spark && spark.length > 1) { const s = h('div', '-mx-1 -mb-2 mt-1'); c.appendChild(s); requestAnimationFrame(() => { charts[id] = sparkline(s, spark, MINT); }); }
     if (onClick) { c.classList.add('cursor-pointer'); c.tabIndex = 0; c.onclick = onClick; c.onkeydown = (e) => { if (e.key === 'Enter') onClick(); }; }
@@ -970,7 +970,7 @@ const paintHotels = () => {
   card('hx5', 'Above policy cap', over, int, over ? (HX.status === 'over' ? 'Showing these · clear →' : 'View these →') : 'All within cap', 'triangle-alert', null, over ? show('over') : null, false, over > 0);
   card('hx6', 'Cancelled', canc, int, canc ? (HX.status === 'cancelled' ? 'Showing these · clear →' : 'View these →') : 'None', 'circle-x', null, canc ? show('cancelled') : null);
   // table
-  const hd = $('#hxHead'); if (!hd.childElementCount) HX_COLS.forEach(([k, l], i) => { const th = h('th', 'th ' + (i === 0 ? 'pl-5 ' : '') + (i === HX_COLS.length - 1 ? 'pr-5 ' : '') + (k === 'Booked Date' ? 'hidden 2xl:table-cell' : ''), l); th.dataset.k = k; th.scope = 'col'; th.onclick = () => { HX.sort = {k, dir: HX.sort.k === k ? -HX.sort.dir : (k === 'Booked Date' || k === 'Check-In Date' ? -1 : 1)}; paintHotels(); }; hd.appendChild(th); });
+  const hd = $('#hxHead'); if (!hd.childElementCount) HX_COLS.forEach(([k, l], i) => { const th = h('th', 'th ' + (i === 0 ? 'pl-5 ' : '') + (i === HX_COLS.length - 1 ? 'pr-5 ' : '') + (k === 'Booked Date' ? 'hidden 2xl:table-cell' : ''), l); th.dataset.k = k; if (k === 'Grade') th.dataset.c = 'grade'; if (k === 'Status') th.dataset.c = 'status'; th.scope = 'col'; th.onclick = () => { HX.sort = {k, dir: HX.sort.k === k ? -HX.sort.dir : (k === 'Booked Date' || k === 'Check-In Date' ? -1 : 1)}; paintHotels(); }; hd.appendChild(th); });
   if (!hd.querySelector('.hx-view')) { const th = h('th', 'th hx-view pr-5'); th.scope = 'col'; th.appendChild(h('span', 'sr-only', 'Details')); hd.appendChild(th); }
   [...hd.children].forEach((th) => { if (th.dataset.k) th.dataset.sort = th.dataset.k === HX.sort.k ? (HX.sort.dir > 0 ? '↑' : '↓') : ''; });
   const {k, dir} = HX.sort; rows.sort((a, b) => { const x = a[k], y = b[k]; return (typeof x === 'number' || typeof y === 'number' ? num(x) - num(y) : String(x || '').localeCompare(String(y || ''))) * dir || String(b['Booked Date']).localeCompare(String(a['Booked Date'])); });
@@ -979,26 +979,33 @@ const paintHotels = () => {
   else if (!rows.length) { const tr = h('tr'); const td = h('td', 'px-5 py-12 text-center text-zuna-500'); td.colSpan = HX_COLS.length + 1; td.textContent = HX.err || (all.length ? 'No bookings match these filters.' : 'No hotel bookings yet for these dates. They appear here once the Zuna team uploads the transaction report.'); if (HX.err) td.classList.add('text-rose-600'); tr.appendChild(td); tb.appendChild(tr); }
   rows.slice(0, HX.show).forEach((r) => { const tr = h('tr', 'group hover:bg-zuna-50/70 cursor-pointer transition-colors'); tr.tabIndex = 0; tr.title = 'View booking details';
     const g = h('td', 'pl-5 pr-2.5 py-3'); const w = h('div', 'flex items-center gap-3'); w.appendChild(avatar(r['Guest Name'] || '?', 'w-8 h-8 text-xs')); const m = h('div', 'min-w-0 max-w-[150px] 2xl:max-w-[200px]'); m.appendChild(h('p', 'font-semibold truncate', r['Guest Name'] || '—')); m.firstChild.title = r['Guest Name'] || '';
-    m.appendChild(h('p', 'text-xs text-zuna-500 truncate', r['Emp Code'] ? 'Emp ' + r['Emp Code'] : 'No employee code')); w.appendChild(m); g.appendChild(w); tr.appendChild(g);
-    const gd = h('td', 'px-2.5 py-3 whitespace-nowrap'); gd.appendChild(r.Grade ? gradeTag(r.Grade) : h('span', 'text-zuna-300', '—')); tr.appendChild(gd);
+    const sl = h('p', 'flex items-center gap-1.5 text-xs text-zuna-500 min-w-0'); if (r.Grade) { const gi = gradeTag(r.Grade); gi.classList.add('hx-gr-in', '!px-1.5', '!py-0'); sl.appendChild(gi); } sl.appendChild(h('span', 'truncate', r['Emp Code'] ? 'Emp ' + r['Emp Code'] : 'No employee code'));
+    m.appendChild(sl); w.appendChild(m); g.appendChild(w); tr.appendChild(g);
+    const gd = h('td', 'px-2.5 py-3 whitespace-nowrap'); gd.dataset.c = 'grade'; gd.appendChild(r.Grade ? gradeTag(r.Grade) : h('span', 'text-zuna-300', '—')); tr.appendChild(gd);
     const ho = h('td', 'px-2.5 py-3'); const hw = h('div', 'max-w-[170px] xl:max-w-[180px] 2xl:max-w-[280px]'); hw.appendChild(h('p', 'font-medium truncate', r['Property Name'] || '—')); hw.lastChild.title = r['Property Name'] || ''; hw.appendChild(h('p', 'text-xs text-zuna-500 truncate', [r.City, r['Property Category']].filter(Boolean).join(' · '))); ho.appendChild(hw); tr.appendChild(ho);
     tr.appendChild(h('td', 'hidden 2xl:table-cell px-2.5 py-3 whitespace-nowrap tabular-nums', r['Booked Date'] ? fShort(r['Booked Date']) : '—'));
     const sy = h('td', 'px-2.5 py-3 whitespace-nowrap tabular-nums'); sy.appendChild(h('p', 'font-medium', (r['Check-In Date'] ? fShort(r['Check-In Date']) : '?') + ' → ' + (r['Check-Out Date'] ? fShort(r['Check-Out Date']) : '?'))); const n = num(r['Stay Days']);
     const sub = h('p', 'text-xs text-zuna-400', n + (n === 1 ? ' night' : ' nights')); if (r['Booked Date']) sub.appendChild(h('span', '2xl:hidden', ' · booked ' + fShort(r['Booked Date']))); sy.appendChild(sub); tr.appendChild(sy);
     const tf = h('td', 'px-2.5 py-3 whitespace-nowrap tabular-nums'); tf.appendChild(h('p', 'font-medium ' + (hxOver(r) ? 'text-amber-700' : ''), inr(r['Tariff Per Day'])));
     if (num(r['Eligibility Criteria'])) { const cp = h('p', 'flex items-center gap-1 text-xs ' + (hxOver(r) ? 'text-amber-700 font-semibold' : 'text-zuna-400')); if (hxOver(r)) cp.appendChild(icon('triangle-alert', 'w-3 h-3')); cp.appendChild(document.createTextNode('Cap ' + inr(r['Eligibility Criteria']))); if (hxOver(r)) cp.title = 'Above the policy cap'; tf.appendChild(cp); } tr.appendChild(tf);
-    tr.appendChild(h('td', 'px-2.5 py-3 whitespace-nowrap tabular-nums font-medium', inr(r['Net Amount Charged'])));
-    const s = h('td', 'px-2.5 py-3 whitespace-nowrap'); s.appendChild(h('span', 'zchip ' + (hxCancelled(r) ? 'zchip-bad' : /unbilled/i.test(r.Status || '') ? 'zchip-warn' : ''), r.Status || '—')); tr.appendChild(s);
+    const chip = () => h('span', 'zchip ' + (hxCancelled(r) ? 'zchip-bad' : /unbilled/i.test(r.Status || '') ? 'zchip-warn' : ''), r.Status || '—');
+    const na = h('td', 'px-2.5 py-3 whitespace-nowrap tabular-nums font-medium'); na.appendChild(h('p', null, inr(r['Net Amount Charged']))); const si = h('p', 'hx-st-in mt-1'); si.appendChild(chip()); na.appendChild(si); tr.appendChild(na);
+    const s = h('td', 'px-2.5 py-3 whitespace-nowrap'); s.dataset.c = 'status'; s.appendChild(chip()); tr.appendChild(s);
     // a visible "View" button so it is obvious every booking opens (the whole row opens it too)
     const vd = h('td', 'pl-1 pr-5 py-3 text-right'); const vb = h('button', 'inline-flex items-center gap-1 rounded-lg px-2.5 py-1.5 text-xs font-semibold ring-1 ring-zuna-100 text-zuna-700 bg-white group-hover:bg-mint-500 group-hover:ring-mint-500 group-hover:text-zuna-900 transition-colors whitespace-nowrap');
-    vb.type = 'button'; vb.tabIndex = -1; vb.setAttribute('aria-label', 'View details for ' + (r['Guest Name'] || 'this booking')); vb.append(document.createTextNode('View'), icon('chevron-right', 'w-3.5 h-3.5')); vd.appendChild(vb); tr.appendChild(vd);
+    vb.type = 'button'; vb.tabIndex = -1; vb.setAttribute('aria-label', 'View details for ' + (r['Guest Name'] || 'this booking')); vb.append(h('span', 'hx-vt', 'View'), icon('chevron-right', 'w-3.5 h-3.5')); vd.appendChild(vb); tr.appendChild(vd);
     tr.onclick = () => hxDrawer(r); tr.onkeydown = (e) => { if (e.key === 'Enter') hxDrawer(r); }; tb.appendChild(tr); });
+  hxFit();
   const ft = $('#hxFoot'); ft.replaceChildren(); ft.appendChild(h('span', null, rows.length ? 'Showing ' + Math.min(HX.show, rows.length) + ' of ' + rows.length + (rows.length === 1 ? ' booking' : ' bookings') : ''));
   if (rows.length > HX.show) { const more = h('button', 'btn !py-1 !px-3 text-xs', 'Show ' + Math.min(100, rows.length - HX.show) + ' more'); more.type = 'button'; more.onclick = () => { HX.show += 100; paintHotels(); }; ft.appendChild(more); }
   if (HX.more) ft.appendChild(h('span', 'text-amber-700 font-semibold', 'Only the latest 10,000 are shown. Narrow the dates to see older bookings.'));
   ft.appendChild(h('span', 'ml-auto', HX.updated ? 'Last uploaded ' + new Date(HX.updated).toLocaleString('en-IN', {day: 'numeric', month: 'short', year: 'numeric', hour: 'numeric', minute: '2-digit'}) : ''));
   $('#hxSub').textContent = [HX.booked ? 'Booked ' + hxRangeText(HX.booked) : '', HX.checkout ? 'Check-out ' + hxRangeText(HX.checkout) : ''].filter(Boolean).join(' · ') || 'All uploaded bookings · click a booking for full details';
 };
+// keep the table inside its card: step into a compact layout when space is short (sidebar open, laptop screens)
+const hxFit = () => { const tb = $('#hxBody'), box = tb.closest('.overflow-x-auto'), t = tb.closest('table'); if (!box.clientWidth) return;
+  t.classList.remove('hx-c1', 'hx-c2'); for (const c of ['hx-c1', 'hx-c2']) { if (box.scrollWidth <= box.clientWidth + 1) break; t.classList.add(c); } };
+new ResizeObserver(() => { if (state.view === 'hotels') hxFit(); }).observe($('#hxBody').closest('.overflow-x-auto'));
 const renderHotels = () => { if (HX.rows === null && !HX.loading) hxLoad(); else paintHotels(); };
 $('#hxXlsx').onclick = () => { const rows = hxFiltered(); if (!rows.length) { toast('No bookings to download'); return; }
   const {k, dir} = HX.sort; rows.sort((a, b) => String(a[k] || '').localeCompare(String(b[k] || ''), undefined, {numeric: true}) * dir);

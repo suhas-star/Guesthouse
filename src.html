@@ -171,6 +171,11 @@ if(document.readyState!=='loading')setTimeout(hide,150);else document.addEventLi
           </div>
           <div class="px-5 py-3 flex flex-wrap items-center gap-3 border-b border-zuna-50">
             <div id="bfilters" class="flex flex-wrap gap-1 rounded-xl bg-zuna-50 p-1 ring-1 ring-zuna-100"></div>
+            <div id="coBox" class="flex items-center gap-2 rounded-xl bg-zuna-50 p-1 pl-3 ring-1 ring-zuna-100" role="group" aria-label="Filter by check-out date">
+              <span class="flex items-center gap-1.5 text-xs font-semibold text-zuna-600 whitespace-nowrap"><i data-i="log-out" class="w-3.5 h-3.5"></i>Check-out</span>
+              <div class="grid grid-cols-2 gap-1 w-[268px] max-w-[60vw]"><input id="coFrom" type="date" aria-label="Check-out from" class="w-full rounded-lg bg-white ring-1 ring-zuna-100 px-2 py-1.5 text-xs focus:outline-none focus:ring-2 focus:ring-mint-500"><input id="coTo" type="date" aria-label="Check-out to" class="w-full rounded-lg bg-white ring-1 ring-zuna-100 px-2 py-1.5 text-xs focus:outline-none focus:ring-2 focus:ring-mint-500"></div>
+              <button type="button" id="coClear" class="hidden grid place-items-center w-7 h-7 rounded-lg text-zuna-500 hover:bg-white hover:text-zuna-900" title="Clear check-out dates" aria-label="Clear check-out dates"><i data-i="x" class="w-4 h-4"></i></button>
+            </div>
             <label class="relative ml-auto w-full sm:w-72"><i data-i="search" class="w-4 h-4 absolute left-3 top-1/2 -translate-y-1/2 text-zuna-400"></i><input id="bsearch" type="search" placeholder="Search guest, grade, room…" class="w-full pl-9 pr-3 py-2 rounded-xl ring-1 ring-zuna-100 bg-white text-sm placeholder:text-zuna-300 focus:outline-none focus:ring-2 focus:ring-mint-500"></label>
           </div>
           <div class="overflow-x-auto">
@@ -251,7 +256,7 @@ bookings.forEach((b) => {
 const clashNights = (b, o) => { const a = b.check_in > o.check_in ? b.check_in : o.check_in, z = b.check_out < o.check_out ? b.check_out : o.check_out; return [a, z]; };
 const clashText = (b) => b._clash.map((o) => { const [a, z] = clashNights(b, o); return cleanName(b.guest) + ' (' + b._g.toLowerCase() + ') and ' + cleanName(o.guest) + ' (' + o._g.toLowerCase() + ') share room ' + b.room + ', ' + fShort(a) + ' – ' + fShort(z); }).join('; ');
 const RULE = 'Double occupancy is allowed only for two male or two female guests.';
-const state = {view: 'overview', prop: (props.find((p) => p.status === 'Live') || props[0] || {}).property, range: 'all', bfilter: 'all', bsearch: '', bsort: {k: 'check_in', dir: 1}, calMonth: null};
+const state = {view: 'overview', prop: (props.find((p) => p.status === 'Live') || props[0] || {}).property, range: 'all', cofrom: '', coto: '', bfilter: 'all', bsearch: '', bsort: {k: 'check_in', dir: 1}, calMonth: null};
 try { const s = JSON.parse(localStorage.getItem('ltmgh') || '{}'); if (s.range) state.range = s.range; if (s.cfrom && s.cto) { state.cfrom = s.cfrom; state.cto = s.cto; } } catch (e) {}
 if (state.range === 'custom' && !(state.cfrom && state.cto)) state.range = 'all';
 const save = () => { try { localStorage.setItem('ltmgh', JSON.stringify({range: state.range, cfrom: state.cfrom, cto: state.cto})); } catch (e) {} };
@@ -601,9 +606,12 @@ $('#calPrev').onclick = () => { const ms = months(), i = ms.indexOf(state.calMon
 $('#calNext').onclick = () => { const ms = months(), i = ms.indexOf(state.calMonth); if (i < ms.length - 1) { state.calMonth = ms[i + 1]; renderCal(); } };
 
 /* ---------- BOOKINGS ---------- */
+// Bookings can be pulled by check-out date (as in LTM's consolidated sheet) instead of by stay dates
+const coOn = () => !!(state.cofrom && state.coto);
+const coText = () => 'Check-out ' + (state.cofrom === state.coto ? fLong(state.cofrom) : fShort(state.cofrom) + ' – ' + fLong(state.coto));
+const inView = (b) => { if (coOn()) return b.check_out >= state.cofrom && b.check_out <= state.coto; const [ra, rz] = rangeBounds(); return state.range === 'all' || (b.check_in <= rz && b.check_out > ra); };
 const renderBookings = () => {
-  const [ra, rz] = rangeBounds();   // stays that overlap the chosen dates
-  const bs = myB().filter((b) => state.range === 'all' || (b.check_in <= rz && b.check_out > ra)).map((b) => Object.assign({}, b, {state: stateOf(b)}));
+  const bs = myB().filter(inView).map((b) => Object.assign({}, b, {state: stateOf(b)}));
   const F = $('#bfilters'); F.replaceChildren();
   const isConf = (b) => b._clash && b._clash.length > 0;
   ['all', 'Upcoming', 'In house', 'Completed', 'Not accommodated', 'conflict'].forEach((k) => {
@@ -638,6 +646,12 @@ const renderBookings = () => {
 };
 $$('th[data-k]').forEach((th) => th.onclick = () => { const k = th.dataset.k; state.bsort = {k, dir: state.bsort.k === k ? -state.bsort.dir : 1}; renderBookings(); });
 $('#bsearch').addEventListener('input', (e) => { state.bsearch = e.target.value; renderBookings(); });
+{ const f = $('#coFrom'), t = $('#coTo'), clr = $('#coClear');
+  const apply = () => { state.cofrom = f.value; state.coto = t.value; clr.classList.toggle('hidden', !(f.value || t.value)); $('#coBox').classList.toggle('ring-mint-500', coOn()); $('#coBox').classList.toggle('ring-2', coOn());
+    if (coOn() || (!f.value && !t.value)) { render(); if (coOn()) toast('Showing stays with ' + coText().replace('Check-out', 'check-out')); } };
+  f.addEventListener('change', () => { if (t.value && t.value < f.value) t.value = ''; apply(); }); t.addEventListener('change', apply);
+  clr.onclick = () => { f.value = ''; t.value = ''; apply(); };
+  window.__coClear = () => { if (f.value || t.value) { f.value = ''; t.value = ''; state.cofrom = state.coto = ''; clr.classList.add('hidden'); $('#coBox').classList.remove('ring-mint-500', 'ring-2'); } }; }
 
 /* ---------- HOUSES ---------- */
 const copy = async (t) => { try { await navigator.clipboard.writeText(t); toast('Copied ' + t); } catch (e) { toast(t); } };
@@ -797,11 +811,12 @@ const render = () => {
   $$('.view').forEach((v) => v.classList.toggle('hidden', v.dataset.view !== state.view));
   $('#viewTitle').textContent = TITLES[state.view]; document.title = TITLES[state.view] + ' · Zuna Stays';
   const p = P();
-  $('#viewSub').textContent = state.view === 'users' ? (DATA.client ? DATA.client.name + ' · ' : '') + (DATA.users || []).length + ' users' : state.view === 'houses' ? props.length + ' guest houses · ' + props.filter((x) => x.status === 'Live').length + ' live' : p.property + ', ' + p.city + ' · ' + (state.view === 'calendar' ? fShort(period.from) + ' – ' + fLong(period.to) : rangeLabel());
+  $('#viewSub').textContent = state.view === 'users' ? (DATA.client ? DATA.client.name + ' · ' : '') + (DATA.users || []).length + ' users' : state.view === 'houses' ? props.length + ' guest houses · ' + props.filter((x) => x.status === 'Live').length + ' live' : p.property + ', ' + p.city + ' · ' + (state.view === 'calendar' ? fShort(period.from) + ' – ' + fLong(period.to) : state.view === 'bookings' && coOn() ? coText() : rangeLabel());
   $('#rangeBox').classList.toggle('invisible', !(state.view === 'overview' || state.view === 'rack' || state.view === 'bookings'));
   $('#rangeCustomTxt').textContent = state.range === 'custom' ? fShort(state.cfrom) + ' – ' + fShort(state.cto) : 'Custom';
   $('#propWrap').classList.toggle('invisible', state.view === 'houses' || state.view === 'users');
-  $$('#rangeWrap button').forEach((b) => b.toggleAttribute('data-active', b.dataset.range === state.range));
+  const coRule = state.view === 'bookings' && coOn();   // check-out dates replace the range here
+  $$('#rangeWrap button').forEach((b) => b.toggleAttribute('data-active', !coRule && b.dataset.range === state.range));
   $('#navCount').textContent = myB().length;
   ({overview: renderOverview, rack: renderRack, calendar: renderCal, bookings: renderBookings, houses: renderHouses, users: () => renderUsersView()})[state.view]();
   if (state.view !== render.v) { render.v = state.view; ZUI.stagger(document.querySelector('.view[data-view="' + state.view + '"]')); }   // a soft lift only when the page changes; content is never hidden
@@ -810,7 +825,7 @@ const reRender = render;   // range / guest house switches repaint instantly (th
 const closeSide = () => { $('#side').classList.add('-translate-x-full'); $('#scrimSide').classList.add('hidden'); };
 const go = (v) => { state.view = v; try { history.replaceState(null, '', '#' + v); } catch (e) {} closeSide(); render(); window.scrollTo({top: 0, behavior: 'smooth'}); };
 $$('#nav button').forEach((b) => b.onclick = () => go(b.dataset.view));
-$$('#rangeWrap button').forEach((b) => { if (b.dataset.range !== 'custom') b.onclick = () => { if (state.range === b.dataset.range) return; state.range = b.dataset.range; save(); closeRange(); $$('#rangeWrap button').forEach((x) => x.toggleAttribute('data-active', x === b)); reRender(); }; });
+$$('#rangeWrap button').forEach((b) => { if (b.dataset.range !== 'custom') b.onclick = () => { if (state.range === b.dataset.range && !coOn()) return; window.__coClear && window.__coClear(); state.range = b.dataset.range; save(); closeRange(); $$('#rangeWrap button').forEach((x) => x.toggleAttribute('data-active', x === b)); reRender(); }; });
 // custom date range: From–To, with quick picks for whole weeks (Mon–Sun, as in the weekly GH report)
 const monday = (d) => { const x = D(d), w = (x.getUTCDay() + 6) % 7; return addDays(d, -w); };
 function closeRange() { $('#rangePop').classList.add('hidden'); $('#rangeCustom').setAttribute('aria-expanded', 'false'); }
@@ -823,7 +838,7 @@ $('#rangeCustom').onclick = (e) => { e.stopPropagation(); $('#rangePop').classLi
 $('#rCancel').onclick = closeRange;
 $('#rApply').onclick = () => { const f = $('#rFrom').value, t = $('#rTo').value, er = $('#rErr');
   if (!f || !t || t < f) { er.textContent = !f || !t ? 'Choose both dates.' : 'The end date must be on or after the start date.'; er.classList.remove('hidden'); return; }
-  state.range = 'custom'; state.cfrom = f; state.cto = t; state.calMonth = null; save(); closeRange(); reRender(); toast('Showing ' + fShort(f) + ' – ' + fShort(t)); };
+  window.__coClear && window.__coClear(); state.range = 'custom'; state.cfrom = f; state.cto = t; state.calMonth = null; save(); closeRange(); reRender(); toast('Showing ' + fShort(f) + ' – ' + fShort(t)); };
 document.addEventListener('mousedown', (e) => { if (!$('#rangePop').classList.contains('hidden') && !e.target.closest('#rangeBox, .zcal')) closeRange(); });
 document.addEventListener('keydown', (e) => { if (e.key === 'Escape' && !$('#rangePop').classList.contains('hidden')) closeRange(); });
 const sel = $('#propSel');
@@ -970,7 +985,7 @@ const openWeekly = (onGo) => {
 };
 $$('[data-ghname]').forEach((e) => { e.textContent = ghReportName(); });
 ZUI.pullRefresh(() => new Promise(() => { location.reload(); }));
-window.__ltm = {openWeekly, props, ghReportName, P, myB, nightsAll, period, stateOf, fDay, fShort, fLong, toast, today, rangeBounds, inRange: (b) => { const [a, z] = rangeBounds(); return state.range === 'all' || (b.check_in <= z && b.check_out > a); }, rangeText: () => rangeLabel(), rackGrid, cleanName, client: DATA.client || null, addDays, monday};
+window.__ltm = {openWeekly, props, ghReportName, P, myB, nightsAll, period, stateOf, fDay, fShort, fLong, toast, today, rangeBounds, inRange: inView, rangeText: () => coOn() ? coText() : rangeLabel(), rackGrid, cleanName, client: DATA.client || null, addDays, monday};
 })();
 </script>
 <script>

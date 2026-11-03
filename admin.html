@@ -359,7 +359,7 @@ const dataTable = ({cols, rows, st, pageSize = 20, empty = 'Nothing to show.', n
     const pages = Math.max(1, Math.ceil(list.length / pageSize)); st.page = Math.min(Math.max(1, st.page || 1), pages);
     const from = (st.page - 1) * pageSize, shown = list.slice(from, from + pageSize);
     const tb = h('table', 'w-full text-sm'); const th = h('thead', 'sticky top-0 z-10'); const hr = h('tr', 'text-left text-xs font-semibold text-zuna-500 bg-zuna-50 shadow-[inset_0_-1px_0_#e6e2f6]');
-    cols.forEach((col) => { const c = h('th', 'px-4 py-2.5 whitespace-nowrap font-semibold ' + (col.actions ? 'text-right' : '')); c.scope = 'col';
+    cols.forEach((col) => { const c = h('th', 'px-3 py-2.5 whitespace-nowrap font-semibold ' + (col.actions ? 'text-right' : '')); c.scope = 'col';
       if (col.sort) { const on = st.sort.k === col.k; c.setAttribute('aria-sort', on ? (st.sort.dir > 0 ? 'ascending' : 'descending') : 'none');
         const b = h('button', 'inline-flex items-center gap-1 rounded-md -mx-1 px-1 py-0.5 hover:text-zuna-900 hover:bg-white transition-colors ' + (on ? 'text-zuna-900' : '')); b.type = 'button'; b.appendChild(document.createTextNode(col.label));
         b.appendChild(icon(on ? (st.sort.dir > 0 ? 'chevron-up' : 'chevron-down') : 'chevrons-up-down', 'w-3.5 h-3.5 ' + (on ? 'text-mint-700' : 'text-zuna-300')));
@@ -369,7 +369,7 @@ const dataTable = ({cols, rows, st, pageSize = 20, empty = 'Nothing to show.', n
     th.appendChild(hr); tb.appendChild(th);
     const body = h('tbody', 'divide-y divide-zuna-50');
     shown.forEach((r) => { const tr = h('tr', 'group align-middle hover:bg-zuna-50/50');
-      cols.forEach((col) => { const td = h('td', 'px-4 py-3 ' + (col.td || '')); const n = col.render(r);
+      cols.forEach((col) => { const td = h('td', 'px-3 py-3 ' + (col.td || '')); const n = col.render(r);
         if (col.actions) { const box = h('div', 'flex justify-end transition-opacity md:opacity-0 md:group-hover:opacity-100 md:group-focus-within:opacity-100'); box.appendChild(n); td.appendChild(box); }
         else if (n != null) td.append(...[].concat(n)); tr.appendChild(td); });
       body.appendChild(tr); });

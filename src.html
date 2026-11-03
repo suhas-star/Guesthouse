@@ -196,7 +196,7 @@ if(document.readyState!=='loading')setTimeout(hide,150);else document.addEventLi
             </div>
           </div>
           <div class="overflow-x-auto">
-            <table class="w-full text-sm">
+            <table id="bTable" class="w-full text-sm">
               <thead><tr class="text-left text-xs font-semibold text-zuna-500 bg-zuna-50/70">
                 <th data-k="guest" class="th">Guest</th><th data-k="grade" class="th">Grade</th><th data-k="_g" class="th">Gender</th><th data-k="_occ" class="th">Occupancy</th><th data-k="check_in" class="th">Stay</th><th data-k="room" class="th">Room</th><th data-k="state" class="th">Status</th>
               </tr></thead>
@@ -221,7 +221,7 @@ if(document.readyState!=='loading')setTimeout(hide,150);else document.addEventLi
             <div class="ml-auto flex flex-wrap gap-2"><button type="button" class="btn-primary" id="hxCons"><i data-i="file-spreadsheet" class="w-4 h-4"></i><span id="hxConsName">Consolidated report</span></button><button type="button" class="btn-primary" id="hxXlsx"><i data-i="receipt" class="w-4 h-4"></i><span id="hxXlsxName">Hotel transaction report</span></button></div>
           </div>
           <div id="hxBar" class="px-5 py-3 flex flex-wrap items-center gap-2 border-b border-zuna-50"></div>
-          <div class="overflow-x-auto"><table class="w-full text-sm"><thead><tr id="hxHead" class="text-left text-xs font-semibold text-zuna-500 bg-zuna-50/70"></tr></thead><tbody id="hxBody" class="divide-y divide-zuna-50"></tbody></table></div>
+          <div class="overflow-x-auto"><table id="hxTable" class="w-full text-sm"><thead><tr id="hxHead" class="text-left text-xs font-semibold text-zuna-500 bg-zuna-50/70"></tr></thead><tbody id="hxBody" class="divide-y divide-zuna-50"></tbody></table></div>
           <div id="hxFoot" class="px-5 py-3 flex flex-wrap items-center gap-3 text-xs text-zuna-500 border-t border-zuna-50"></div>
         </div>
       </section>
@@ -755,14 +755,14 @@ const renderHouses = () => {
       if (p.map_url) { const mp = h('a', 'mx-5 -mt-2 mb-3 inline-flex items-center gap-1 text-xs font-semibold text-mint-700 hover:underline', 'Open in Google Maps'); mp.href = p.map_url; mp.target = '_blank'; mp.rel = 'noopener'; c.appendChild(mp); }
       if (!(p.photos && p.photos.length)) { const cv = h('div', 'mx-5 mb-4 relative h-40 rounded-xl overflow-hidden ring-1 ring-zuna-100'); const im = h('img', 'w-full h-full object-cover'); im.src = ZUI.art.gh; im.alt = ''; cv.appendChild(im);
         cv.appendChild(h('span', 'absolute right-2.5 top-2.5 rounded-md bg-white/90 px-2 py-0.5 text-[11px] font-semibold text-zuna-700 shadow-sm', 'Photos coming soon')); c.insertBefore(cv, c.children[1]); }
-      if (p.photos && p.photos.length) { const gl = h('div', 'px-5 pb-4 flex gap-2 overflow-x-auto'); p.photos.forEach((ph, i) => { const im = h('img', 'h-20 w-28 shrink-0 rounded-lg object-cover ring-1 ring-zuna-100 cursor-zoom-in'); im.src = ph.url; im.alt = ph.caption || p.property; im.loading = 'lazy'; im.onclick = () => gallery(p, i); gl.appendChild(im); }); c.insertBefore(gl, c.children[1]); }
+      if (p.photos && p.photos.length) { const gl = h('div', 'px-5 pb-4 flex gap-2 overflow-x-auto'); p.photos.forEach((ph, i) => { const im = h('img', 'h-20 w-28 shrink-0 rounded-lg object-cover ring-1 ring-zuna-100 cursor-zoom-in'); im.src = ph.url; im.alt = ph.caption || p.property; im.loading = 'lazy'; im.onclick = () => gallery(p, i); im.tabIndex = 0; im.setAttribute('role', 'button'); im.setAttribute('aria-label', 'Open photo ' + (i + 1) + ' of ' + p.photos.length + ' · ' + (ph.caption || p.property)); im.onkeydown = (e) => { if (e.key === 'Enter' || e.key === ' ') { e.preventDefault(); gallery(p, i); } }; gl.appendChild(im); }); c.insertBefore(gl, c.children[1]); }
       const extra = h('div', 'px-5 pb-4 space-y-3');
       if (hasRT) { const rt = h('div'); rt.appendChild(h('p', 'text-xs font-semibold text-zuna-500 mb-1.5', 'Room types'));
         const wrap = h('div', 'rounded-xl ring-1 ring-zuna-100 overflow-x-auto'); const tb = h('table', 'w-full text-sm'); const th = h('thead'); const hr = h('tr', 'bg-zuna-50/70 text-[11px] font-semibold text-zuna-500 text-left');
         [['Type', 'pl-3'], ['Occupancy', ''], ['Eligible', 'pr-3']].forEach(([t, cl]) => hr.appendChild(h('th', 'py-1.5 px-2 font-semibold ' + cl, t))); th.appendChild(hr); tb.appendChild(th);
         const bd = h('tbody', 'divide-y divide-zuna-50');
         p.room_types.forEach((r) => { const tr = h('tr', 'align-middle');
-          const c1 = h('td', 'py-2 pl-3 pr-2'); const f = h('div', 'flex items-center gap-2.5'); const ti = h('img', 'w-11 h-8 rounded-md object-cover ring-1 ring-zuna-100 shrink-0'); ti.src = ZUI.art.room; ti.alt = ''; f.appendChild(ti);
+          const c1 = h('td', 'py-2 pl-3 pr-2'); const f = h('div', 'flex items-center gap-2.5'); const ti = h('img', 'hidden sm:block w-11 h-8 rounded-md object-cover ring-1 ring-zuna-100 shrink-0'); ti.src = ZUI.art.room; ti.alt = ''; f.appendChild(ti);
           const nm = h('div', 'min-w-0'); nm.appendChild(h('p', 'font-semibold leading-tight', r.name || 'Rooms')); nm.appendChild(h('p', 'text-xs text-zuna-500 leading-tight mt-0.5', r.rooms + ' rooms' + (r.room_nos ? ' · ' + r.room_nos : ''))); f.appendChild(nm); c1.appendChild(f); tr.appendChild(c1);
           const c2 = h('td', 'py-2 px-2 whitespace-nowrap'); c2.appendChild(h('span', 'inline-flex rounded-md px-2 py-0.5 text-xs font-semibold bg-zuna-50 ring-1 ring-zuna-100', r.occupancy)); if (r.bed_type) c2.appendChild(h('p', 'text-[11px] text-zuna-500 mt-0.5 pl-0.5', r.bed_type + ' bed')); tr.appendChild(c2);
           const c3 = h('td', 'py-2 pl-2 pr-3'); c3.appendChild(h('span', 'inline-flex rounded-md px-2 py-0.5 text-xs font-semibold bg-mint-50 text-mint-700 ring-1 ring-mint-200 whitespace-nowrap', r.eligible)); tr.appendChild(c3); bd.appendChild(tr); });

@@ -3,8 +3,11 @@
 @tailwind utilities;
 @layer components {
   .navbtn { @apply flex items-center gap-3 w-full px-3 py-2.5 rounded-xl text-sm font-medium text-zuna-200 hover:bg-white/10 hover:text-white transition-colors; }
-  .navbtn[data-active] { @apply bg-mint-500 text-zuna-900 font-bold shadow-lg shadow-mint-500/25; }
-  .navbtn[data-active] #navCount { @apply bg-zuna-900/15; }
+  .navbtn { position: relative; }
+  .navbtn[data-active] { @apply bg-white/[.09] text-white font-semibold; box-shadow: inset 0 0 0 1px rgba(255,255,255,.06); }
+  .navbtn[data-active] svg { color: #02C988; }
+  .navbtn[data-active]::before { content: ""; position: absolute; left: -12px; top: 9px; bottom: 9px; width: 3px; border-radius: 0 3px 3px 0; background: #02C988; }
+  .navbtn[data-active] #navCount { @apply bg-mint-500/20 text-mint-300; }
   .rangebtn { @apply whitespace-nowrap rounded-lg px-3 py-1.5 text-xs font-semibold text-zuna-500 hover:text-zuna-900 transition-all; }
   .rangebtn[data-active], .segbtn[aria-selected="true"] { @apply bg-zuna-900 text-white hover:text-white; box-shadow: 0 6px 14px -6px rgba(18,0,90,.55), inset 0 -2px 0 #02C988; }
   .card { @apply bg-white rounded-2xl ring-1 ring-zuna-100 shadow-[0_1px_2px_rgba(18,0,90,.04),0_1px_3px_rgba(18,0,90,.06)]; }
@@ -250,7 +253,7 @@ html.sb-anim .glass-zone .card, html.sb-anim header, html.sb-anim .backdrop-blur
 .sb-act { display: flex; flex-direction: column; align-items: center; justify-content: center; gap: 4px; min-height: 42px; padding: 6px 2px 5px; border-radius: 10px; color: #b9b0e0; font-size: 10px; font-weight: 500; letter-spacing: .01em; line-height: 1; transition: background-color .15s, color .15s; }
 .sb-act svg { width: 16px; height: 16px; stroke-width: 1.75; }
 .sb-act:hover { background: rgba(255,255,255,.1); color: #fff; }
-.sb-act[data-active] { background: #02C988; color: #12005A; }
+.sb-act[data-active] { background: rgba(255,255,255,.09); color: #fff; } .sb-act[data-active] svg { color: #02C988; }
 /* menu group headings (Guest houses / Hotels); a thin divider when the sidebar is narrow */
 .nav-h { margin: .9rem 0 .2rem; padding: 0 .75rem; font-size: 10.5px; font-weight: 700; letter-spacing: .12em; text-transform: uppercase; color: #8f86c4; white-space: nowrap; }
 .nav-h:first-child { margin-top: 0; }

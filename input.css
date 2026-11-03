@@ -249,6 +249,13 @@ html.sb-anim .glass-zone .card, html.sb-anim header, html.sb-anim .backdrop-blur
 /* sidebar footer actions: icon with its name underneath */
 .sb-act { display: flex; flex-direction: column; align-items: center; justify-content: center; gap: 3px; min-height: 44px; padding: 5px 2px; border-radius: 10px; color: #cdc5ec; font-size: 11px; font-weight: 600; line-height: 1.1; transition: background-color .15s, color .15s; }
 .sb-act:hover { background: rgba(255,255,255,.1); color: #fff; }
+.sb-act[data-active] { background: #02C988; color: #12005A; }
+/* menu group headings (Guest houses / Hotels); a thin divider when the sidebar is narrow */
+.nav-h { margin: .9rem 0 .2rem; padding: 0 .75rem; font-size: 10.5px; font-weight: 700; letter-spacing: .12em; text-transform: uppercase; color: #8f86c4; white-space: nowrap; }
+.nav-h:first-child { margin-top: 0; }
+html.sb-c #side .nav-h { height: 1px; margin: .6rem .6rem; padding: 0; background: rgba(255,255,255,.14); }
+html.sb-c #side .nav-h:first-child { display: none; }
+html.sb-c #side .nav-h span { display: none; }
 .sb-act .sb-label { white-space: nowrap; }
 html.sb-c #side .sb-act { min-height: 38px; }
 /* tooltip next to the narrow sidebar */

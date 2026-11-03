@@ -31,26 +31,29 @@ if(document.readyState!=='loading')setTimeout(hide,150);else document.addEventLi
     <div class="sb-mini hidden absolute top-0 left-0 w-[72px] pt-5 justify-center"><span class="logo-box w-11 h-9 rounded-lg bg-white grid place-items-center px-1.5"><img alt="LTM" src="__LTM__" class="w-full h-auto max-h-[14px] object-contain"></span></div>
     <div class="px-5 mt-4 flex items-center gap-2 sb-full">
       <div class="min-w-0 flex-1">
-        <p class="text-base font-semibold leading-tight">Guest Houses</p>
-        <p class="text-xs text-zuna-200 mt-0.5">Inventory &amp; occupancy</p>
+        <p class="text-base font-semibold leading-tight">Accommodation</p>
+        <p class="text-xs text-zuna-200 mt-0.5">Guest houses &amp; hotels</p>
       </div>
       <button id="sbCloseM" title="Close menu" aria-label="Close menu" class="lg:hidden grid place-items-center w-8 h-8 rounded-lg text-zuna-200 hover:text-white hover:bg-white/10"><i data-i="x" class="w-[18px] h-[18px]"></i></button>
     </div>
     
-    <nav id="nav" class="mt-6 px-3 flex flex-col gap-1">
+    <nav id="nav" class="mt-5 px-3 flex flex-col gap-1">
+      <p class="nav-h" aria-hidden="true"><span>Guest houses</span></p>
       <button data-view="overview" class="navbtn" title="Overview"><i data-i="layout-dashboard"></i><span class="sb-label">Overview</span></button>
       <button data-view="rack" class="navbtn" title="Room rack"><i data-i="bed-double"></i><span class="sb-label">Room rack</span></button>
       <button data-view="calendar" class="navbtn" title="Availability"><i data-i="calendar-days"></i><span class="sb-label">Availability</span></button>
-      <button data-view="bookings" class="navbtn" title="Bookings"><i data-i="list-checks"></i><span class="sb-label">Bookings</span><span id="navCount" class="sb-label ml-auto text-xs font-bold rounded-full px-2 py-0.5 bg-white/15">0</span></button>
+      <button data-view="bookings" class="navbtn" title="Stay register"><i data-i="list-checks"></i><span class="sb-label">Stay register</span><span id="navCount" class="sb-label ml-auto text-xs font-bold rounded-full px-2 py-0.5 bg-white/15">0</span></button>
+      <button data-view="houses" class="navbtn" title="Directory"><i data-i="building-2"></i><span class="sb-label">Directory</span></button>
+      <p id="navHotelsH" class="nav-h hidden" aria-hidden="true"><span>Hotels</span></p>
       <button data-view="hotels" id="navHotels" class="navbtn hidden" title="Hotel bookings"><i data-i="hotel"></i><span class="sb-label">Hotel bookings</span></button>
-      <button data-view="houses" class="navbtn" title="Guest houses"><i data-i="building-2"></i><span class="sb-label">Guest houses</span></button>
     </nav>
     <div class="mt-auto border-t border-white/10 p-3 sb-user">
       <div class="flex items-center gap-3 sb-who">
         <span id="userAv" class="w-9 h-9 shrink-0 rounded-full bg-mint-500 text-zuna-900 grid place-items-center text-xs font-bold">—</span>
         <div class="min-w-0 flex-1 sb-label"><p id="userName" class="text-sm font-semibold truncate">—</p><p id="userMail" class="text-xs text-zuna-300 truncate">—</p></div>
       </div>
-      <div class="mt-2.5 grid grid-cols-3 gap-1 sb-actions">
+      <div id="sbActs" class="mt-2.5 grid grid-cols-3 gap-1 sb-actions">
+        <button type="button" id="usersBtn" data-tip="Users & access" aria-label="Users & access" class="sb-act"><i data-i="users" class="w-[18px] h-[18px]"></i><span class="sb-label">Users</span></button>
         <button type="button" id="themeBtn" data-tip="Dark mode" aria-label="Switch to dark mode" aria-pressed="false" class="sb-act"><i data-i="moon" class="w-[18px] h-[18px]"></i><span class="sb-label">Dark mode</span></button>
         <button id="sbToggle" type="button" data-tip="Collapse sidebar" aria-label="Collapse sidebar" aria-expanded="true" class="sb-act hidden lg:flex"><i data-i="panel-left-close" class="w-[18px] h-[18px]"></i><span class="sb-label">Collapse</span></button>
         <a href="/logout" id="logoutBtn" data-tip="Log out" aria-label="Log out" class="sb-act"><i data-i="log-out" class="w-[18px] h-[18px]"></i><span class="sb-label">Log out</span></a>
@@ -167,7 +170,7 @@ if(document.readyState!=='loading')setTimeout(hide,150);else document.addEventLi
       <section data-view="bookings" class="view hidden">
         <div class="card">
           <div class="card-h">
-            <div><h2 class="card-t">Booking register</h2><p class="card-s">Click a booking for full details</p></div>
+            <div><h2 class="card-t">Stay register</h2><p class="card-s">Click a booking for full details</p></div>
             <div class="ml-auto flex flex-wrap gap-2"><button type="button" class="btn-primary" data-weekly><i data-i="download" class="w-4 h-4"></i><span data-ghname>LTM GH Report</span></button><button class="btn-primary" data-dl="register-pdf"><i data-i="download" class="w-4 h-4"></i>PDF</button><button class="btn-primary" data-dl="register-xlsx"><i data-i="download" class="w-4 h-4"></i>Excel</button></div>
           </div>
           <div class="px-5 py-3 flex flex-wrap items-center gap-3 border-b border-zuna-50">
@@ -950,9 +953,10 @@ $('#hxXlsx').onclick = () => { const rows = hxFiltered(); if (!rows.length) { to
   window.__ltm.txExcel(HX.cols, rows, ((DATA.client && DATA.client.name) || 'Client').replace(/[^A-Za-z0-9]+/g, '_') + '_Hotel_Bookings_' + tag + '.xlsx'); };
 
 /* ---------- routing ---------- */
-const TITLES = {overview: 'Overview', rack: 'Room rack', calendar: 'Night-wise availability', bookings: 'Booking register', hotels: 'Hotel bookings', houses: 'All guest houses', users: 'Users & access'};
+const TITLES = {overview: 'Overview', rack: 'Room rack', calendar: 'Night-wise availability', bookings: 'Stay register', hotels: 'Hotel bookings', houses: 'Guest house directory', users: 'Users & access'};
 const render = () => {
   $$('#nav button').forEach((b) => b.toggleAttribute('data-active', b.dataset.view === state.view));
+  const ub = $('#usersBtn'); if (ub) ub.toggleAttribute('data-active', state.view === 'users');
   $$('.view').forEach((v) => v.classList.toggle('hidden', v.dataset.view !== state.view));
   $('#viewTitle').textContent = TITLES[state.view]; document.title = TITLES[state.view] + ' · Zuna Stays';
   const p = P();
@@ -997,7 +1001,8 @@ ZUI.auto(document.body); ZUI.clickables(document.body);
 (() => {   // client branding + Zuna admin tools
   const cl = DATA.client;
   if (cl) { $$('#side img[alt="LTM"]').forEach((im) => { im.alt = cl.name; if (cl.logo) im.src = cl.logo; else { const mini = !!im.closest('.sb-mini'); const t = h('span', (mini ? 'text-[11px]' : 'text-sm') + ' font-black text-zuna-900 px-1 whitespace-nowrap', mini ? cl.name.split(/\s+/).map((w) => w[0]).join('').slice(0, 3).toUpperCase() : cl.name); t.title = cl.name; im.replaceWith(t); } }); }
-  if (USER.manager && !USER.admin) { const nav = $('#nav'); const b = h('button', 'navbtn'); b.dataset.view = 'users'; b.title = 'Users & access'; b.appendChild(icon('users', 'w-[18px] h-[18px] shrink-0')); b.appendChild(h('span', 'sb-label', 'Users & access')); b.onclick = () => go('users'); nav.appendChild(b); }
+  if (USER.manager && !USER.admin) { $('#sbActs').classList.replace('grid-cols-3', 'grid-cols-4'); $('#usersBtn').onclick = () => go('users'); }   // Users & access sits with the account buttons, not in the menu
+  else $('#usersBtn').remove();
   if (USER.admin) {
     const nav = $('#nav'); const a = h('a', 'navbtn'); a.href = '/admin'; a.appendChild(icon('shield-check', 'w-[18px] h-[18px] shrink-0')); a.appendChild(h('span', 'sb-label', 'Admin panel')); nav.appendChild(a);
     if ((DATA.clients || []).length > 1) { const w = h('div', 'px-5 mt-3 sb-full'); const s = h('select', 'w-full rounded-lg bg-white/10 text-white text-xs font-semibold px-2 py-1.5 ring-1 ring-white/15');
@@ -1046,7 +1051,7 @@ hydrateIcons();
   ['#dHandle', '#dHead'].forEach((sel) => { const n = $(sel); n.addEventListener('touchstart', startY, {passive: true}); n.addEventListener('touchmove', moveY, {passive: false}); n.addEventListener('touchend', endY); n.addEventListener('touchcancel', endY); }); }
 { const tb = $('#themeBtn'); const sync = () => { const dk = ZUI.theme.get() === 'dark'; tb.replaceChildren(icon(dk ? 'sun' : 'moon', 'w-[18px] h-[18px]'), h('span', 'sb-label', dk ? 'Light mode' : 'Dark mode')); tb.dataset.tip = dk ? 'Light mode' : 'Dark mode'; tb.setAttribute('aria-label', dk ? 'Switch to light mode' : 'Switch to dark mode'); tb.setAttribute('aria-pressed', dk ? 'true' : 'false'); };
   tb.onclick = () => { ZUI.theme.set(ZUI.theme.get() === 'dark' ? 'light' : 'dark'); sync(); render(); toast(ZUI.theme.get() === 'dark' ? 'Dark mode on' : 'Light mode on'); }; sync(); }
-if (USER.tx) $('#navHotels').classList.remove('hidden');   // hotel bookings: admins, client admins and users given access
+if (USER.tx) { $('#navHotels').classList.remove('hidden'); $('#navHotelsH').classList.remove('hidden'); }   // hotel bookings: admins, client admins and users given access
 const hs = location.hash.slice(1); if (TITLES[hs] && (hs !== 'users' || (USER.manager && !USER.admin)) && (hs !== 'hotels' || USER.tx)) state.view = hs;
 /* auto-refresh: reload data every 10 minutes while the tab is open (quietly, keeps the current page) */
 const LOADED = Date.now();

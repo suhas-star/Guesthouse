@@ -306,6 +306,9 @@ check('old host redirects to PRIMARY_HOST', r.status === 301 && r.headers.get('l
     check('booking is confirmed instantly with a ZUNA code', x.status === 200 && /^ZUNA\d+$/.test(t1.code) && t1.status === 'Confirmed' && t1.room === 'A1');
     const em = mails[m0];
     check('confirmation e-mail goes to the guest with CC and BCC', mails.length === m0 + 1 && em.to[0] === 'karan@acme.example' && em.cc[0] === 'desk@zuna.example' && em.bcc[0] === 'audit@zuna.example' && /Booking confirmed/.test(em.subject) && em.text.includes(t1.code) && em.text.includes('Late arrival') && t1.mail_status === 'sent');
+    x = await B(asha, 'guests', {q: 'kar'}); check('booked guest is saved and found by the first letters', x.status === 200 && x.j.guests.length === 1 && x.j.guests[0].name === 'Karan Mehta' && x.j.guests[0].email === 'karan@acme.example' && x.j.guests[0].grade === 'E1' && x.j.guests[0].title === 'Mr.');
+    x = await B(asha, 'guests', {q: ''}); check('recent guests are offered before typing', x.j.guests.some((g) => g.name === 'Karan Mehta'));
+    x = await B(admin, 'guests', {client_id: other, q: 'kar'}); check("another client's guest list is separate", x.status === 200 && !x.j.guests.some((g) => g.name === 'Karan Mehta'));
     x = await B(asha, 'bookings', {}); check('the stay shows in the stay list with its code', x.j.bookings.some((b) => b.guest === 'Mr. Karan Mehta' && b.room === 'A1' && b.booking_code === t1.code));
     check('room taken on those nights is refused', (await B(asha, 'book', {property: 'Acme House', check_in: D(201), check_out: D(202), room: 'A1', title: 'Ms.', name: 'Priya S', grade: 'E1'})).status === 409);
     check('same guest cannot be booked twice for the same nights', (await B(asha, 'book', {property: 'Acme House', check_in: D(201), check_out: D(204), room: 'A2', title: 'Mr.', name: 'Karan Mehta', grade: 'E1'})).status === 409);

@@ -1201,7 +1201,7 @@ const bkDraw = () => {
   body.appendChild(bkStepper());
   const pane = h('div'); body.appendChild(pane); const err = h('p', 'hidden mt-3 rounded-xl bg-rose-50 ring-1 ring-rose-200 px-3 py-2 text-xs font-semibold text-rose-700'); err.setAttribute('role', 'alert'); BK.errEl = err;
   [bkStay, bkGuestStep, bkRoom, bkConfirm][BK.step](pane); body.appendChild(err);
-  const foot = h('div', 'flex items-center justify-between gap-3 border-t border-zuna-50 mt-5 pt-4');
+  const foot = h('div', 'sticky bottom-0 z-20 -mx-5 -mb-5 mt-5 px-5 py-3 flex items-center justify-between gap-3 bg-white/95 backdrop-blur border-t border-zuna-100 rounded-b-2xl shadow-[0_-8px_20px_-14px_rgba(18,0,90,.35)]');
   const back = h('button', 'btn'); back.type = 'button'; back.appendChild(document.createTextNode(BK.step === 1 && BK.from === 'timeline' ? '← Back to timeline' : '← Back')); back.style.visibility = BK.step || BK.mode === 'timeline' ? 'visible' : 'hidden';
   back.onclick = () => { if (BK.from === 'timeline' && BK.step === 3) BK.step = 1; else if (BK.from === 'timeline' && BK.step <= 1) BK.step = 0; else BK.step = Math.max(0, BK.step - 1); bkDraw(); };
   const next = h('button', 'btn-primary !py-2.5 !px-5'); next.type = 'button';
@@ -1280,17 +1280,44 @@ const bkSection = (title, desc, fields) => { const s = h('section', 'grid gap-4 
   const g = h('div', 'grid grid-cols-12 gap-x-4 gap-y-4 items-start'); fields.forEach(([span, el]) => { if (!/(^|\s)col-span-/.test(span)) el.classList.add('col-span-12'); span.split(' ').forEach((c) => c && el.classList.add(c)); g.appendChild(el); }); s.appendChild(g); return s; };
 const bkLabel = (label, el, req) => { const w = h('label', 'block min-w-0'); const t = h('span', 'flex items-center gap-1 text-xs font-semibold text-zuna-600 mb-1.5'); t.appendChild(document.createTextNode(label)); if (req) { const r = h('span', 'text-rose-500', '*'); r.setAttribute('aria-hidden', 'true'); t.appendChild(r); } w.append(t, el); return w; };
 
+// guest name: suggestions from saved guests (recent ones on focus, matches after 3 letters); picking one fills the guest's details
+const bkSuggest = (inp, wrap) => {
+  inp.setAttribute('role', 'combobox'); inp.setAttribute('aria-autocomplete', 'list'); inp.setAttribute('aria-expanded', 'false'); inp.setAttribute('aria-controls', 'gSug');
+  const pan = h('div', 'hidden absolute left-0 right-0 top-full mt-1.5 z-40 rounded-xl bg-white ring-1 ring-zuna-100 shadow-xl shadow-zuna-900/10 max-h-80 overflow-auto p-1.5'); pan.id = 'gSug'; pan.setAttribute('role', 'listbox'); wrap.appendChild(pan);
+  let items = [], act = -1, seq = 0, timer = null, head = '';
+  const close = () => { pan.classList.add('hidden'); inp.setAttribute('aria-expanded', 'false'); inp.removeAttribute('aria-activedescendant'); act = -1; };
+  const full = (g) => (g.title ? g.title + ' ' : '') + g.name;
+  const paint = () => { pan.replaceChildren(); if (!items.length) { close(); return; }
+    pan.appendChild(h('p', 'px-2.5 pt-1 pb-1.5 text-[10.5px] font-bold uppercase tracking-wider text-zuna-400', head));
+    items.forEach((g, i) => { const o = h('div', 'flex items-center gap-3 rounded-lg px-2.5 py-2 cursor-pointer ' + (i === act ? 'bg-mint-50' : 'hover:bg-zuna-50')); o.id = 'gSug' + i; o.setAttribute('role', 'option'); o.setAttribute('aria-selected', i === act ? 'true' : 'false');
+      o.appendChild(avatar(full(g), 'w-8 h-8 text-[11px]')); const tx = h('div', 'min-w-0 flex-1'); tx.appendChild(h('p', 'text-sm font-semibold truncate', full(g)));
+      tx.appendChild(h('p', 'text-xs text-zuna-500 truncate', [g.grade, g.emp_code, g.email || g.phone].filter(Boolean).join(' · ') || (g.base || 'Past stay'))); o.appendChild(tx);
+      o.appendChild(h('span', 'text-[10.5px] font-semibold shrink-0 ' + (g.saved ? 'text-mint-700' : 'text-zuna-400'), g.saved ? (g.uses > 1 ? g.uses + ' bookings' : 'Saved') : 'Past stay'));
+      o.addEventListener('mousedown', (e) => { e.preventDefault(); choose(g); }); pan.appendChild(o); });
+    pan.classList.remove('hidden'); inp.setAttribute('aria-expanded', 'true'); if (act >= 0) { inp.setAttribute('aria-activedescendant', 'gSug' + act); const el = pan.querySelector('#gSug' + act); if (el) el.scrollIntoView({block: 'nearest'}); } };
+  const load = async () => { const q = inp.value.trim(), my = ++seq;
+    try { const r = await fetch('/api/guests', {method: 'POST', headers: {'content-type': 'application/json'}, credentials: 'same-origin', body: JSON.stringify({client_id: DATA.client && DATA.client.id, q: q.length >= 3 ? q : ''})});
+      const j = await r.json(); if (my !== seq || document.activeElement !== inp) return; items = j.guests || []; act = -1; head = q.length >= 3 ? 'Matching guests' : 'Recent guests'; paint(); } catch (e) { /* suggestions are optional */ } };
+  const choose = (g) => { const v = BK.v; ['title', 'name', 'gender', 'email', 'phone', 'grade', 'emp_code', 'base'].forEach((k) => { if (g[k]) v[k] = g[k]; }); close(); bkDraw(); toast('Filled in ' + full(g) + "'s details"); };
+  inp.addEventListener('focus', () => { if (inp.value.trim().length < 3) load(); });
+  inp.addEventListener('input', () => { clearTimeout(timer); const q = inp.value.trim(); if (q.length > 0 && q.length < 3) { close(); return; } timer = setTimeout(load, 160); });
+  inp.addEventListener('keydown', (e) => { if (pan.classList.contains('hidden') || !items.length) return;
+    if (e.key === 'ArrowDown' || e.key === 'ArrowUp') { e.preventDefault(); act = (act + (e.key === 'ArrowDown' ? 1 : -1) + items.length) % items.length; paint(); }
+    else if (e.key === 'Enter' && act >= 0) { e.preventDefault(); choose(items[act]); } else if (e.key === 'Escape') close(); });
+  inp.addEventListener('blur', () => setTimeout(close, 120));
+};
+
 // step 2 · guest
 const bkGuestStep = (pane) => { const v = BK.v;
   bkHead(pane, 'Who is staying?', BK.from === 'timeline' ? 'Room ' + BK.room + ' · ' + BK.prop + ' · ' + fShort(BK.ci) + ' → ' + fShort(BK.co) + ' · ' + bkNights() + (bkNights() === 1 ? ' night' : ' nights') : 'Fields marked * are needed. Grade and gender decide which rooms are offered next.');
   const ttl = bkVal('title', bSelect(['Mr.', 'Ms.', 'Mrs.', 'Dr.']), 'change'), gen = bkVal('gender', bSelect(['Male', 'Female']), 'change');
-  const nm = bkVal('name', bInput('First and last name')); nm.required = true;
+  const nm = bkVal('name', bInput('Type 3 letters to find a saved guest')); nm.required = true; const nmw = h('div', 'relative'); nmw.appendChild(nm); bkSuggest(nm, nmw);
   const syncG = () => { if (v.title === 'Mr.') v.gender = 'Male'; else if (v.title === 'Ms.' || v.title === 'Mrs.') v.gender = 'Female'; gen.value = v.gender; }; ttl.addEventListener('change', syncG);
   const em = bkVal('email', bInput('name@company.com', 'email')), ph = bkPhone();
   const sec = h('div', 'divide-y divide-zuna-50');
   sec.append(
     bkSection('Guest', 'As on the guest\'s ID. Gender follows the title; change it if needed.', [
-      ['col-span-4 sm:col-span-3 lg:col-span-2', bkLabel('Title', ttl, true)], ['col-span-8 sm:col-span-9 lg:col-span-7', bkLabel('Full name', nm, true)], ['col-span-12 sm:col-span-6 lg:col-span-3', bkLabel('Gender', gen, true)]]),
+      ['col-span-4 sm:col-span-3 lg:col-span-2', bkLabel('Title', ttl, true)], ['col-span-8 sm:col-span-9 lg:col-span-7', bkLabel('Full name', nmw, true)], ['col-span-12 sm:col-span-6 lg:col-span-3', bkLabel('Gender', gen, true)]]),
     bkSection('Contact', 'The booking confirmation is emailed to this address.', [
       ['sm:col-span-6', bkLabel('Email', em)], ['sm:col-span-6', bkLabel('Mobile', ph)]]),
     bkSection('Employee & billing', 'Used for eligibility and in the reports.', [

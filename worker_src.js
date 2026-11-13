@@ -402,6 +402,8 @@ const SCHEMA = [
   // bookings made from the portal (Book a room) -- also written into the stay data so they show everywhere
   "CREATE TABLE IF NOT EXISTS trips (id INTEGER PRIMARY KEY AUTOINCREMENT, client_id INTEGER NOT NULL, code TEXT, property TEXT, room TEXT, title TEXT, name TEXT, gender TEXT, grade TEXT, emp_code TEXT, email TEXT, phone TEXT, base TEXT, concur_tr TEXT, wbs TEXT, occupancy TEXT, check_in TEXT, check_out TEXT, note TEXT, status TEXT, cc TEXT, bcc TEXT, booked_by TEXT, booked_at TEXT, changed_by TEXT, changed_at TEXT, cancelled_by TEXT, cancelled_at TEXT, cancel_reason TEXT, mail_status TEXT, history TEXT)",
   "CREATE INDEX IF NOT EXISTS trips_client ON trips (client_id, check_in)",
+  // guests saved from bookings, offered as suggestions when the next booking is typed
+  "CREATE TABLE IF NOT EXISTS guests (id INTEGER PRIMARY KEY AUTOINCREMENT, client_id INTEGER NOT NULL, gkey TEXT NOT NULL, title TEXT, name TEXT, gender TEXT, email TEXT, phone TEXT, grade TEXT, emp_code TEXT, base TEXT, uses INTEGER DEFAULT 0, last_used TEXT, UNIQUE (client_id, gkey))",
   // hotel bookings removed by the Zuna team (kept so they can be restored)
   "CREATE TABLE IF NOT EXISTS tx_removed (id INTEGER PRIMARY KEY AUTOINCREMENT, client_id INTEGER NOT NULL, code TEXT NOT NULL, row TEXT NOT NULL, upload_id INTEGER, by_email TEXT, at TEXT, restored TEXT)",
 ];
@@ -732,6 +734,7 @@ async function placeTrip(env, user, cid, b, trip) {
   let id;
   if (trip) { await env.DB.prepare("UPDATE trips SET " + cols.map((k) => k + " = ?").join(", ") + ", changed_by = ?, changed_at = ?, history = ? WHERE id = ?").bind(...vals, user.email, now, JSON.stringify(hist), trip.id).run(); id = trip.id; }
   else { const r = await env.DB.prepare("INSERT INTO trips (client_id, " + cols.join(", ") + ", status, booked_by, booked_at, history) VALUES (?, " + cols.map(() => "?").join(", ") + ", 'Confirmed', ?, ?, ?)").bind(client.id, ...vals, user.email, now, JSON.stringify(hist)).run(); id = r.meta ? r.meta.last_row_id : r.lastInsertRowid; }
+  await saveGuest(env, client.id, t);
   const saved = await env.DB.prepare("SELECT * FROM trips WHERE id = ?").bind(id).first();
   const mail = b.send_mail === false ? "not sent" : await tripMail(env, client, saved, av.gh, trip ? "changed" : "confirmed");
   await env.DB.prepare("UPDATE trips SET mail_status = ? WHERE id = ?").bind(mail, id).run();
@@ -778,6 +781,30 @@ async function tripMail(env, client, trip, gh, kind) {
       body: JSON.stringify(Object.assign({from: env.MAIL_FROM || "Zuna Hotel Desk <noreply@zuna.ai>", to: main, subject, html, text}, copies.length ? {cc: copies} : {}, bcc.length ? {bcc} : {}))});
     return r.ok ? "sent" : "failed"; } catch (e) { return "failed"; }
 }
+// guest list: one row per person (employee code, else name + email), newest details win
+const guestKeyOf = (t) => t.emp_code ? "E:" + String(t.emp_code).trim().toLowerCase() : "N:" + nameKey(t.name) + "|" + String(t.email || "").toLowerCase();
+async function saveGuest(env, cid, t) {
+  if (!t.name) return; const key = guestKeyOf(t), now = new Date().toISOString();
+  if (t.emp_code) await env.DB.prepare("DELETE FROM guests WHERE client_id = ? AND gkey = ?").bind(cid, "N:" + nameKey(t.name) + "|" + String(t.email || "").toLowerCase()).run();   // an older entry without the employee code
+  await env.DB.prepare("INSERT INTO guests (client_id, gkey, title, name, gender, email, phone, grade, emp_code, base, uses, last_used) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, 1, ?) ON CONFLICT (client_id, gkey) DO UPDATE SET title = excluded.title, name = excluded.name, gender = excluded.gender, email = COALESCE(NULLIF(excluded.email, ''), guests.email), phone = COALESCE(NULLIF(excluded.phone, ''), guests.phone), grade = excluded.grade, emp_code = excluded.emp_code, base = COALESCE(NULLIF(excluded.base, ''), guests.base), uses = guests.uses + 1, last_used = excluded.last_used")
+    .bind(cid, key, t.title || "", t.name, t.gender || "", t.email || "", t.phone || "", t.grade || "", t.emp_code || "", t.base || "", now).run();
+}
+async function findGuests(env, client, q) {
+  const out = [], seen = new Set(), add = (g) => { const k = nameKey(g.name); if (!k || seen.has(k)) return; seen.add(k); out.push(g); };
+  const pick = (r) => ({title: r.title || "", name: r.name, gender: r.gender || "", email: r.email || "", phone: r.phone || "", grade: r.grade || "", emp_code: r.emp_code || "", base: r.base || "", last: (r.last_used || "").slice(0, 10), uses: r.uses || 0, saved: true});
+  const term = String(q || "").trim().toLowerCase().slice(0, 60);
+  if (term.length < 3) { const {results} = await env.DB.prepare("SELECT * FROM guests WHERE client_id = ? ORDER BY last_used DESC LIMIT 8").bind(client.id).all(); results.forEach((r) => add(pick(r))); return out; }
+  const like = "%" + term.replace(/[%_]/g, "") + "%";
+  const {results} = await env.DB.prepare("SELECT * FROM guests WHERE client_id = ? AND (lower(name) LIKE ? OR lower(emp_code) LIKE ? OR lower(email) LIKE ?) ORDER BY uses DESC, last_used DESC LIMIT 8").bind(client.id, like, like, like).all();
+  results.forEach((r) => add(pick(r)));
+  if (out.length < 8) {   // past stays in the stay data (e.g. from guest house emails) as extra suggestions
+    const names = new Set((await clientGuestHouses(env, client, false)).map((g) => g.property)), bk = await readSet(env, "bookings");
+    bk.rows.filter((x) => names.has(x.property) && String(x.guest || "").toLowerCase().includes(term)).sort((a, b) => (a.check_in < b.check_in ? 1 : -1)).forEach((x) => { if (out.length >= 8) return;
+      const m = String(x.guest).match(/^\s*(Mr|Ms|Mrs|Miss|Dr)\.?\s+(.*)$/i), title = m ? ({mr: "Mr.", ms: "Ms.", mrs: "Mrs.", miss: "Ms.", dr: "Dr."})[m[1].toLowerCase()] : "";
+      add({title, name: (m ? m[2] : x.guest).trim(), gender: /^(Male|Female)$/.test(x.gender || "") ? x.gender : "", email: "", phone: "", grade: /not stated/i.test(x.grade || "") ? "" : x.grade || "", emp_code: x.emp_code || "", base: /not stated/i.test(x.base || "") ? "" : x.base || "", last: x.check_in, uses: 0, saved: false}); });
+  }
+  return out;
+}
 async function bookApi(req, env, user, path) {
   let b; try { b = await req.json(); } catch (e) { return json({error: "Bad request."}, 400); }
   const cid = user.admin ? +b.client_id : user.client_id; if (!cid) return json({error: "No client."}, 400);
@@ -788,6 +815,7 @@ async function bookApi(req, env, user, path) {
     const names = new Set((await clientGuestHouses(env, client, false)).map((g) => g.property)), bk = await readSet(env, "bookings");
     const rows = bk.rows.filter((x) => names.has(x.property) && x.status !== "Cancelled"); await ghCodes(env, rows); return json({bookings: rows}); }
   if (!user.book) return json({error: "You can't book rooms yet. Ask your admin to switch on Book rooms for you."}, 403);
+  if (path === "/api/guests") { const client = await bookClient(env, cid); if (!client) return json({error: "No client."}, 404); return json({guests: await findGuests(env, client, b.q)}); }
   if (path === "/api/book/avail") { const client = await bookClient(env, cid); if (!client) return json({error: "No such client."}, 404);
     const iso = /^\d{4}-\d{2}-\d{2}$/; if (!iso.test(b.check_in || "") || !iso.test(b.check_out || "") || b.check_out <= b.check_in) return json({error: "Check-out must be after check-in."}, 400);
     let skip = null; if (b.exclude_id) { const tr = await tripFor(env, user, cid, b.exclude_id); if (tr) skip = guestKey({guest: guestOf(tr), check_in: tr.check_in}); }
@@ -1183,7 +1211,7 @@ async function handle(request, env) {
       if (!u || !u.admin) return json({error: "Not allowed."}, 403);
       return adminApi(request, env, u, path);
     }
-    if ((path === "/api/trips" || path === "/api/bookings" || path.startsWith("/api/book")) && request.method === "POST") {   // Book a room + Trips
+    if ((path === "/api/trips" || path === "/api/bookings" || path === "/api/guests" || path.startsWith("/api/book")) && request.method === "POST") {   // Book a room + Trips
       const origin = request.headers.get("origin");
       if (origin && origin !== url.origin) return json({error: "Bad origin."}, 403);
       const u = await currentUser(request, env);

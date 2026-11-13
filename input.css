@@ -403,3 +403,7 @@ table.hx-c2 .hx-gr-in { display: inline-flex; }
   #side .nav-h { margin: .55rem 0 .1rem; }
   html.sb-c #side .nav-h { margin: .4rem .6rem; }
 }
+
+/* Book a room timeline: nights not open to the guest's grade */
+.tl-ng { background: #f4f2fb repeating-linear-gradient(45deg, #e6e2f6 0 3px, transparent 3px 7px); }
+html.dark .tl-ng { background: #1a1440 repeating-linear-gradient(45deg, #2a2160 0 3px, transparent 3px 7px); }

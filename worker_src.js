@@ -400,7 +400,7 @@ const SCHEMA = [
   "CREATE INDEX IF NOT EXISTS tx_versions_up ON tx_versions (upload_id)",
   "CREATE TABLE IF NOT EXISTS gh_codes (id INTEGER PRIMARY KEY AUTOINCREMENT, key TEXT UNIQUE NOT NULL, created TEXT)",
   // bookings made from the portal (Book a room) -- also written into the stay data so they show everywhere
-  "CREATE TABLE IF NOT EXISTS trips (id INTEGER PRIMARY KEY AUTOINCREMENT, client_id INTEGER NOT NULL, code TEXT, property TEXT, room TEXT, title TEXT, name TEXT, gender TEXT, grade TEXT, emp_code TEXT, email TEXT, phone TEXT, base TEXT, concur_tr TEXT, occupancy TEXT, check_in TEXT, check_out TEXT, note TEXT, status TEXT, cc TEXT, bcc TEXT, booked_by TEXT, booked_at TEXT, changed_by TEXT, changed_at TEXT, cancelled_by TEXT, cancelled_at TEXT, cancel_reason TEXT, mail_status TEXT, history TEXT)",
+  "CREATE TABLE IF NOT EXISTS trips (id INTEGER PRIMARY KEY AUTOINCREMENT, client_id INTEGER NOT NULL, code TEXT, property TEXT, room TEXT, title TEXT, name TEXT, gender TEXT, grade TEXT, emp_code TEXT, email TEXT, phone TEXT, base TEXT, concur_tr TEXT, wbs TEXT, occupancy TEXT, check_in TEXT, check_out TEXT, note TEXT, status TEXT, cc TEXT, bcc TEXT, booked_by TEXT, booked_at TEXT, changed_by TEXT, changed_at TEXT, cancelled_by TEXT, cancelled_at TEXT, cancel_reason TEXT, mail_status TEXT, history TEXT)",
   "CREATE INDEX IF NOT EXISTS trips_client ON trips (client_id, check_in)",
   // hotel bookings removed by the Zuna team (kept so they can be restored)
   "CREATE TABLE IF NOT EXISTS tx_removed (id INTEGER PRIMARY KEY AUTOINCREMENT, client_id INTEGER NOT NULL, code TEXT NOT NULL, row TEXT NOT NULL, upload_id INTEGER, by_email TEXT, at TEXT, restored TEXT)",
@@ -409,7 +409,7 @@ let schemaReady = false;
 async function ensureSchema(env) {
   if (schemaReady) return;
   for (const q of SCHEMA) await env.DB.prepare(q).run();
-  for (const c of ["users ADD COLUMN role TEXT", "users ADD COLUMN client_id INTEGER", "guesthouses ADD COLUMN state TEXT", "guesthouses ADD COLUMN country TEXT", "room_types ADD COLUMN bed_type TEXT", "clients ADD COLUMN legal_name TEXT", "users ADD COLUMN tx_access INTEGER", "tx_uploads ADD COLUMN hash TEXT", "tx_uploads ADD COLUMN file_id INTEGER", "transactions ADD COLUMN held INTEGER", "users ADD COLUMN book_access INTEGER", "clients ADD COLUMN mail_cc TEXT", "clients ADD COLUMN mail_bcc TEXT"]) { try { await env.DB.prepare("ALTER TABLE " + c).run(); } catch (e) { /* exists */ } }
+  for (const c of ["users ADD COLUMN role TEXT", "users ADD COLUMN client_id INTEGER", "guesthouses ADD COLUMN state TEXT", "guesthouses ADD COLUMN country TEXT", "room_types ADD COLUMN bed_type TEXT", "clients ADD COLUMN legal_name TEXT", "users ADD COLUMN tx_access INTEGER", "tx_uploads ADD COLUMN hash TEXT", "tx_uploads ADD COLUMN file_id INTEGER", "transactions ADD COLUMN held INTEGER", "users ADD COLUMN book_access INTEGER", "clients ADD COLUMN mail_cc TEXT", "clients ADD COLUMN mail_bcc TEXT", "trips ADD COLUMN wbs TEXT"]) { try { await env.DB.prepare("ALTER TABLE " + c).run(); } catch (e) { /* exists */ } }
   schemaReady = true;
 }
 const DEFAULT_GRADES = "M1,M2,M3,M4,M5,M6,M7,M8,P1,P2,P3,E1,E2,E3,E4,E5,E6,E7";
@@ -623,6 +623,7 @@ async function saveBooking(env, client, b) {
   const gender = title === "Mr." ? "Male" : title === "Ms." || title === "Mrs." ? "Female" : ["Male", "Female"].includes(r.gender) ? r.gender : "Not stated";
   const row = {property: gh.property, guest: (title ? title + " " : "") + name, grade: clean(r.grade, 20) || "Not stated", base: clean(r.base, 60) || "Not stated", check_in: r.check_in, check_out: r.check_out,
     nights: String(Math.round((Date.parse(r.check_out) - Date.parse(r.check_in)) / 864e5)), room, status, concur_tr: clean(r.concur_tr, 40), note: clean(r.note, 300), gender, occupancy: r.occupancy === "Double" ? "Double" : "Single"};
+  if (r.emp_code) row.emp_code = clean(r.emp_code, 30); if (r.wbs) row.wbs = clean(r.wbs, 60);
   const bk = await readSet(env, "bookings"), mn = await readSet(env, "manual"), key = guestKey(row), orig = b.original && b.original.guest ? guestKey(b.original) : "";
   let rows = bk.rows.filter((x) => guestKey(x) !== key && (!orig || guestKey(x) !== orig)); rows.push(row);
   let man = mn.rows.filter((x) => guestKey(x) !== key && (!orig || guestKey(x) !== orig)); man.push(row);
@@ -684,7 +685,7 @@ async function roomAvailability(env, client, property, ci, co, skipKey) {
 function tripInput(b, client, isNew) {
   const iso = /^\d{4}-\d{2}-\d{2}$/, t = {property: clean(b.property, 120), check_in: String(b.check_in || ""), check_out: String(b.check_out || ""), room: clean(b.room, 40),
     title: ["Mr.", "Ms.", "Mrs.", "Dr."].includes(b.title) ? b.title : "", name: clean(b.name, 100).replace(/^\s*(mr|mrs|ms|miss|dr)\b\.?\s*/i, ""), grade: clean(b.grade, 20),
-    emp_code: clean(b.emp_code, 30), email: emailList(b.email)[0] || "", phone: clean(b.phone, 20).replace(/[^\d+\-\s]/g, ""), base: clean(b.base, 60), concur_tr: clean(b.concur_tr, 40),
+    emp_code: clean(b.emp_code, 30), email: emailList(b.email)[0] || "", phone: clean(b.phone, 20).replace(/[^\d+\-\s]/g, ""), base: clean(b.base, 60), concur_tr: clean(b.concur_tr, 40), wbs: clean(b.wbs, 60),
     occupancy: b.occupancy === "Double" ? "Double" : "Single", note: clean(b.note, 300), cc: emailList(b.cc).join(", "), bcc: emailList(b.bcc).join(", ")};
   t.gender = t.title === "Mr." ? "Male" : t.title === "Ms." || t.title === "Mrs." ? "Female" : ["Male", "Female"].includes(b.gender) ? b.gender : "";
   if (!t.property) return {err: "Choose the guest house."};
@@ -727,7 +728,7 @@ async function placeTrip(env, user, cid, b, trip) {
   const stay = {property: t.property, guest: guestOf(t), check_in: t.check_in}; await ghCodes(env, [stay]); const code = stay.booking_code || (trip && trip.code) || "";
   const now = new Date().toISOString(), hist = trip ? jparse(trip.history, []) : [];
   hist.push({at: now, by: user.email, what: trip ? "Changed" : "Booked", detail: t.property + " · room " + t.room + " · " + fmtD(t.check_in) + " → " + fmtD(t.check_out)});
-  const cols = ["code", "property", "room", "title", "name", "gender", "grade", "emp_code", "email", "phone", "base", "concur_tr", "occupancy", "check_in", "check_out", "note", "cc", "bcc"], vals = cols.map((k) => k === "code" ? code : t[k]);
+  const cols = ["code", "property", "room", "title", "name", "gender", "grade", "emp_code", "email", "phone", "base", "concur_tr", "wbs", "occupancy", "check_in", "check_out", "note", "cc", "bcc"], vals = cols.map((k) => k === "code" ? code : t[k]);
   let id;
   if (trip) { await env.DB.prepare("UPDATE trips SET " + cols.map((k) => k + " = ?").join(", ") + ", changed_by = ?, changed_at = ?, history = ? WHERE id = ?").bind(...vals, user.email, now, JSON.stringify(hist), trip.id).run(); id = trip.id; }
   else { const r = await env.DB.prepare("INSERT INTO trips (client_id, " + cols.join(", ") + ", status, booked_by, booked_at, history) VALUES (?, " + cols.map(() => "?").join(", ") + ", 'Confirmed', ?, ?, ?)").bind(client.id, ...vals, user.email, now, JSON.stringify(hist)).run(); id = r.meta ? r.meta.last_row_id : r.lastInsertRowid; }
@@ -737,7 +738,7 @@ async function placeTrip(env, user, cid, b, trip) {
   return json({ok: true, trip: tripOut(Object.assign(saved, {mail_status: mail}))});
 }
 const tripOut = (x) => ({id: x.id, code: x.code || "", property: x.property, room: x.room, title: x.title || "", name: x.name, guest: guestOf(x), gender: x.gender, grade: x.grade, emp_code: x.emp_code || "", email: x.email || "", phone: x.phone || "",
-  base: x.base || "", concur_tr: x.concur_tr || "", occupancy: x.occupancy, check_in: x.check_in, check_out: x.check_out, note: x.note || "", status: x.status, cc: x.cc || "", bcc: x.bcc || "",
+  base: x.base || "", concur_tr: x.concur_tr || "", wbs: x.wbs || "", occupancy: x.occupancy, check_in: x.check_in, check_out: x.check_out, note: x.note || "", status: x.status, cc: x.cc || "", bcc: x.bcc || "",
   booked_by: x.booked_by, booked_at: x.booked_at, changed_by: x.changed_by || "", changed_at: x.changed_at || "", cancelled_by: x.cancelled_by || "", cancelled_at: x.cancelled_at || "", cancel_reason: x.cancel_reason || "", mail_status: x.mail_status || "", history: jparse(x.history, [])});
 async function tripFor(env, user, cid, id) { return env.DB.prepare("SELECT * FROM trips WHERE id = ? AND client_id = ?").bind(+id || 0, cid).first(); }
 async function cancelTrip(env, user, cid, b) {

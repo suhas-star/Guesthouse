@@ -41,11 +41,11 @@ async function currentUser(req, env) {
   const tok = getCookie(req, COOKIE);
   if (!tok || !/^[a-f0-9]{64}$/.test(tok)) return null;
   await ensureSchema(env);
-  const row = await env.DB.prepare("SELECT s.email, s.expires, u.name, u.active, u.role, u.client_id, u.tx_access FROM sessions s JOIN users u ON u.email = s.email WHERE s.token_hash = ?").bind(await sha256(tok)).first();
+  const row = await env.DB.prepare("SELECT s.email, s.expires, u.name, u.active, u.role, u.client_id, u.tx_access, u.book_access FROM sessions s JOIN users u ON u.email = s.email WHERE s.token_hash = ?").bind(await sha256(tok)).first();
   if (!row || !row.active || row.expires < new Date().toISOString()) return null;
   const admin = row.role === "admin", manager = row.role === "client_admin" && !!row.client_id;
   // hotel bookings: Zuna admins and client admins always; other users when an admin switches it on
-  return {email: row.email, name: row.name, role: row.role || "client", client_id: row.client_id, admin, manager, tx: admin || manager || !!row.tx_access};
+  return {email: row.email, name: row.name, role: row.role || "client", client_id: row.client_id, admin, manager, tx: admin || manager || !!row.tx_access, book: admin || !!row.book_access};   // booking rooms: Zuna admins always; others when switched on
 }
 
 async function login(req, env) {
@@ -399,6 +399,9 @@ const SCHEMA = [
   "CREATE TABLE IF NOT EXISTS tx_versions (upload_id INTEGER NOT NULL, code TEXT NOT NULL, prev TEXT)",
   "CREATE INDEX IF NOT EXISTS tx_versions_up ON tx_versions (upload_id)",
   "CREATE TABLE IF NOT EXISTS gh_codes (id INTEGER PRIMARY KEY AUTOINCREMENT, key TEXT UNIQUE NOT NULL, created TEXT)",
+  // bookings made from the portal (Book a room) -- also written into the stay data so they show everywhere
+  "CREATE TABLE IF NOT EXISTS trips (id INTEGER PRIMARY KEY AUTOINCREMENT, client_id INTEGER NOT NULL, code TEXT, property TEXT, room TEXT, title TEXT, name TEXT, gender TEXT, grade TEXT, emp_code TEXT, email TEXT, phone TEXT, base TEXT, concur_tr TEXT, occupancy TEXT, check_in TEXT, check_out TEXT, note TEXT, status TEXT, cc TEXT, bcc TEXT, booked_by TEXT, booked_at TEXT, changed_by TEXT, changed_at TEXT, cancelled_by TEXT, cancelled_at TEXT, cancel_reason TEXT, mail_status TEXT, history TEXT)",
+  "CREATE INDEX IF NOT EXISTS trips_client ON trips (client_id, check_in)",
   // hotel bookings removed by the Zuna team (kept so they can be restored)
   "CREATE TABLE IF NOT EXISTS tx_removed (id INTEGER PRIMARY KEY AUTOINCREMENT, client_id INTEGER NOT NULL, code TEXT NOT NULL, row TEXT NOT NULL, upload_id INTEGER, by_email TEXT, at TEXT, restored TEXT)",
 ];
@@ -406,7 +409,7 @@ let schemaReady = false;
 async function ensureSchema(env) {
   if (schemaReady) return;
   for (const q of SCHEMA) await env.DB.prepare(q).run();
-  for (const c of ["users ADD COLUMN role TEXT", "users ADD COLUMN client_id INTEGER", "guesthouses ADD COLUMN state TEXT", "guesthouses ADD COLUMN country TEXT", "room_types ADD COLUMN bed_type TEXT", "clients ADD COLUMN legal_name TEXT", "users ADD COLUMN tx_access INTEGER", "tx_uploads ADD COLUMN hash TEXT", "tx_uploads ADD COLUMN file_id INTEGER", "transactions ADD COLUMN held INTEGER"]) { try { await env.DB.prepare("ALTER TABLE " + c).run(); } catch (e) { /* exists */ } }
+  for (const c of ["users ADD COLUMN role TEXT", "users ADD COLUMN client_id INTEGER", "guesthouses ADD COLUMN state TEXT", "guesthouses ADD COLUMN country TEXT", "room_types ADD COLUMN bed_type TEXT", "clients ADD COLUMN legal_name TEXT", "users ADD COLUMN tx_access INTEGER", "tx_uploads ADD COLUMN hash TEXT", "tx_uploads ADD COLUMN file_id INTEGER", "transactions ADD COLUMN held INTEGER", "users ADD COLUMN book_access INTEGER", "clients ADD COLUMN mail_cc TEXT", "clients ADD COLUMN mail_bcc TEXT"]) { try { await env.DB.prepare("ALTER TABLE " + c).run(); } catch (e) { /* exists */ } }
   schemaReady = true;
 }
 const DEFAULT_GRADES = "M1,M2,M3,M4,M5,M6,M7,M8,P1,P2,P3,E1,E2,E3,E4,E5,E6,E7";
@@ -436,12 +439,12 @@ function expandRooms(t) {
 async function multiClient(env) { await ensureSchema(env); return !!(await env.DB.prepare("SELECT id FROM clients LIMIT 1").first()); }
 async function adminState(env, user) {
   await ensureSchema(env);
-  const {results: clients} = await env.DB.prepare("SELECT id, name, logo_file, grades, active, legal_name FROM clients ORDER BY id").all();
+  const {results: clients} = await env.DB.prepare("SELECT id, name, logo_file, grades, active, legal_name, mail_cc, mail_bcc FROM clients ORDER BY id").all();
   const [bk, mn] = await Promise.all([readSet(env, "bookings"), readSet(env, "manual")]), manualKeys = new Set(mn.rows.filter((x) => x.status !== "Cancelled").map(guestKey));
   const out = await Promise.all(clients.map(async (c) => {
     const [users, guesthouses] = await Promise.all([clientUsers(env, c.id), clientGuestHouses(env, c, true)]);
     const names = new Set(guesthouses.map((g) => g.property));
-    return {id: c.id, name: c.name, legal_name: c.legal_name || "", active: !!c.active, logo: c.logo_file ? "/files/" + c.logo_file : "", grades: (c.grades || DEFAULT_GRADES).split(",").filter(Boolean), users, guesthouses,
+    return {id: c.id, name: c.name, legal_name: c.legal_name || "", mail_cc: c.mail_cc || "", mail_bcc: c.mail_bcc || "", active: !!c.active, logo: c.logo_file ? "/files/" + c.logo_file : "", grades: (c.grades || DEFAULT_GRADES).split(",").filter(Boolean), users, guesthouses,
       bookings: bk.rows.filter((x) => names.has(x.property) && x.status !== "Cancelled").map((x) => Object.assign({}, x, {manual: manualKeys.has(guestKey(x))}))}; }));
   return {clients: out, me: user.email};
 }
@@ -491,7 +494,7 @@ function docMail(client, list) {
 }
 
 // ---- users of one client (Zuna admins, and the client's own client admins) ----
-async function clientUsers(env, cid) { const {results} = await env.DB.prepare("SELECT email, name, active, last_login, locked_until, role, tx_access FROM users WHERE client_id = ? AND (role IS NULL OR role <> 'admin') ORDER BY name").bind(cid).all(); return results.map((u) => Object.assign(u, {role: u.role === "client_admin" ? "client_admin" : "client", tx: u.role === "client_admin" || !!u.tx_access})); }
+async function clientUsers(env, cid) { const {results} = await env.DB.prepare("SELECT email, name, active, last_login, locked_until, role, tx_access, book_access FROM users WHERE client_id = ? AND (role IS NULL OR role <> 'admin') ORDER BY name").bind(cid).all(); return results.map((u) => Object.assign(u, {role: u.role === "client_admin" ? "client_admin" : "client", tx: u.role === "client_admin" || !!u.tx_access, book: !!u.book_access})); }
 async function userAction(env, cid, b, actor, action) {
   const email = clean(b.email, 200).toLowerCase(), name = clean(b.name, 120), role = b.role === "client_admin" ? "client_admin" : "client";
   if (!email) return json({error: "Enter an email address or user ID."}, 400);
@@ -499,7 +502,9 @@ async function userAction(env, cid, b, actor, action) {
   if (ex && (ex.role === "admin" || ex.client_id !== cid)) return json({error: ex.role === "admin" ? "That account is a Zuna admin." : "That email already has an account."}, 400);
   if (action === "access") {   // switch hotel bookings on or off for a user (client admins always have it)
     if (!ex) return json({error: "No such user."}, 404);
-    await env.DB.prepare("UPDATE users SET tx_access = ? WHERE email = ?").bind(b.tx ? 1 : 0, email).run(); return json({ok: true}); }
+    if ("tx" in b) await env.DB.prepare("UPDATE users SET tx_access = ? WHERE email = ?").bind(b.tx ? 1 : 0, email).run();
+    if ("book" in b) await env.DB.prepare("UPDATE users SET book_access = ? WHERE email = ?").bind(b.book ? 1 : 0, email).run();
+    return json({ok: true}); }
   if (action === "reset") { if (!ex) return json({error: "No such user."}, 404); const pw = makePassword(ex.name); await setPassword(env, email, pw); await env.DB.prepare("DELETE FROM sessions WHERE email = ?").bind(email).run(); return json({ok: true, password: pw}); }
   if (!ex) {
     const pw = makePassword(name || email);
@@ -645,6 +650,158 @@ async function restoreBooking(env, client, b) {
   const man = mn.rows.filter((x) => guestKey(x) !== key); if (b.manual && b.manual.guest) man.push(pick(b.manual));
   await env.DB.batch([writeSet(env, "bookings", rows, istToday()), writeSet(env, "manual", man, istToday())]);
   return json({ok: true});
+}
+
+/* ---------- Book a room + Trips ----------
+   Bookings made in the portal are confirmed instantly. Each one is written into the stay data exactly like an
+   admin-panel booking (live `bookings` + `manual`), so the Room rack, reports and the hourly email update all see it:
+   the updater matches a later guest-house email by guest + check-in and keeps this booking. The `trips` table keeps
+   who booked, contact details, e-mail copies and the history. */
+const emailList = (s) => [...new Set(String(s || "").split(/[,;\s]+/).map((e) => e.trim().toLowerCase()).filter((e) => /^[^@\s]+@[^@\s]+\.[^@\s]+$/.test(e)))].slice(0, 20);
+const dayAfter = (d) => new Date(Date.parse(d) + 864e5).toISOString().slice(0, 10);
+const genderRow = (x) => /^(m|male)$/i.test(x.gender || "") ? "Male" : /^(f|female)$/i.test(x.gender || "") ? "Female" : /^\s*mr\b/i.test(x.guest || "") ? "Male" : /^\s*(ms|mrs|miss)\b/i.test(x.guest || "") ? "Female" : "Not stated";
+const fmtD = (d) => { const t = new Date(d + "T00:00:00Z"); return t.getUTCDate() + " " + ["Jan", "Feb", "Mar", "Apr", "May", "Jun", "Jul", "Aug", "Sep", "Oct", "Nov", "Dec"][t.getUTCMonth()] + " " + t.getUTCFullYear(); };
+const esc = (s) => String(s == null ? "" : s).replace(/[&<>"]/g, (c) => ({"&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;"})[c]);
+async function bookClient(env, cid) { return env.DB.prepare("SELECT id, name, grades, legal_name, mail_cc, mail_bcc FROM clients WHERE id = ? AND active = 1").bind(+cid || 0).first(); }
+// every room of a guest house with its state for the chosen nights: free, shared (a double room with space left) or full
+async function roomAvailability(env, client, property, ci, co, skipKey) {
+  const gh = (await clientGuestHouses(env, client, true)).find((g) => g.property === property);
+  if (!gh) return {error: "Pick one of " + client.name + "'s guest houses."};
+  const bk = await readSet(env, "bookings");
+  const stays = bk.rows.filter((x) => x.property === property && x.status === "Confirmed" && x.check_in < co && x.check_out > ci && guestKey(x) !== skipKey);
+  const rooms = [];
+  (gh.room_types || []).forEach((t) => expandRooms(t.room_nos).forEach((rn) => rooms.push({room: rn, type: t.name || "", occupancy: t.occupancy || "Single", bed_type: t.bed_type || "", grades: t.grades || []})));
+  if (!rooms.length) (gh.rooms_list || []).forEach((rn) => rooms.push({room: rn, type: "", occupancy: "Single", bed_type: "", grades: []}));
+  rooms.sort((a, b) => a.room.localeCompare(b.room, "en", {numeric: true}));
+  rooms.forEach((r) => { const g = stays.filter((x) => x.room === r.room); let peak = 0;
+    for (let d = ci; d < co; d = dayAfter(d)) peak = Math.max(peak, g.filter((x) => x.check_in <= d && x.check_out > d).length);
+    r.capacity = /double|twin|shar/i.test(r.occupancy) ? 2 : 1;
+    r.state = peak === 0 ? "free" : peak < r.capacity ? "shared" : "full";
+    r.guests = g.map((x) => ({gender: genderRow(x), check_in: x.check_in, check_out: x.check_out})); });
+  const listed = new Set(rooms.map((r) => r.room));
+  return {gh, rooms, nights: Math.round((Date.parse(co) - Date.parse(ci)) / 864e5), unassigned: stays.filter((x) => !listed.has(x.room)).length};
+}
+function tripInput(b, client, isNew) {
+  const iso = /^\d{4}-\d{2}-\d{2}$/, t = {property: clean(b.property, 120), check_in: String(b.check_in || ""), check_out: String(b.check_out || ""), room: clean(b.room, 40),
+    title: ["Mr.", "Ms.", "Mrs.", "Dr."].includes(b.title) ? b.title : "", name: clean(b.name, 100).replace(/^\s*(mr|mrs|ms|miss|dr)\b\.?\s*/i, ""), grade: clean(b.grade, 20),
+    emp_code: clean(b.emp_code, 30), email: emailList(b.email)[0] || "", phone: clean(b.phone, 20).replace(/[^\d+\-\s]/g, ""), base: clean(b.base, 60), concur_tr: clean(b.concur_tr, 40),
+    occupancy: b.occupancy === "Double" ? "Double" : "Single", note: clean(b.note, 300), cc: emailList(b.cc).join(", "), bcc: emailList(b.bcc).join(", ")};
+  t.gender = t.title === "Mr." ? "Male" : t.title === "Ms." || t.title === "Mrs." ? "Female" : ["Male", "Female"].includes(b.gender) ? b.gender : "";
+  if (!t.property) return {err: "Choose the guest house."};
+  if (!iso.test(t.check_in) || !iso.test(t.check_out) || t.check_out <= t.check_in) return {err: "Check-out must be after check-in."};
+  if (isNew && t.check_in < istToday()) return {err: "Check-in can't be in the past."};
+  if ((Date.parse(t.check_out) - Date.parse(t.check_in)) / 864e5 > 90) return {err: "Book up to 90 nights at a time."};
+  if (!t.name) return {err: "Enter the guest's name."};
+  if (!t.gender) return {err: "Choose the guest's gender (it decides who can share a room)."};
+  if (!t.grade) return {err: "Choose the guest's grade."};
+  if (b.email && !t.email) return {err: "The guest's email address doesn't look right."};
+  return {t};
+}
+const guestOf = (t) => (t.title ? t.title + " " : "") + t.name;
+// pick or check the room, write the stay, keep the trip, send the email
+async function placeTrip(env, user, cid, b, trip) {
+  const client = await bookClient(env, cid); if (!client) return json({error: "No such client."}, 404);
+  const v = tripInput(b, client, !trip); if (v.err) return json({error: v.err}, 400); const t = v.t;
+  const oldKey = trip ? guestKey({guest: guestOf(trip), check_in: trip.check_in}) : null;
+  const av = await roomAvailability(env, client, t.property, t.check_in, t.check_out, oldKey); if (av.error) return json({error: av.error}, 400);
+  const fits = (r) => !r.grades.length || r.grades.includes(t.grade);
+  const sharable = (r) => r.state === "shared" && r.guests.every((g) => g.gender === t.gender);
+  let room;
+  if (t.room) { room = av.rooms.find((r) => r.room === t.room); if (!room) return json({error: "Room " + t.room + " is not in " + t.property + "."}, 400);
+    if (!fits(room)) return json({error: "Room " + room.room + (room.type ? " (" + room.type + ")" : "") + " is for grades " + room.grades.join(", ") + " only."}, 400);
+    if (room.state === "full") return json({error: "Room " + room.room + " is already taken on some of these nights. Choose another room."}, 409);
+    if (room.state === "shared" && !sharable(room)) return json({error: "Room " + room.room + " is shared with a guest of another gender on these nights. Choose another room."}, 409); }
+  else { room = av.rooms.find((r) => r.state === "free" && fits(r)) || (t.occupancy === "Double" ? av.rooms.find((r) => sharable(r) && fits(r)) : null);
+    if (!room) return json({error: "No room in " + t.property + " is free for these nights for grade " + t.grade + "."}, 409); }
+  if (room.state === "shared") t.occupancy = "Double";
+  t.room = room.room;
+  // the same guest must not have another stay on these nights
+  const bk = await readSet(env, "bookings"), names = new Set((await clientGuestHouses(env, client, true)).map((g) => g.property)), me = nameKey(t.name);
+  const clash = bk.rows.find((x) => names.has(x.property) && x.status === "Confirmed" && nameKey(x.guest) === me && x.check_in < t.check_out && x.check_out > t.check_in && guestKey(x) !== oldKey);
+  if (clash) return json({error: guestOf(t) + " already has a stay at " + clash.property + " from " + fmtD(clash.check_in) + " to " + fmtD(clash.check_out) + "."}, 409);
+  const res = await saveBooking(env, client, {row: Object.assign({}, t, {status: "Confirmed"}), original: trip ? {guest: guestOf(trip), check_in: trip.check_in} : null});
+  if (!res.ok) return res;
+  const newKey = t.property + "|" + guestKey({guest: guestOf(t), check_in: t.check_in});
+  if (trip && trip.code) {   // keep the same ZUNA code when a booking is changed
+    const oldCodeKey = trip.property + "|" + oldKey; if (oldCodeKey !== newKey) { await env.DB.prepare("DELETE FROM gh_codes WHERE key = ?").bind(newKey).run(); await env.DB.prepare("UPDATE gh_codes SET key = ? WHERE key = ?").bind(newKey, oldCodeKey).run(); } }
+  const stay = {property: t.property, guest: guestOf(t), check_in: t.check_in}; await ghCodes(env, [stay]); const code = stay.booking_code || (trip && trip.code) || "";
+  const now = new Date().toISOString(), hist = trip ? jparse(trip.history, []) : [];
+  hist.push({at: now, by: user.email, what: trip ? "Changed" : "Booked", detail: t.property + " · room " + t.room + " · " + fmtD(t.check_in) + " → " + fmtD(t.check_out)});
+  const cols = ["code", "property", "room", "title", "name", "gender", "grade", "emp_code", "email", "phone", "base", "concur_tr", "occupancy", "check_in", "check_out", "note", "cc", "bcc"], vals = cols.map((k) => k === "code" ? code : t[k]);
+  let id;
+  if (trip) { await env.DB.prepare("UPDATE trips SET " + cols.map((k) => k + " = ?").join(", ") + ", changed_by = ?, changed_at = ?, history = ? WHERE id = ?").bind(...vals, user.email, now, JSON.stringify(hist), trip.id).run(); id = trip.id; }
+  else { const r = await env.DB.prepare("INSERT INTO trips (client_id, " + cols.join(", ") + ", status, booked_by, booked_at, history) VALUES (?, " + cols.map(() => "?").join(", ") + ", 'Confirmed', ?, ?, ?)").bind(client.id, ...vals, user.email, now, JSON.stringify(hist)).run(); id = r.meta ? r.meta.last_row_id : r.lastInsertRowid; }
+  const saved = await env.DB.prepare("SELECT * FROM trips WHERE id = ?").bind(id).first();
+  const mail = b.send_mail === false ? "not sent" : await tripMail(env, client, saved, av.gh, trip ? "changed" : "confirmed");
+  await env.DB.prepare("UPDATE trips SET mail_status = ? WHERE id = ?").bind(mail, id).run();
+  return json({ok: true, trip: tripOut(Object.assign(saved, {mail_status: mail}))});
+}
+const tripOut = (x) => ({id: x.id, code: x.code || "", property: x.property, room: x.room, title: x.title || "", name: x.name, guest: guestOf(x), gender: x.gender, grade: x.grade, emp_code: x.emp_code || "", email: x.email || "", phone: x.phone || "",
+  base: x.base || "", concur_tr: x.concur_tr || "", occupancy: x.occupancy, check_in: x.check_in, check_out: x.check_out, note: x.note || "", status: x.status, cc: x.cc || "", bcc: x.bcc || "",
+  booked_by: x.booked_by, booked_at: x.booked_at, changed_by: x.changed_by || "", changed_at: x.changed_at || "", cancelled_by: x.cancelled_by || "", cancelled_at: x.cancelled_at || "", cancel_reason: x.cancel_reason || "", mail_status: x.mail_status || "", history: jparse(x.history, [])});
+async function tripFor(env, user, cid, id) { return env.DB.prepare("SELECT * FROM trips WHERE id = ? AND client_id = ?").bind(+id || 0, cid).first(); }
+async function cancelTrip(env, user, cid, b) {
+  const trip = await tripFor(env, user, cid, b.id); if (!trip) return json({error: "Booking not found."}, 404);
+  if (trip.status === "Cancelled") return json({error: "This booking is already cancelled."}, 409);
+  if (trip.check_out <= istToday()) return json({error: "This stay has already ended."}, 409);
+  const client = await bookClient(env, cid);
+  const res = await cancelBooking(env, client, {guest: guestOf(trip), check_in: trip.check_in}); if (!res.ok && res.status !== 404) return res;
+  const now = new Date().toISOString(), hist = jparse(trip.history, []), reason = clean(b.reason, 200); hist.push({at: now, by: user.email, what: "Cancelled", detail: reason});
+  await env.DB.prepare("UPDATE trips SET status = 'Cancelled', cancelled_by = ?, cancelled_at = ?, cancel_reason = ?, history = ? WHERE id = ?").bind(user.email, now, reason, JSON.stringify(hist), trip.id).run();
+  const saved = await env.DB.prepare("SELECT * FROM trips WHERE id = ?").bind(trip.id).first(), gh = (await clientGuestHouses(env, client, true)).find((g) => g.property === trip.property) || {property: trip.property};
+  const mail = b.send_mail === false ? "not sent" : await tripMail(env, client, saved, gh, "cancelled");
+  await env.DB.prepare("UPDATE trips SET mail_status = ? WHERE id = ?").bind(mail, trip.id).run();
+  return json({ok: true, trip: tripOut(Object.assign(saved, {mail_status: mail}))});
+}
+// confirmation / change / cancellation e-mail to the guest, copies to the CC and BCC addresses
+async function tripMail(env, client, trip, gh, kind) {
+  const to = emailList(trip.email), cc = emailList(trip.cc).filter((e) => !to.includes(e)), bcc = emailList(trip.bcc).filter((e) => !to.includes(e) && !cc.includes(e));
+  if (!to.length && !cc.length) return "no email address";
+  if (!env.RESEND_API_KEY) return "not sent (email not set up)";
+  const nights = Math.round((Date.parse(trip.check_out) - Date.parse(trip.check_in)) / 864e5), head = {confirmed: "Your stay is confirmed", changed: "Your booking has been changed", cancelled: "Your booking has been cancelled"}[kind];
+  const subject = {confirmed: "Booking confirmed", changed: "Booking changed", cancelled: "Booking cancelled"}[kind] + " · " + trip.property + " · " + fmtD(trip.check_in) + " – " + fmtD(trip.check_out) + " · " + (trip.code || "");
+  const rows = [["Booking code", trip.code], ["Guest", guestOf(trip)], ["Guest house", trip.property + (gh.city ? ", " + gh.city : "")], ["Address", gh.address || ""], ["Room", trip.room + (trip.occupancy === "Double" ? " · shared" : "")],
+    ["Check-in", fmtD(trip.check_in)], ["Check-out", fmtD(trip.check_out)], ["Nights", String(nights)], ["Remarks", trip.note || ""], kind === "cancelled" ? ["Reason", trip.cancel_reason || ""] : null].filter((r) => r && r[1]);
+  const contacts = (gh.contacts || []).filter((c) => c.phone || c.email).slice(0, 2).map((c) => c.name + (c.designation ? " (" + c.designation + ")" : "") + (c.phone ? " · " + c.phone : "") + (c.email ? " · " + c.email : ""));
+  const html = '<!doctype html><html><body style="margin:0;background:#f4f2fb;font-family:Segoe UI,Arial,sans-serif;color:#12005A"><table role="presentation" width="100%" cellpadding="0" cellspacing="0"><tr><td align="center" style="padding:28px 12px">'
+    + '<table role="presentation" width="560" cellpadding="0" cellspacing="0" style="max-width:560px;background:#fff;border-radius:16px;overflow:hidden;border:1px solid #e6e2f6">'
+    + '<tr><td style="background:#12005A;padding:20px 28px;color:#fff;font-size:18px;font-weight:700">' + esc(head) + '<div style="margin-top:4px;font-size:13px;font-weight:400;color:#c9c2ec">' + esc(client.name) + ' · guest house booking</div></td></tr>'
+    + '<tr><td style="padding:22px 28px"><table role="presentation" width="100%" cellpadding="0" cellspacing="0" style="font-size:14px">'
+    + rows.map(([k, v]) => '<tr><td style="padding:6px 0;color:#6a6390;width:130px;vertical-align:top">' + esc(k) + '</td><td style="padding:6px 0;font-weight:600">' + esc(v) + '</td></tr>').join('')
+    + '</table>' + (gh.map_url && kind !== "cancelled" ? '<p style="margin:16px 0 0"><a href="' + esc(gh.map_url) + '" style="color:#01885c;font-weight:600">Open in Google Maps</a></p>' : '')
+    + (contacts.length && kind !== "cancelled" ? '<p style="margin:16px 0 0;font-size:13px;color:#5d5887">Guest house contact: ' + contacts.map(esc).join('<br>') + '</p>' : '')
+    + '</td></tr><tr><td style="padding:16px 28px;border-top:1px solid #e6e2f6;font-size:12px;color:#7d68c6">Zuna Hotel Desk · Zuna Travel Solutions</td></tr></table></td></tr></table></body></html>';
+  const text = head + "\n\n" + rows.map(([k, v]) => k + ": " + v).join("\n") + (contacts.length && kind !== "cancelled" ? "\n\nGuest house contact: " + contacts.join("; ") : "") + "\n\nZuna Hotel Desk";
+  const main = to.length ? to : cc.slice(0, 1), copies = to.length ? cc : cc.slice(1);
+  try { const r = await fetch("https://api.resend.com/emails", {method: "POST", headers: {authorization: "Bearer " + env.RESEND_API_KEY, "content-type": "application/json"},
+      body: JSON.stringify(Object.assign({from: env.MAIL_FROM || "Zuna Hotel Desk <noreply@zuna.ai>", to: main, subject, html, text}, copies.length ? {cc: copies} : {}, bcc.length ? {bcc} : {}))});
+    return r.ok ? "sent" : "failed"; } catch (e) { return "failed"; }
+}
+async function bookApi(req, env, user, path) {
+  let b; try { b = await req.json(); } catch (e) { return json({error: "Bad request."}, 400); }
+  const cid = user.admin ? +b.client_id : user.client_id; if (!cid) return json({error: "No client."}, 400);
+  if (path === "/api/trips") { if (!user.book && !user.manager) return json({error: "You don't have access to bookings. Ask your admin."}, 403);
+    const {results} = await env.DB.prepare("SELECT * FROM trips WHERE client_id = ? ORDER BY check_in DESC, id DESC LIMIT 3000").bind(cid).all(); return json({trips: results.map(tripOut)}); }
+  if (path === "/api/bookings") {   // fresh stay list for the dashboard after a booking changes
+    const client = await bookClient(env, cid); if (!client) return json({error: "No client."}, 404);
+    const names = new Set((await clientGuestHouses(env, client, false)).map((g) => g.property)), bk = await readSet(env, "bookings");
+    const rows = bk.rows.filter((x) => names.has(x.property) && x.status !== "Cancelled"); await ghCodes(env, rows); return json({bookings: rows}); }
+  if (!user.book) return json({error: "You can't book rooms yet. Ask your admin to switch on Book rooms for you."}, 403);
+  if (path === "/api/book/avail") { const client = await bookClient(env, cid); if (!client) return json({error: "No such client."}, 404);
+    const iso = /^\d{4}-\d{2}-\d{2}$/; if (!iso.test(b.check_in || "") || !iso.test(b.check_out || "") || b.check_out <= b.check_in) return json({error: "Check-out must be after check-in."}, 400);
+    let skip = null; if (b.exclude_id) { const tr = await tripFor(env, user, cid, b.exclude_id); if (tr) skip = guestKey({guest: guestOf(tr), check_in: tr.check_in}); }
+    const av = await roomAvailability(env, client, clean(b.property, 120), b.check_in, b.check_out, skip); if (av.error) return json({error: av.error}, 400);
+    return json({rooms: av.rooms, nights: av.nights, unassigned: av.unassigned}); }
+  if (path === "/api/book") return placeTrip(env, user, cid, b, null);
+  if (path === "/api/book/update") { const tr = await tripFor(env, user, cid, b.id); if (!tr) return json({error: "Booking not found."}, 404);
+    if (tr.status === "Cancelled") return json({error: "A cancelled booking can't be changed. Make a new booking instead."}, 409);
+    if (tr.check_out <= istToday()) return json({error: "This stay has already ended."}, 409); return placeTrip(env, user, cid, b, tr); }
+  if (path === "/api/book/cancel") return cancelTrip(env, user, cid, b);
+  if (path === "/api/book/resend") { const tr = await tripFor(env, user, cid, b.id); if (!tr) return json({error: "Booking not found."}, 404); const client = await bookClient(env, cid);
+    const gh = (await clientGuestHouses(env, client, true)).find((g) => g.property === tr.property) || {property: tr.property};
+    const mail = await tripMail(env, client, tr, gh, tr.status === "Cancelled" ? "cancelled" : tr.changed_at ? "changed" : "confirmed");
+    await env.DB.prepare("UPDATE trips SET mail_status = ? WHERE id = ?").bind(mail, tr.id).run(); return json({ok: true, mail_status: mail}); }
+  return json({error: "Not found."}, 404);
 }
 
 /* ---------- hotel transaction reports ----------
@@ -831,7 +988,7 @@ async function adminApi(req, env, user, path) {
       case "/api/admin/client": {
         const name = clean(b.name, 120); if (!name) return json({error: "Enter the client name."}, 400);
         const grades = (Array.isArray(b.grades) ? b.grades : String(b.grades || DEFAULT_GRADES).split(",")).map((g) => clean(g, 20)).filter(Boolean).join(",") || DEFAULT_GRADES;
-        if (b.id) await env.DB.prepare("UPDATE clients SET name = ?, grades = ?, active = ?, legal_name = ? WHERE id = ?").bind(name, grades, b.active === false ? 0 : 1, clean(b.legal_name, 160), +b.id).run();
+        if (b.id) await env.DB.prepare("UPDATE clients SET name = ?, grades = ?, active = ?, legal_name = ?, mail_cc = ?, mail_bcc = ? WHERE id = ?").bind(name, grades, b.active === false ? 0 : 1, clean(b.legal_name, 160), emailList(b.mail_cc).join(", "), emailList(b.mail_bcc).join(", "), +b.id).run();
         else { const r = await env.DB.prepare("INSERT INTO clients (name, grades, active, created) VALUES (?, ?, 1, ?)").bind(name, grades, now).run(); return json({ok: true, id: r.meta ? r.meta.last_row_id : r.lastInsertRowid}); }
         return json({ok: true, id: +b.id});
       }
@@ -949,7 +1106,7 @@ async function dashboard(env, user, url) {
   for (const r of results) { data[r.id] = JSON.parse(r.json); if (r.id === "bookings") updated = r.updated_at; }
   data.bookings = (data.bookings || []).filter((b) => b.status !== "Cancelled");
   if (await multiClient(env)) {
-    const {results: clients} = await env.DB.prepare("SELECT id, name, logo_file, grades, legal_name FROM clients WHERE active = 1 ORDER BY id").all();
+    const {results: clients} = await env.DB.prepare("SELECT id, name, logo_file, grades, legal_name, mail_cc, mail_bcc FROM clients WHERE active = 1 ORDER BY id").all();
     const want = user.admin ? (+url.searchParams.get("client") || (clients[0] || {}).id) : user.client_id;
     const client = clients.find((c) => c.id === want);
     if (!client) return html(LOGIN.replace("</body>", "<script>document.getElementById('err').textContent='Your account is not linked to a client yet. Please contact the Zuna Hotel Desk.';document.getElementById('err').classList.remove('hidden');</script></body>"));
@@ -957,6 +1114,7 @@ async function dashboard(env, user, url) {
     const names = new Set(data.properties.map((p) => p.property));
     data.bookings = (data.bookings || []).filter((b) => names.has(b.property));
     data.client = {id: client.id, name: client.name, legal_name: client.legal_name || "", logo: client.logo_file ? "/files/" + client.logo_file : ""};
+    if (user.book) { data.client.mail_cc = client.mail_cc || ""; data.client.mail_bcc = client.mail_bcc || ""; data.client.grades = (client.grades || DEFAULT_GRADES).split(",").filter(Boolean); }
     if (user.admin) data.clients = clients.map((c) => ({id: c.id, name: c.name}));
     if (user.tx) {   // travel policy caps (hotel rate per night by grade group and city zone) for the consolidated report's Eligibility column
       const pol = await env.DB.prepare("SELECT json FROM datasets WHERE id = ?").bind("policy:" + client.id).first();
@@ -966,7 +1124,7 @@ async function dashboard(env, user, url) {
   }
   await ghCodes(env, data.bookings || []);
   const payload = JSON.stringify(data).replace(/</g, "\\u003c");
-  const userJs = JSON.stringify({name: user.name || "", email: user.email, admin: !!user.admin, manager: !!user.manager, tx: !!user.tx}).replace(/</g, "\\u003c");
+  const userJs = JSON.stringify({name: user.name || "", email: user.email, admin: !!user.admin, manager: !!user.manager, tx: !!user.tx, book: !!user.book}).replace(/</g, "\\u003c");
   let page = TEMPLATE.replace("__DATA__", () => payload).replace("__USER__", () => userJs);
   if (updated) page = page.replace(/REPORT_DATE = '\d{4}-\d{2}-\d{2}'/, "REPORT_DATE = '" + updated.slice(0, 10) + "'");
   return html(page);
@@ -1023,6 +1181,13 @@ async function handle(request, env) {
       const u = await currentUser(request, env);
       if (!u || !u.admin) return json({error: "Not allowed."}, 403);
       return adminApi(request, env, u, path);
+    }
+    if ((path === "/api/trips" || path === "/api/bookings" || path.startsWith("/api/book")) && request.method === "POST") {   // Book a room + Trips
+      const origin = request.headers.get("origin");
+      if (origin && origin !== url.origin) return json({error: "Bad origin."}, 403);
+      const u = await currentUser(request, env);
+      if (!u) return json({error: "Your session has expired."}, 403);
+      return bookApi(request, env, u, path);
     }
     if (path === "/api/tx" && request.method === "POST") {   // hotel bookings for the signed-in client
       const origin = request.headers.get("origin");

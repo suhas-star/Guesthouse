@@ -689,6 +689,12 @@ const renderUsers = (D, c) => {
       sw.append(tr, h('span', u.tx ? 'text-mint-700' : 'text-zuna-500', u.tx ? 'Allowed' : 'Off'));
       sw.onclick = async () => { sw.disabled = true; try { await api('user/access', {email: u.email, tx: !u.tx}); toast((u.tx ? 'Hotel bookings turned off for ' : 'Hotel bookings turned on for ') + u.name); load(true); } catch (er) { toast(er.message, true); sw.disabled = false; } };
       return sw; }},
+    {k: 'book', label: 'Book rooms', sort: (u) => (u.book ? '0' : '1'), render: (u) => {   // Book a room + Trips, off until switched on (also for client admins)
+      const sw = h('button', 'group inline-flex items-center gap-2 text-xs font-semibold whitespace-nowrap'); sw.type = 'button'; sw.setAttribute('role', 'switch'); sw.setAttribute('aria-checked', u.book ? 'true' : 'false'); sw.setAttribute('aria-label', 'Book rooms for ' + u.name);
+      const tr = h('span', 'relative inline-block w-9 h-5 rounded-full transition-colors ' + (u.book ? 'bg-mint-500' : 'bg-zuna-200')); tr.appendChild(h('span', 'absolute top-0.5 left-0.5 w-4 h-4 rounded-full bg-white shadow transition-transform ' + (u.book ? 'translate-x-4' : '')));
+      sw.append(tr, h('span', u.book ? 'text-mint-700' : 'text-zuna-500', u.book ? 'Allowed' : 'Off'));
+      sw.onclick = async () => { sw.disabled = true; try { await api('user/access', {email: u.email, book: !u.book}); toast((u.book ? 'Booking turned off for ' : 'Booking turned on for ') + u.name); load(true); } catch (er) { toast(er.message, true); sw.disabled = false; } };
+      return sw; }},
     {k: 'act', label: '', actions: true, render: actions}];
   UF.st = UF.st || {sort: {k: 'user', dir: 1}, page: 1};
   D.appendChild(dataTable({cols, rows: c.users, st: UF.st, noun: 'users', empty: 'No users yet.'}));
@@ -707,8 +713,10 @@ const renderSettings = (D, c) => {
   const n = inp(c.name); card.appendChild(field('Client name', n));
   const ln = inp(c.legal_name || '', 'e.g. LTM Limited'); card.appendChild(field('Company name in reports (Guest Circle Name in the weekly GH report)', ln));
   const gr = h('textarea', 'inp'); gr.rows = 2; gr.value = c.grades.join(', '); card.appendChild(field('Grades used by this client (comma separated, in order)', gr));
+  const mc = inp(c.mail_cc || '', 'e.g. travel.desk@zuna.ai, admin@client.com'); card.appendChild(field('Booking emails · default CC (every booking, change and cancellation; comma separated)', mc));
+  const mb = inp(c.mail_bcc || '', 'e.g. records@zuna.ai'); card.appendChild(field('Booking emails · default BCC', mb));
   const act = switchEl('Client active (users can log in)', c.active); card.appendChild(act);
-  const save = h('button', 'btn-primary', 'Save settings'); save.onclick = async () => { try { await api('client', {id: c.id, name: n.value, legal_name: ln.value, grades: gr.value.split(/\s*[,\n]\s*/).map((g) => g.trim()).filter(Boolean), active: act.input.checked}); toast('Saved'); load(true); } catch (er) { toast(er.message, true); } };
+  const save = h('button', 'btn-primary', 'Save settings'); save.onclick = async () => { try { await api('client', {id: c.id, name: n.value, legal_name: ln.value, mail_cc: mc.value, mail_bcc: mb.value, grades: gr.value.split(/\s*[,\n]\s*/).map((g) => g.trim()).filter(Boolean), active: act.input.checked}); toast('Saved'); load(true); } catch (er) { toast(er.message, true); } };
   card.appendChild(save); D.appendChild(card);
 };
 

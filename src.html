@@ -44,6 +44,9 @@ if(document.readyState!=='loading')setTimeout(hide,150);else document.addEventLi
       <button data-view="calendar" class="navbtn" title="Availability"><i data-i="calendar-days"></i><span class="sb-label">Availability</span></button>
       <button data-view="bookings" class="navbtn" title="Stay register"><i data-i="list-checks"></i><span class="sb-label">Stay register</span><span id="navCount" class="sb-label ml-auto text-xs font-bold rounded-full px-2 py-0.5 bg-white/15">0</span></button>
       <button data-view="houses" class="navbtn" title="Directory"><i data-i="building-2"></i><span class="sb-label">Directory</span></button>
+      <p id="navBookH" class="nav-h hidden" aria-hidden="true"><span>Bookings</span></p>
+      <button data-view="book" id="navBook" class="navbtn hidden" title="Book a room"><i data-i="calendar-plus"></i><span class="sb-label">Book a room</span></button>
+      <button data-view="trips" id="navTrips" class="navbtn hidden" title="Trips"><i data-i="luggage"></i><span class="sb-label">Trips</span></button>
       <p id="navHotelsH" class="nav-h hidden" aria-hidden="true"><span>Hotels</span></p>
       <button data-view="hotels" id="navHotels" class="navbtn hidden" title="Hotel bookings"><i data-i="hotel"></i><span class="sb-label">Hotel bookings</span></button>
     </nav>
@@ -226,6 +229,31 @@ if(document.readyState!=='loading')setTimeout(hide,150);else document.addEventLi
         </div>
       </section>
 
+      <!-- BOOK A ROOM (users with the Book rooms switch, and the Zuna team on the client's behalf) -->
+      <section data-view="book" class="view hidden">
+        <div id="bookView" class="grid xl:grid-cols-[minmax(0,1fr)_340px] gap-4 items-start"></div>
+      </section>
+
+      <!-- TRIPS (bookings made in the portal) -->
+      <section data-view="trips" class="view hidden">
+        <div class="card">
+          <div class="card-h">
+            <div><h2 class="card-t">Trips</h2><p class="card-s" id="trSub">Guest house bookings made in the portal · click a trip for details</p></div>
+            <div class="ml-auto flex flex-wrap gap-2"><button type="button" class="btn-primary hidden" id="trNew"><i data-i="calendar-plus" class="w-4 h-4"></i>Book a room</button></div>
+          </div>
+          <div class="px-5 py-3 flex flex-wrap items-center gap-3 border-b border-zuna-50">
+            <div id="trTabs" class="flex flex-wrap gap-1 rounded-xl bg-zuna-50 p-1 ring-1 ring-zuna-100"></div>
+            <label class="relative ml-auto w-full sm:w-56 2xl:w-72"><i data-i="search" class="w-4 h-4 absolute left-3 top-1/2 -translate-y-1/2 text-zuna-400"></i><input id="trSearch" type="search" placeholder="Search trips…" title="Search by guest, code, room, employee code or email" aria-label="Search trips" class="w-full pl-9 pr-3 py-2 rounded-xl bg-white ring-1 ring-zuna-100 text-sm focus:outline-none focus:ring-2 focus:ring-mint-500"></label>
+          </div>
+          <div class="overflow-x-auto">
+            <table id="tTable" class="w-full text-sm">
+              <thead><tr class="text-left text-xs font-semibold text-zuna-500 bg-zuna-50/70"><th class="th">Guest</th><th class="th">Booking</th><th class="th">Guest house</th><th class="th">Stay</th><th class="th">Status</th><th class="th">Email</th></tr></thead>
+              <tbody id="tBody" class="divide-y divide-zuna-50"></tbody>
+            </table>
+          </div>
+        </div>
+      </section>
+
       <!-- USERS & ACCESS (client admins) -->
       <section data-view="users" class="view hidden">
         <div id="usersView"></div>
@@ -278,12 +306,13 @@ const genderOf = (b) => { const g = String(b.gender || '').trim().toLowerCase();
   if (/^mr\.?\s/i.test(b.guest || '')) return 'Male'; if (/^(ms|mrs|miss)\.?\s/i.test(b.guest || '')) return 'Female'; return 'Not stated'; };
 const hasRoom = (b) => /^\d/.test(b.room || '');
 const overlaps = (a, b) => a.check_in < b.check_out && b.check_in < a.check_out;
-bookings.forEach((b) => { b._g = genderOf(b); });
+const enrich = () => { bookings.forEach((b) => { b._g = genderOf(b); });
 bookings.forEach((b) => {
   b._mates = b.status === 'Confirmed' && hasRoom(b) ? bookings.filter((o) => o !== b && o.status === 'Confirmed' && o.property === b.property && o.room === b.room && overlaps(o, b)) : [];
   b._occ = /^(d|twin|shar)/i.test(String(b.occupancy || '').trim()) || b._mates.length ? 'Double' : 'Single';
   b._clash = b._mates.filter((o) => b._g !== 'Not stated' && o._g !== 'Not stated' && o._g !== b._g);
-});
+}); };
+enrich();
 const clashNights = (b, o) => { const a = b.check_in > o.check_in ? b.check_in : o.check_in, z = b.check_out < o.check_out ? b.check_out : o.check_out; return [a, z]; };
 const clashText = (b) => b._clash.map((o) => { const [a, z] = clashNights(b, o); return cleanName(b.guest) + ' (' + b._g.toLowerCase() + ') and ' + cleanName(o.guest) + ' (' + o._g.toLowerCase() + ') share room ' + b.room + ', ' + fShort(a) + ' – ' + fShort(z); }).join('; ');
 const RULE = 'Double occupancy is allowed only for two male or two female guests.';
@@ -824,7 +853,7 @@ const renderUsersView = () => {
   const t = h('div'); t.appendChild(h('h2', 'card-t', 'Users & access')); t.appendChild(h('p', 'card-s', 'Viewers can see the dashboard. Client admins can also add users, reset passwords and change access.')); hd.appendChild(t);
   const add = h('button', 'btn-primary ml-auto'); add.appendChild(icon('user-plus', 'w-4 h-4')); add.appendChild(document.createTextNode('Add user')); add.onclick = () => openDrawer('Add user', DATA.client ? DATA.client.name : '', userForm()); hd.appendChild(add); card.appendChild(hd);
   const sc = h('div', 'overflow-x-auto'); const tb = h('table', 'w-full text-sm'); const th = h('thead'); const hr = h('tr', 'text-left text-xs font-semibold text-zuna-500 bg-zuna-50/70');
-  ['User', 'Role', 'Status', 'Hotel bookings', ''].forEach((x) => { const c = h('th', 'px-4 py-2.5 whitespace-nowrap', x); c.scope = 'col'; if (!x) c.appendChild(h('span', 'sr-only', 'Actions')); hr.appendChild(c); }); th.appendChild(hr); tb.appendChild(th);
+  ['User', 'Role', 'Status', 'Hotel bookings', 'Book rooms', ''].forEach((x) => { const c = h('th', 'px-4 py-2.5 whitespace-nowrap', x); c.scope = 'col'; if (!x) c.appendChild(h('span', 'sr-only', 'Actions')); hr.appendChild(c); }); th.appendChild(hr); tb.appendChild(th);
   const body = h('tbody', 'divide-y divide-zuna-50'); const B = 'btn !py-1 !px-2 text-xs w-full justify-center whitespace-nowrap';
   const ab = (txt, ic, cls) => { const b = h('button', B + ' ' + (cls || '')); b.type = 'button'; b.appendChild(icon(ic, 'w-3.5 h-3.5 shrink-0')); b.appendChild(document.createTextNode(txt)); return b; };
   us.forEach((u) => { const me = u.email === USER.email, tr = h('tr', 'align-middle hover:bg-zuna-50/50 transition-colors');
@@ -840,6 +869,13 @@ const renderUsersView = () => {
       sw.onclick = async () => { sw.disabled = true; try { await mApi('user/access', {email: u.email, tx: !u.tx}); toast((u.tx ? 'Hotel bookings turned off for ' : 'Hotel bookings turned on for ') + u.name); reloadUsers(); } catch (er) { toast(er.message); sw.disabled = false; } };
       cx.appendChild(sw); }
     tr.appendChild(cx);
+    const cb = h('td', 'px-4 py-3');   // Book a room + Trips: a switch for every user
+    { const sw = h('button', 'inline-flex items-center gap-2 text-xs font-semibold whitespace-nowrap'); sw.type = 'button'; sw.setAttribute('role', 'switch'); sw.setAttribute('aria-checked', u.book ? 'true' : 'false'); sw.setAttribute('aria-label', 'Book rooms for ' + u.name);
+      const trk = h('span', 'relative inline-block w-9 h-5 rounded-full transition-colors ' + (u.book ? 'bg-mint-500' : 'bg-zuna-200')); trk.appendChild(h('span', 'absolute top-0.5 left-0.5 w-4 h-4 rounded-full bg-white shadow transition-transform ' + (u.book ? 'translate-x-4' : '')));
+      sw.append(trk, h('span', u.book ? 'text-mint-700' : 'text-zuna-500', u.book ? 'Allowed' : 'Off'));
+      sw.onclick = async () => { sw.disabled = true; try { await mApi('user/access', {email: u.email, book: !u.book}); toast((u.book ? 'Booking turned off for ' : 'Booking turned on for ') + u.name + (me ? ' · reloading' : '')); if (me) setTimeout(() => location.reload(), 700); else reloadUsers(); } catch (er) { toast(er.message); sw.disabled = false; } };
+      cb.appendChild(sw); }
+    tr.appendChild(cb);
     const c5 = h('td', 'px-4 py-3'); const g = h('div', 'grid grid-cols-[84px_112px_84px] gap-1.5 justify-end ml-auto w-max'); c5.appendChild(g);
     const rs = ab('Reset', 'key-round'); rs.title = 'Reset password'; rs.setAttribute('aria-label', 'Reset password for ' + u.name); rs.onclick = async () => { if (!(await ZUI.confirm({title: 'Reset password?', message: ['A new password is created for ' + u.name + ' (' + u.email + ').', 'The old password stops working and they are signed out.'], ok: 'Reset password', tone: 'warn'}))) return;
       try { const r = await mApi('user/reset', {email: u.email}); const w = h('div', 'p-5'); w.appendChild(pwCard(u.email, r.password)); openDrawer('New password', u.name, w); } catch (er) { toast(er.message); } };
@@ -852,7 +888,7 @@ const renderUsersView = () => {
         try { await mApi('user', {email: u.email, name: u.name, active: !u.active}); toast(u.active ? 'User disabled' : 'User enabled'); reloadUsers(); } catch (er) { toast(er.message); } };
       g.append(rb, tg); }
     tr.appendChild(c5); body.appendChild(tr); });
-  if (!us.length) { const tr = h('tr'); const td = h('td', 'px-5 py-10 text-center text-zuna-500', 'No users yet.'); td.colSpan = 5; tr.appendChild(td); body.appendChild(tr); }
+  if (!us.length) { const tr = h('tr'); const td = h('td', 'px-5 py-10 text-center text-zuna-500', 'No users yet.'); td.colSpan = 6; tr.appendChild(td); body.appendChild(tr); }
   tb.appendChild(body); sc.appendChild(tb); card.appendChild(sc); box.appendChild(card);
 };
 
@@ -1100,22 +1136,174 @@ $('#hxCons').onclick = () => openConsolidated(false); $('#hxXlsx').onclick = () 
 const txName = () => ((DATA.client && DATA.client.name) || 'LTM') + ' Hotel transaction report';
 $('#hxXlsxName').textContent = txName();
 
+/* ---------- BOOK A ROOM + TRIPS ---------- */
+// bookings are confirmed instantly and written into the stay data, so the room rack, register and reports update at once
+const bApi = async (p, body) => { let r; try { r = await ZUI.busy(fetch('/api/' + p, {method: 'POST', headers: {'content-type': 'application/json'}, body: JSON.stringify(Object.assign({client_id: DATA.client && DATA.client.id}, body || {})), credentials: 'same-origin'})); } catch (e) { throw new Error('Network error. Check your connection and try again.'); }
+  const j = await r.json().catch(() => ({})); if (r.status === 403 && /expired/i.test(j.error || '')) { location.reload(); throw new Error(j.error); } if (!r.ok) throw new Error(j.error || 'Something went wrong.'); return j; };
+const refreshStays = async () => { try { const j = await bApi('bookings'); bookings.splice(0, bookings.length, ...j.bookings); enrich(); } catch (e) { /* the page keeps the list it has */ } };
+const MAIL_TXT = {sent: 'Email sent', failed: 'Email could not be sent', 'not sent': 'No email sent', 'no email address': 'No email address', 'not sent (email not set up)': 'Email not set up yet'};
+const mailTxt = (s) => MAIL_TXT[s] || (s ? s : '—');
+const BK = {built: false, edit: null, prop: '', ci: '', co: '', rooms: null, nights: 0, unassigned: 0, room: '', err: '', seq: 0, f: null};
+const TR = {list: null, loading: false, tab: 'upcoming', q: ''};
+const fldCls = 'w-full rounded-xl bg-white ring-1 ring-zuna-100 px-3 py-2.5 text-sm focus:outline-none focus:ring-2 focus:ring-mint-500';
+const bField = (label, el, hint) => { const w = h('label', 'block min-w-0'); w.appendChild(h('span', 'block text-xs font-semibold text-zuna-500 mb-1', label)); w.appendChild(el); if (hint) w.appendChild(h('span', 'block text-[11px] text-zuna-400 mt-1', hint)); return w; };
+const bInput = (ph, type) => { const i = h('input', fldCls); i.type = type || 'text'; if (ph) i.placeholder = ph; i.autocomplete = 'off'; return i; };
+const bSelect = (opts, val) => { const s = h('select', fldCls); opts.forEach((o) => { const [v, t] = Array.isArray(o) ? o : [o, o]; const op = h('option', null, t); op.value = v; s.appendChild(op); }); if (val != null) s.value = val; return s; };
+const gradeList = () => (DATA.client && DATA.client.grades && DATA.client.grades.length ? DATA.client.grades : ['E1', 'E2', 'E3', 'E4', 'E5', 'E6', 'E7', 'M1', 'M2', 'M3', 'M4', 'M5', 'M6', 'M7', 'M8', 'P1', 'P2', 'P3']);
+const gradeSpan = (gs) => !gs || !gs.length ? 'All grades' : gs.length <= 3 ? gs.join(', ') : gs[0] + '–' + gs[gs.length - 1];
+const tripState = (t) => t.status === 'Cancelled' ? 'Cancelled' : t.check_out <= today ? 'Completed' : t.check_in <= today ? 'In stay' : 'Upcoming';
+const TRIP_CHIP = {Upcoming: '', 'In stay': 'zchip-live', Completed: 'zchip-muted', Cancelled: 'zchip-bad'};
+const nightsOf = (a, b) => Math.round((D(b) - D(a)) / 864e5);
+
+const renderBook = () => { if (!BK.built || render.v !== 'book') buildBook(); };
+const buildBook = () => {
+  BK.built = true; const V = $('#bookView'); V.replaceChildren();
+  const live = props.filter((p) => p.status === 'Live'), e = BK.edit;
+  if (!live.length) { const c = h('div', 'card p-8 text-center text-sm text-zuna-500 xl:col-span-2', 'No live guest house to book yet.'); V.appendChild(c); return; }
+  BK.prop = e ? e.property : (live.some((p) => p.property === BK.prop) ? BK.prop : (live.find((p) => p.property === state.prop) || live[0]).property);
+  BK.ci = e ? e.check_in : (BK.ci && BK.ci >= today ? BK.ci : addDays(today, 1)); BK.co = e ? e.check_out : (BK.co > BK.ci ? BK.co : addDays(BK.ci, 1));
+  BK.room = e ? e.room : ''; BK.rooms = null; BK.err = '';
+  const left = h('div', 'space-y-4 min-w-0'), right = h('div', 'space-y-4 xl:sticky xl:top-4');
+  // 1 · where and when
+  const c1 = h('div', 'card'); const h1 = h('div', 'card-h'); const t1 = h('div'); t1.appendChild(h('h2', 'card-t', e ? 'Change booking ' + (e.code || '') : 'Where and when')); t1.appendChild(h('p', 'card-s', e ? cleanName(e.guest) + ' · pick new dates or another room' : 'Pick the guest house and the stay dates'));
+  h1.appendChild(t1); if (e) { const x = h('button', 'btn ml-auto'); x.type = 'button'; x.appendChild(icon('x', 'w-4 h-4')); x.appendChild(document.createTextNode('Stop changing')); x.onclick = () => { BK.edit = null; BK.built = false; go('trips'); }; h1.appendChild(x); }
+  c1.appendChild(h1); const b1 = h('div', 'p-5 grid gap-3 sm:grid-cols-[minmax(0,1.3fr)_minmax(0,1fr)] items-end');
+  const ps = bSelect(live.map((p) => [p.property, p.property + (p.city ? ' · ' + p.city : '')]), BK.prop); ps.setAttribute('aria-label', 'Guest house');
+  const dg = h('div', 'grid grid-cols-2 gap-2'); const ci = h('input', fldCls); ci.type = 'date'; ci.min = e && e.check_in < today ? e.check_in : today; ci.value = BK.ci; ci.setAttribute('aria-label', 'Check-in');
+  const co = h('input', fldCls); co.type = 'date'; co.min = addDays(today, 1); co.value = BK.co; co.setAttribute('aria-label', 'Check-out');
+  dg.append(bField('Check-in', ci), bField('Check-out', co)); b1.append(bField('Guest house', ps), dg); c1.appendChild(b1); left.appendChild(c1);
+  // 2 · rooms
+  const c2 = h('div', 'card'); const h2 = h('div', 'card-h'); const t2 = h('div'); t2.appendChild(h('h2', 'card-t', 'Choose a room')); const rs = h('p', 'card-s', 'Checking rooms…'); t2.appendChild(rs); h2.appendChild(t2);
+  const lg = h('div', 'ml-auto hidden sm:flex items-center gap-3 text-[11px] font-semibold text-zuna-500'); [['bg-mint-500', 'Free'], ['bg-amber-400', 'One bed left'], ['bg-zuna-200', 'Taken / not eligible']].forEach(([c, t]) => { const s = h('span', 'flex items-center gap-1.5'); s.appendChild(h('span', 'w-2.5 h-2.5 rounded-full ' + c)); s.appendChild(document.createTextNode(t)); lg.appendChild(s); }); h2.appendChild(lg);
+  c2.appendChild(h2); const grid = h('div', 'p-5 grid grid-cols-2 sm:grid-cols-3 2xl:grid-cols-4 gap-2.5'); grid.setAttribute('role', 'radiogroup'); grid.setAttribute('aria-label', 'Rooms'); c2.appendChild(grid); left.appendChild(c2);
+  // 3 · guest
+  const c3 = h('div', 'card'); const h3 = h('div', 'card-h'); const t3 = h('div'); t3.appendChild(h('h2', 'card-t', 'Guest details')); t3.appendChild(h('p', 'card-s', 'Gender and grade decide which rooms the guest can have')); h3.appendChild(t3); c3.appendChild(h3);
+  const g = h('div', 'p-5 grid gap-3 sm:grid-cols-2 xl:grid-cols-3');
+  const f = BK.f = {title: bSelect([['Mr.', 'Mr.'], ['Ms.', 'Ms.'], ['Mrs.', 'Mrs.'], ['Dr.', 'Dr.']], e ? e.title || 'Mr.' : 'Mr.'), name: bInput('Full name'), gender: bSelect([['Male', 'Male'], ['Female', 'Female']], e ? e.gender : 'Male'),
+    grade: bSelect([['', 'Choose grade']].concat(gradeList()), e ? e.grade : ''), emp_code: bInput('e.g. 104523'), email: bInput('guest@company.com', 'email'), phone: bInput('+91 …', 'tel'), base: bInput('e.g. Mumbai'),
+    concur_tr: bInput('Travel request no.'), occupancy: bSelect([['Single', 'Single'], ['Double', 'Double · shares the room']], e ? e.occupancy : 'Single'), note: bInput('e.g. late arrival, veg meals')};
+  if (e) ['name', 'emp_code', 'email', 'phone', 'base', 'concur_tr', 'note'].forEach((k) => { f[k].value = e[k] || ''; });
+  const syncGender = () => { const t = f.title.value; if (t === 'Mr.') f.gender.value = 'Male'; else if (t === 'Ms.' || t === 'Mrs.') f.gender.value = 'Female'; f.gender.disabled = t !== 'Dr.'; if (f.gender._zd) f.gender._zd.disabled = f.gender.disabled; };
+  const nameRow = h('div', 'grid grid-cols-[96px_minmax(0,1fr)] gap-2 sm:col-span-2 xl:col-span-1'); nameRow.append(bField('Title', f.title), bField('Guest name', f.name));
+  g.append(nameRow, bField('Gender', f.gender), bField('Grade', f.grade), bField('Employee code', f.emp_code), bField('Email', f.email, 'The booking is emailed here'), bField('Mobile', f.phone),
+    bField('Base location', f.base), bField('Concur TR', f.concur_tr), bField('Occupancy', f.occupancy));
+  const nt = bField('Remarks', f.note); nt.classList.add('sm:col-span-2', 'xl:col-span-3'); g.appendChild(nt); c3.appendChild(g); left.appendChild(c3);
+  // summary + confirm
+  const c4 = h('div', 'card'); const h4 = h('div', 'card-h'); const t4 = h('div'); t4.appendChild(h('h2', 'card-t', 'Summary')); t4.appendChild(h('p', 'card-s', 'Confirmed as soon as you book')); h4.appendChild(t4); c4.appendChild(h4);
+  const sb = h('div', 'p-5 space-y-4'); const sum = h('div'); sb.appendChild(sum);
+  const cc = bInput('Comma-separated', 'text'), bcc = bInput('Comma-separated', 'text'); cc.value = e ? e.cc : (DATA.client && DATA.client.mail_cc) || ''; bcc.value = e ? e.bcc : (DATA.client && DATA.client.mail_bcc) || '';
+  const mw = h('label', 'flex items-center gap-2 text-sm font-semibold cursor-pointer'); const send = h('input', 'w-4 h-4 accent-[#02C988]'); send.type = 'checkbox'; send.checked = true; mw.append(send, document.createTextNode(e ? 'Email the change to the guest' : 'Email the booking to the guest'));
+  const copies = h('div', 'space-y-3'); copies.append(bField('CC', cc), bField('BCC', bcc)); send.onchange = () => copies.classList.toggle('opacity-50', !send.checked);
+  const err = h('p', 'hidden rounded-xl bg-rose-50 ring-1 ring-rose-200 px-3 py-2 text-xs font-semibold text-rose-700'); err.setAttribute('role', 'alert');
+  const ok = h('button', 'btn-primary w-full justify-center !py-3 !text-sm'); ok.type = 'button'; ok.appendChild(icon(e ? 'check' : 'calendar-plus', 'w-4 h-4')); ok.appendChild(document.createTextNode(e ? 'Save changes' : 'Confirm booking'));
+  sb.append(mw, copies, err, ok); c4.appendChild(sb); right.appendChild(c4); V.append(left, right);
+  const fit = (r) => !r.grades.length || !f.grade.value || r.grades.includes(f.grade.value);
+  const shareOk = (r) => r.guests.every((x) => x.gender === f.gender.value);
+  const why = (r) => r.state === 'full' ? 'Taken' : !fit(r) ? 'Not for ' + f.grade.value : r.state === 'shared' && !shareOk(r) ? 'Shared · ' + (r.guests[0] || {}).gender.toLowerCase() + ' guest' : '';
+  const paintSum = () => { sum.replaceChildren(); const n = nightsOf(BK.ci, BK.co), r = (BK.rooms || []).find((x) => x.room === BK.room);
+    sum.appendChild(stat3([[BK.ci ? fShort(BK.ci) : '—', 'Check-in'], [BK.co ? fShort(BK.co) : '—', 'Check-out'], [n > 0 ? n : '—', n === 1 ? 'Night' : 'Nights']])); const k = h('div', 'mt-4');
+    k.appendChild(kv([['Guest house', BK.prop], ['Room', BK.room ? BK.room + (r && r.type ? ' · ' + r.type : '') + (r && r.state === 'shared' ? ' · shared' : '') : 'Any free room'], ['Guest', f.name.value.trim() ? f.title.value + ' ' + f.name.value.trim() : ''], ['Grade', f.grade.value]])); sum.appendChild(k); };
+  const paintRooms = () => { grid.replaceChildren(); if (!BK.rooms) { for (let i = 0; i < 6; i++) grid.appendChild(h('div', 'chart-skel h-[84px] rounded-xl')); return; }
+    const tile = (val, top, sub, tag, dis, tone) => { const b = h('button', 'relative text-left rounded-xl p-3 ring-1 transition-all min-w-0 ' + (dis ? 'ring-zuna-100 bg-zuna-50/60 text-zuna-400 cursor-not-allowed' : 'ring-zuna-100 bg-white hover:ring-mint-500 hover:-translate-y-0.5'));
+      b.type = 'button'; b.setAttribute('role', 'radio'); const on = BK.room === val; b.setAttribute('aria-checked', on ? 'true' : 'false'); if (on) b.className += ' !ring-2 !ring-mint-500 bg-mint-50';
+      const hd = h('div', 'flex items-center gap-2'); hd.appendChild(h('span', 'w-2.5 h-2.5 rounded-full shrink-0 ' + tone)); hd.appendChild(h('span', 'font-bold text-base truncate', top)); if (on) { const ck = icon('circle-check', 'w-4 h-4 text-mint-600 ml-auto shrink-0'); hd.appendChild(ck); } b.appendChild(hd);
+      b.appendChild(h('p', 'text-xs mt-1 truncate ' + (dis ? '' : 'text-zuna-500'), sub)); b.appendChild(h('p', 'text-[11px] font-semibold mt-0.5 truncate ' + (dis ? '' : 'text-zuna-700'), tag));
+      if (dis) b.disabled = true; else b.onclick = () => { BK.room = val; if (val) { const r = BK.rooms.find((x) => x.room === val); if (r && r.state === 'shared') f.occupancy.value = 'Double'; } paintRooms(); paintSum(); }; return b; };
+    const usable = BK.rooms.filter((r) => !why(r));
+    grid.appendChild(tile('', 'Any room', 'We pick a free one', usable.filter((r) => r.state === 'free').length + ' free for these nights', false, 'bg-mint-500'));
+    BK.rooms.forEach((r) => { const w = why(r); grid.appendChild(tile(r.room, 'Room ' + r.room, [r.type, r.bed_type].filter(Boolean).join(' · ') || r.occupancy, w || (r.state === 'shared' ? 'One bed left · ' + gradeSpan(r.grades) : gradeSpan(r.grades)), !!w, w ? 'bg-zuna-200' : r.state === 'shared' ? 'bg-amber-400' : 'bg-mint-500')); });
+    if (BK.room && !usable.some((r) => r.room === BK.room)) { BK.room = ''; paintRooms(); return; }
+    const free = BK.rooms.filter((r) => r.state === 'free').length; rs.textContent = BK.rooms.length + ' rooms · ' + free + ' free · ' + BK.nights + (BK.nights === 1 ? ' night' : ' nights') + (BK.unassigned ? ' · ' + BK.unassigned + ' stays without a room yet' : ''); };
+  const load = async () => { err.classList.add('hidden'); if (!(BK.co > BK.ci)) { BK.rooms = []; grid.replaceChildren(h('p', 'col-span-full text-sm text-rose-600 font-semibold', 'Check-out must be after check-in.')); rs.textContent = 'Fix the dates'; paintSum(); return; }
+    const seq = ++BK.seq; BK.rooms = null; paintRooms(); rs.textContent = 'Checking rooms…';
+    try { const j = await bApi('book/avail', {property: BK.prop, check_in: BK.ci, check_out: BK.co, exclude_id: e ? e.id : undefined}); if (seq !== BK.seq) return; BK.rooms = j.rooms; BK.nights = j.nights; BK.unassigned = j.unassigned; paintRooms(); paintSum(); }
+    catch (x) { if (seq !== BK.seq) return; BK.rooms = []; grid.replaceChildren(h('p', 'col-span-full text-sm text-rose-600 font-semibold', x.message)); rs.textContent = 'Could not check rooms'; } };
+  ps.onchange = () => { BK.prop = ps.value; BK.room = ''; load(); };
+  ci.onchange = () => { BK.ci = ci.value; if (!(BK.co > BK.ci)) { BK.co = addDays(BK.ci, 1); co.value = BK.co; } load(); }; co.onchange = () => { BK.co = co.value; load(); };
+  f.title.onchange = () => { syncGender(); paintRooms(); paintSum(); }; f.gender.onchange = () => { paintRooms(); }; f.grade.onchange = () => { paintRooms(); paintSum(); }; f.name.oninput = paintSum;
+  ok.onclick = async () => { err.classList.add('hidden');
+    const fail = (m, el) => { err.textContent = m; err.classList.remove('hidden'); toast(m); if (el) (el._zd || el).focus(); };
+    if (!f.name.value.trim()) return fail("Enter the guest's name.", f.name); if (!f.grade.value) return fail("Choose the guest's grade.", f.grade); if (!(BK.co > BK.ci)) return fail('Check-out must be after check-in.', co);
+    if (f.email.value.trim() && !/^[^@\s]+@[^@\s]+\.[^@\s]+$/.test(f.email.value.trim())) return fail("The guest's email address doesn't look right.", f.email);
+    const body = {property: BK.prop, check_in: BK.ci, check_out: BK.co, room: BK.room, send_mail: send.checked, cc: cc.value, bcc: bcc.value}; Object.keys(f).forEach((k) => { body[k] = f[k].value; });
+    if (e) body.id = e.id; ok.disabled = true;
+    try { const j = await bApi(e ? 'book/update' : 'book', body), t = j.trip;
+      ZUI.celebrate(e ? 'Booking changed' : 'Booking confirmed', t.code + ' · ' + cleanName(t.guest) + ' · room ' + t.room);
+      if (send.checked) toast(t.mail_status === 'sent' ? 'Email sent to ' + (t.email || 'the CC list') : mailTxt(t.mail_status) + ' · the booking is saved');
+      await refreshStays(); TR.list = null; BK.edit = null; BK.built = false; f.name.value = ''; TR.tab = tripState(t) === 'In stay' ? 'stay' : 'upcoming'; TR.open = t.id; go('trips'); }
+    catch (x) { fail(x.message); if (/taken|shared|free/i.test(x.message)) load(); } finally { ok.disabled = false; } };
+  ZUI.auto(V); syncGender(); hydrateIcons(V); paintSum(); load();
+};
+
+const trLoad = async () => { TR.loading = true; try { TR.list = (await bApi('trips')).trips; } catch (x) { TR.list = []; toast(x.message); } TR.loading = false; if (state.view === 'trips') paintTrips(); };
+const renderTrips = () => { if (TR.list === null) { if (!TR.loading) trLoad(); const tb = $('#tBody'); tb.replaceChildren(); for (let i = 0; i < 4; i++) { const tr = h('tr'); const td = h('td', 'px-5 py-3'); td.colSpan = 6; td.appendChild(h('div', 'chart-skel h-8 rounded-lg')); tr.appendChild(td); tb.appendChild(tr); } return; } paintTrips(); };
+const TABS = [['upcoming', 'Upcoming'], ['stay', 'In stay'], ['done', 'Completed'], ['cancelled', 'Cancelled'], ['all', 'All']];
+const tabOf = (t) => ({Upcoming: 'upcoming', 'In stay': 'stay', Completed: 'done', Cancelled: 'cancelled'})[tripState(t)];
+const paintTrips = () => {
+  const L = TR.list || [], T = $('#trTabs'); T.replaceChildren();
+  TABS.forEach(([k, l]) => { const n = k === 'all' ? L.length : L.filter((t) => tabOf(t) === k).length; const on = TR.tab === k;
+    const b = h('button', 'flex items-center gap-1.5 rounded-lg px-3 py-1.5 text-xs font-semibold transition-all ' + (on ? 'bg-zuna-900 text-white shadow' : 'text-zuna-600 hover:bg-white')); b.type = 'button'; b.setAttribute('aria-pressed', on ? 'true' : 'false');
+    b.appendChild(document.createTextNode(l)); b.appendChild(h('span', 'tabular-nums rounded-full px-1.5 text-[10px] ' + (on ? 'bg-white/20' : 'bg-zuna-100'), String(n))); b.onclick = () => { TR.tab = k; paintTrips(); }; T.appendChild(b); });
+  const q = TR.q.trim().toLowerCase(); let rows = L.filter((t) => TR.tab === 'all' || tabOf(t) === TR.tab);
+  if (q) rows = rows.filter((t) => [t.guest, t.code, t.room, t.property, t.emp_code, t.email, t.grade, t.concur_tr].join(' ').toLowerCase().includes(q));
+  rows.sort((a, b) => TR.tab === 'upcoming' || TR.tab === 'stay' ? (a.check_in < b.check_in ? -1 : a.check_in > b.check_in ? 1 : a.id - b.id) : (a.check_in > b.check_in ? -1 : a.check_in < b.check_in ? 1 : b.id - a.id));
+  const tb = $('#tBody'); tb.replaceChildren();
+  if (!rows.length) { const tr = h('tr'); const td = h('td', 'p-8 text-center text-sm text-zuna-400'); td.colSpan = 6; td.textContent = !L.length ? (USER.book ? 'No trips yet. Book a room and it shows here.' : 'No trips booked in the portal yet.') : q ? 'No trips match "' + TR.q.trim() + '".' : 'Nothing here.'; tr.appendChild(td); tb.appendChild(tr); }
+  rows.forEach((t) => { const tr = h('tr', 'hover:bg-zuna-50/60 cursor-pointer transition-colors'); tr.tabIndex = 0; tr.setAttribute('aria-label', 'Trip ' + t.code + ', ' + cleanName(t.guest));
+    const c1 = h('td', 'px-5 py-3'); const f1 = h('div', 'flex items-center gap-3 min-w-0'); f1.appendChild(avatar(t.guest)); const n1 = h('div', 'min-w-0'); n1.appendChild(h('p', 'font-semibold truncate', cleanName(t.guest))); n1.appendChild(h('p', 'text-xs text-zuna-500 truncate', [t.grade, t.emp_code].filter(Boolean).join(' · '))); f1.appendChild(n1); c1.appendChild(f1);
+    const c2 = h('td', 'px-3 py-3 whitespace-nowrap'); c2.appendChild(h('p', 'font-bold tabular-nums', t.code || '—')); c2.appendChild(h('p', 'text-xs text-zuna-500', 'Booked ' + fShort(String(t.booked_at || '').slice(0, 10) || today)));
+    const c3 = h('td', 'px-3 py-3'); c3.appendChild(h('p', 'font-medium truncate max-w-[220px]', t.property)); c3.appendChild(h('p', 'text-xs text-zuna-500', 'Room ' + t.room + (t.occupancy === 'Double' ? ' · shared' : '')));
+    const c4 = h('td', 'px-3 py-3 whitespace-nowrap'); c4.appendChild(h('p', 'font-medium tabular-nums', fShort(t.check_in) + ' → ' + fShort(t.check_out))); const nn = nightsOf(t.check_in, t.check_out); c4.appendChild(h('p', 'text-xs text-zuna-500', nn + (nn === 1 ? ' night' : ' nights')));
+    const c5 = h('td', 'px-3 py-3'); const st = tripState(t); c5.appendChild(h('span', 'zchip ' + TRIP_CHIP[st], st));
+    const c6 = h('td', 'px-3 py-3 pr-5 whitespace-nowrap text-xs font-semibold ' + (t.mail_status === 'sent' ? 'text-mint-700' : t.mail_status === 'failed' ? 'text-rose-600' : 'text-zuna-500')); const mi = h('span', 'inline-flex items-center gap-1.5'); mi.appendChild(icon(t.mail_status === 'sent' ? 'circle-check' : 'mail', 'w-3.5 h-3.5 shrink-0')); mi.appendChild(document.createTextNode(mailTxt(t.mail_status))); c6.appendChild(mi);
+    tr.append(c1, c2, c3, c4, c5, c6); tr.onclick = () => tripDrawer(t); tr.onkeydown = (ev) => { if (ev.key === 'Enter') tripDrawer(t); }; tb.appendChild(tr); });
+  $('#trSub').textContent = L.length + (L.length === 1 ? ' trip' : ' trips') + ' booked in the portal · click a trip for details';
+  if (TR.open) { const t = L.find((x) => x.id === TR.open); TR.open = null; if (t) tripDrawer(t); }
+};
+$('#trSearch').oninput = (ev) => { TR.q = ev.target.value; paintTrips(); };
+const tripDrawer = (t) => {
+  const st = tripState(t), box = h('div', 'space-y-5'), canAct = USER.book && t.status !== 'Cancelled' && t.check_out > today;
+  const top = h('div', 'flex items-center gap-3'); top.appendChild(avatar(t.guest, 'w-12 h-12 text-base')); const tt = h('div', 'space-y-1 min-w-0'); const ch = h('div', 'flex flex-wrap items-center gap-2'); ch.appendChild(h('span', 'zchip ' + TRIP_CHIP[st], st)); ch.appendChild(h('span', 'text-sm font-bold tabular-nums', t.code)); tt.appendChild(ch); tt.appendChild(h('p', 'text-xs text-zuna-500 truncate', t.property + ' · room ' + t.room)); top.appendChild(tt); box.appendChild(top);
+  const nn = nightsOf(t.check_in, t.check_out); box.appendChild(stat3([[fShort(t.check_in), 'Check-in'], [fShort(t.check_out), 'Check-out'], [nn, nn === 1 ? 'Night' : 'Nights']]));
+  if (t.status === 'Cancelled') { const w = warnBox('Cancelled', 'By ' + t.cancelled_by + ' on ' + fLong(String(t.cancelled_at).slice(0, 10)) + (t.cancel_reason ? ' · ' + t.cancel_reason : '')); box.appendChild(w); }
+  if (USER.book) { const acts = h('div', 'grid gap-2 ' + (canAct ? 'grid-cols-3' : 'grid-cols-1'));
+    const mk = (txt, ic, cls) => { const b = h('button', 'btn justify-center !py-2 ' + (cls || '')); b.type = 'button'; b.appendChild(icon(ic, 'w-4 h-4 shrink-0')); b.appendChild(document.createTextNode(txt)); acts.appendChild(b); return b; };
+    if (canAct) { mk('Change', 'pencil').onclick = () => { closeDrawer(); BK.edit = t; BK.built = false; go('book'); };
+      mk('Cancel', 'calendar-x', 'text-rose-600').onclick = () => cancelPanel(t, box); }
+    mk('Resend email', 'send').onclick = async (ev) => { const b = ev.currentTarget; b.disabled = true; try { const j = await bApi('book/resend', {id: t.id}); t.mail_status = j.mail_status; toast(j.mail_status === 'sent' ? 'Email sent again' : mailTxt(j.mail_status)); paintTrips(); } catch (x) { toast(x.message); } b.disabled = false; };
+    box.appendChild(acts); }
+  box.appendChild(kv([['Guest', t.guest], ['Gender', t.gender], ['Grade', t.grade], ['Employee code', t.emp_code], ['Email', t.email], ['Mobile', t.phone], ['Base location', t.base], ['Concur TR', t.concur_tr], ['Occupancy', t.occupancy === 'Double' ? 'Double · shares the room' : 'Single'], ['Remarks', t.note],
+    ['Email copies', [t.cc && 'CC ' + t.cc, t.bcc && 'BCC ' + t.bcc].filter(Boolean).join(' · ')], ['Email status', mailTxt(t.mail_status)], ['Booked by', t.booked_by + ' · ' + fLong(String(t.booked_at).slice(0, 10))]]));
+  const hs = h('div', 'space-y-2'); hs.appendChild(h('p', 'text-xs font-bold uppercase tracking-wider text-zuna-500', 'History'));
+  const ol = h('ol', 'relative border-l-2 border-zuna-100 ml-1.5 space-y-3'); (t.history || []).slice().reverse().forEach((x) => { const li = h('li', 'pl-4 relative'); li.appendChild(h('span', 'absolute -left-[7px] top-1 w-3 h-3 rounded-full ring-2 ring-white ' + (x.what === 'Cancelled' ? 'bg-rose-500' : x.what === 'Changed' ? 'bg-amber-400' : 'bg-mint-500')));
+    li.appendChild(h('p', 'text-sm font-semibold', x.what + (x.detail ? ' · ' + x.detail : ''))); li.appendChild(h('p', 'text-xs text-zuna-500', x.by + ' · ' + fLong(String(x.at).slice(0, 10)) + ' ' + String(x.at).slice(11, 16) + ' UTC')); ol.appendChild(li); }); hs.appendChild(ol); box.appendChild(hs);
+  openDrawer(cleanName(t.guest), fFull(t.check_in) + ' → ' + fShort(t.check_out), box);
+};
+const cancelPanel = (t, box) => { if (box.querySelector('[data-cancel]')) return; const p = h('div', 'rounded-xl bg-rose-50 ring-1 ring-rose-200 p-4 space-y-3'); p.dataset.cancel = '1';
+  p.appendChild(h('p', 'text-sm font-semibold text-rose-800', 'Cancel this booking?')); p.appendChild(h('p', 'text-xs text-rose-700', 'The room is released at once' + (t.email ? ' and ' + t.email + ' is told by email.' : '.')));
+  const r = h('input', fldCls); r.placeholder = 'Reason (optional), e.g. trip postponed'; r.maxLength = 200; p.appendChild(r);
+  const row = h('div', 'grid grid-cols-2 gap-2'); const no = h('button', 'btn justify-center', 'Keep booking'); no.type = 'button'; no.onclick = () => p.remove();
+  const yes = h('button', 'btn-primary justify-center !bg-rose-600', 'Cancel booking'); yes.type = 'button';
+  yes.onclick = async () => { if (!(await ZUI.confirm({title: 'Cancel ' + t.code + '?', message: [cleanName(t.guest) + ' · ' + t.property + ' · ' + fShort(t.check_in) + ' – ' + fShort(t.check_out), 'This cannot be undone. Make a new booking if plans change again.'], ok: 'Cancel booking', tone: 'danger', hold: true}))) return;
+    yes.disabled = true; try { const j = await bApi('book/cancel', {id: t.id, reason: r.value}); Object.assign(t, j.trip); toast('Booking cancelled' + (j.trip.mail_status === 'sent' ? ' · guest told by email' : '')); await refreshStays(); paintTrips(); tripDrawer(t); } catch (x) { toast(x.message); yes.disabled = false; } };
+  row.append(no, yes); p.appendChild(row); box.insertBefore(p, box.children[2] || null); r.focus(); };
+
 /* ---------- routing ---------- */
-const TITLES = {overview: 'Overview', rack: 'Room rack', calendar: 'Night-wise availability', bookings: 'Stay register', hotels: 'Hotel bookings', houses: 'Guest house directory', users: 'Users & access'};
+const TITLES = {overview: 'Overview', rack: 'Room rack', calendar: 'Night-wise availability', bookings: 'Stay register', hotels: 'Hotel bookings', book: 'Book a room', trips: 'Trips', houses: 'Guest house directory', users: 'Users & access'};
 const render = () => {
   $$('#nav button').forEach((b) => b.toggleAttribute('data-active', b.dataset.view === state.view));
   const ub = $('#usersBtn'); if (ub) ub.toggleAttribute('data-active', state.view === 'users');
   $$('.view').forEach((v) => v.classList.toggle('hidden', v.dataset.view !== state.view));
   $('#viewTitle').textContent = TITLES[state.view]; document.title = TITLES[state.view] + ' · Zuna Stays';
   const p = P();
-  $('#viewSub').textContent = state.view === 'hotels' ? (DATA.client ? DATA.client.name + ' · ' : '') + 'Hotels and apartments booked through Zuna' : state.view === 'users' ? (DATA.client ? DATA.client.name + ' · ' : '') + (DATA.users || []).length + ' users' : state.view === 'houses' ? props.length + ' guest houses · ' + props.filter((x) => x.status === 'Live').length + ' live' : p.property + ', ' + p.city + ' · ' + (state.view === 'calendar' ? fShort(period.from) + ' – ' + fLong(period.to) : state.view === 'bookings' && coOn() ? coText() : rangeLabel());
+  $('#viewSub').textContent = state.view === 'book' ? (DATA.client ? DATA.client.name + ' · ' : '') + 'Confirmed instantly · the guest gets the booking by email' : state.view === 'trips' ? (DATA.client ? DATA.client.name + ' · ' : '') + 'Guest house bookings made in the portal' : state.view === 'hotels' ? (DATA.client ? DATA.client.name + ' · ' : '') + 'Hotels and apartments booked through Zuna' : state.view === 'users' ? (DATA.client ? DATA.client.name + ' · ' : '') + (DATA.users || []).length + ' users' : state.view === 'houses' ? props.length + ' guest houses · ' + props.filter((x) => x.status === 'Live').length + ' live' : p.property + ', ' + p.city + ' · ' + (state.view === 'calendar' ? fShort(period.from) + ' – ' + fLong(period.to) : state.view === 'bookings' && coOn() ? coText() : rangeLabel());
   $('#rangeBox').classList.toggle('invisible', !(state.view === 'overview' || state.view === 'rack' || state.view === 'bookings'));
   $('#rangeCustomTxt').textContent = state.range === 'custom' ? fShort(state.cfrom) + ' – ' + fShort(state.cto) : 'Custom';
-  $('#propWrap').classList.toggle('invisible', state.view === 'houses' || state.view === 'users' || state.view === 'hotels');
+  $('#propWrap').classList.toggle('invisible', ['houses', 'users', 'hotels', 'book', 'trips'].includes(state.view));
   const coRule = state.view === 'bookings' && coOn();   // check-out dates replace the range here
   $$('#rangeWrap button').forEach((b) => b.toggleAttribute('data-active', !coRule && b.dataset.range === state.range));
   $('#navCount').textContent = myB().length;
-  ({overview: renderOverview, rack: renderRack, calendar: renderCal, bookings: renderBookings, hotels: renderHotels, houses: renderHouses, users: () => renderUsersView()})[state.view]();
+  ({overview: renderOverview, rack: renderRack, calendar: renderCal, bookings: renderBookings, hotels: renderHotels, book: renderBook, trips: renderTrips, houses: renderHouses, users: () => renderUsersView()})[state.view]();
   if (state.view !== render.v) { render.v = state.view; ZUI.stagger(document.querySelector('.view[data-view="' + state.view + '"]')); }   // a soft lift only when the page changes; content is never hidden
 };
 const reRender = render;   // range / guest house switches repaint instantly (the data is already here)
@@ -1199,8 +1387,10 @@ hydrateIcons();
   ['#dHandle', '#dHead'].forEach((sel) => { const n = $(sel); n.addEventListener('touchstart', startY, {passive: true}); n.addEventListener('touchmove', moveY, {passive: false}); n.addEventListener('touchend', endY); n.addEventListener('touchcancel', endY); }); }
 { const tb = $('#themeBtn'); const sync = () => { const dk = ZUI.theme.get() === 'dark'; tb.replaceChildren(icon(dk ? 'sun' : 'moon', 'w-4 h-4'), h('span', 'sb-label', 'Theme')); tb.dataset.tip = dk ? 'Light mode' : 'Dark mode'; tb.setAttribute('aria-label', dk ? 'Switch to light mode' : 'Switch to dark mode'); tb.setAttribute('aria-pressed', dk ? 'true' : 'false'); };
   tb.onclick = () => { ZUI.theme.set(ZUI.theme.get() === 'dark' ? 'light' : 'dark'); sync(); render(); toast(ZUI.theme.get() === 'dark' ? 'Dark mode on' : 'Light mode on'); }; sync(); }
+if (USER.book || USER.manager) { $('#navBookH').classList.remove('hidden'); $('#navTrips').classList.remove('hidden'); }   // Trips: bookers and client admins
+if (USER.book) { $('#navBook').classList.remove('hidden'); $('#trNew').classList.remove('hidden'); $('#trNew').onclick = () => { BK.edit = null; BK.built = false; go('book'); }; }
 if (USER.tx) { $('#navHotels').classList.remove('hidden'); $('#navHotelsH').classList.remove('hidden'); }   // hotel bookings: admins, client admins and users given access
-const hs = location.hash.slice(1); if (TITLES[hs] && (hs !== 'users' || (USER.manager && !USER.admin)) && (hs !== 'hotels' || USER.tx)) state.view = hs;
+const hs = location.hash.slice(1); if (TITLES[hs] && (hs !== 'users' || (USER.manager && !USER.admin)) && (hs !== 'hotels' || USER.tx) && (hs !== 'book' || USER.book) && (hs !== 'trips' || USER.book || USER.manager)) state.view = hs;
 /* auto-refresh: reload data every 10 minutes while the tab is open (quietly, keeps the current page) */
 const LOADED = Date.now();
 setInterval(() => {

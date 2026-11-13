@@ -289,6 +289,51 @@ check('old host redirects to PRIMARY_HOST', r.status === 301 && r.headers.get('l
   check('expiry reminder e-mailed to Zuna admin and client admin', rm.length === 2 && rm.some((m) => m.to[0] === 'meera@acme.example') && rm.every((m) => /Trade licence/.test(m.text) && /Expires in 30 days/.test(m.text)));
   await worker.scheduled({}, env, {waitUntil: (p) => p}); await new Promise((r) => setTimeout(r, 50));
   check('reminder not repeated the same day', mails.length === before + 2);
+  { // Book a room + Trips
+    const D = (n) => new Date(Date.now() + n * 864e5).toISOString().slice(0, 10);
+    const B = async (who, p, body) => { const y = await call('/api/' + p, {method: 'POST', body, cookie: who}); return {status: y.status, j: await y.json()}; };
+    check('booking needs the Book rooms switch', (await B(asha, 'book/avail', {property: 'Acme House', check_in: D(200), check_out: D(203)})).status === 403);
+    check('client admin switches Book rooms on', (await M('user/access', {email: 'asha@acme.example', book: true})).status === 200);
+    await A('client', {id: acme, name: 'Acme', legal_name: 'Acme Industries Limited', grades: ['E1', 'E2'], mail_cc: 'desk@zuna.example, bad-address', mail_bcc: 'audit@zuna.example'});
+    { const pg = await (await call('/', {cookie: asha})).text(); const dd = JSON.parse(pg.match(/window\.__LTMGH_DATA = (.*?);\nconst REPORT_DATE/s)[1]);
+      check('dashboard carries default CC/BCC for bookers', dd.client.mail_cc === 'desk@zuna.example' && dd.client.mail_bcc === 'audit@zuna.example' && pg.includes('"book":true')); }
+    x = await B(asha, 'book/avail', {property: 'Acme House', check_in: D(200), check_out: D(203)});
+    check('availability lists every room as free', x.status === 200 && x.j.rooms.length === 3 && x.j.rooms.every((r) => r.state === 'free') && x.j.nights === 3);
+    check('past check-in refused', (await B(asha, 'book', {property: 'Acme House', check_in: D(-2), check_out: D(1), title: 'Mr.', name: 'Old Guest', grade: 'E1'})).status === 400);
+    const m0 = mails.length;
+    x = await B(asha, 'book', {property: 'Acme House', check_in: D(200), check_out: D(203), room: 'A1', title: 'Mr.', name: 'Karan Mehta', grade: 'E1', email: 'karan@acme.example', cc: 'desk@zuna.example', bcc: 'audit@zuna.example', note: 'Late arrival'});
+    const t1 = x.j.trip;
+    check('booking is confirmed instantly with a ZUNA code', x.status === 200 && /^ZUNA\d+$/.test(t1.code) && t1.status === 'Confirmed' && t1.room === 'A1');
+    const em = mails[m0];
+    check('confirmation e-mail goes to the guest with CC and BCC', mails.length === m0 + 1 && em.to[0] === 'karan@acme.example' && em.cc[0] === 'desk@zuna.example' && em.bcc[0] === 'audit@zuna.example' && /Booking confirmed/.test(em.subject) && em.text.includes(t1.code) && em.text.includes('Late arrival') && t1.mail_status === 'sent');
+    x = await B(asha, 'bookings', {}); check('the stay shows in the stay list with its code', x.j.bookings.some((b) => b.guest === 'Mr. Karan Mehta' && b.room === 'A1' && b.booking_code === t1.code));
+    check('room taken on those nights is refused', (await B(asha, 'book', {property: 'Acme House', check_in: D(201), check_out: D(202), room: 'A1', title: 'Ms.', name: 'Priya S', grade: 'E1'})).status === 409);
+    check('same guest cannot be booked twice for the same nights', (await B(asha, 'book', {property: 'Acme House', check_in: D(201), check_out: D(204), room: 'A2', title: 'Mr.', name: 'Karan Mehta', grade: 'E1'})).status === 409);
+    check('room not open to the grade is refused', (await B(asha, 'book', {property: 'Acme House', check_in: D(200), check_out: D(201), room: 'A2', title: 'Ms.', name: 'Priya S', grade: 'M1'})).status === 400);
+    x = await B(asha, 'book', {property: 'Acme House', check_in: D(200), check_out: D(202), room: 'S1', title: 'Ms.', name: 'Priya S', grade: 'E2', occupancy: 'Double'});
+    check('booking in a double room', x.status === 200);
+    check('a man cannot share a room with a woman', (await B(asha, 'book', {property: 'Acme House', check_in: D(200), check_out: D(201), room: 'S1', title: 'Mr.', name: 'Ravi K', grade: 'E1'})).status === 409);
+    x = await B(asha, 'book', {property: 'Acme House', check_in: D(200), check_out: D(201), room: 'S1', title: 'Ms.', name: 'Anu P', grade: 'E1', send_mail: false});
+    check('a woman can share it and no e-mail when switched off', x.status === 200 && x.j.trip.occupancy === 'Double' && x.j.trip.mail_status === 'not sent');
+    x = await B(asha, 'book/avail', {property: 'Acme House', check_in: D(200), check_out: D(201)});
+    check('availability shows taken rooms as full', x.j.rooms.find((r) => r.room === 'A1').state === 'full' && x.j.rooms.find((r) => r.room === 'S1').state === 'full');
+    x = await B(asha, 'book/avail', {property: 'Acme House', check_in: D(200), check_out: D(201), exclude_id: t1.id});
+    check('modify sees its own room as free', x.j.rooms.find((r) => r.room === 'A1').state === 'free');
+    x = await B(admin, 'book/update', {client_id: acme, id: t1.id, property: 'Acme House', check_in: D(205), check_out: D(207), room: 'A2', title: 'Mr.', name: 'Karan Mehta', grade: 'E1', email: 'karan@acme.example'});
+    check('Zuna admin changes the booking for the client and the code stays', x.status === 200 && x.j.trip.code === t1.code && x.j.trip.room === 'A2' && x.j.trip.history.length === 2 && /Booking changed/.test(mails[mails.length - 1].subject));
+    x = await B(asha, 'bookings', {}); check('old stay is gone, new one keeps the code', !x.j.bookings.some((b) => b.guest === 'Mr. Karan Mehta' && b.check_in === D(200)) && x.j.bookings.some((b) => b.check_in === D(205) && b.booking_code === t1.code));
+    x = await B(asha, 'book/cancel', {id: t1.id, reason: 'Trip postponed'});
+    check('booker cancels with a reason and the guest is told', x.status === 200 && x.j.trip.status === 'Cancelled' && x.j.trip.cancel_reason === 'Trip postponed' && /Booking cancelled/.test(mails[mails.length - 1].subject) && mails[mails.length - 1].text.includes('Trip postponed'));
+    x = await B(asha, 'bookings', {}); check('cancelled stay leaves the stay list', !x.j.bookings.some((b) => b.guest === 'Mr. Karan Mehta'));
+    check('a cancelled booking cannot be changed', (await B(asha, 'book/update', {id: t1.id, property: 'Acme House', check_in: D(205), check_out: D(206), title: 'Mr.', name: 'Karan Mehta', grade: 'E1'})).status === 409);
+    const m1 = mails.length; x = await B(asha, 'book/resend', {id: t1.id}); check('e-mail can be sent again', x.status === 200 && x.j.mail_status === 'sent' && mails.length === m1 + 1);
+    x = await B(asha, 'trips', {}); check('trips list shows all bookings of the client', x.status === 200 && x.j.trips.length === 3 && x.j.trips.some((t) => t.status === 'Cancelled'));
+    x = await B(admin, 'trips', {client_id: other}); check("other client's trips stay separate", x.status === 200 && x.j.trips.length === 0);
+    check("booker cannot touch another client's trip", (await B(asha, 'book/cancel', {id: 99999})).status === 404);
+    x = await B(admin, 'book', {client_id: acme, property: 'Acme House', check_in: D(210), check_out: D(211), title: 'Dr.', gender: 'Female', name: 'Neha Iyer', grade: 'E2'});
+    check('Zuna admin books on behalf and the free room is picked', x.status === 200 && x.j.trip.booked_by === 'boss@zuna.example' && ['A1', 'A2'].includes(x.j.trip.room));
+    await M('user/access', {email: 'asha@acme.example', book: false});
+    check('switching Book rooms off blocks booking', (await B(asha, 'book', {property: 'Acme House', check_in: D(220), check_out: D(221), title: 'Mr.', name: 'X Y', grade: 'E1'})).status === 403); }
   x = await A('user', {email: 'asha@acme.example', name: 'Asha Rao', active: false});
   check('disabled user is signed out', (await (await call('/', {cookie: asha})).text()).includes('id="f"'));
 }

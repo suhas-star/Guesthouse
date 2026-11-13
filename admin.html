@@ -713,10 +713,12 @@ const renderSettings = (D, c) => {
   const n = inp(c.name); card.appendChild(field('Client name', n));
   const ln = inp(c.legal_name || '', 'e.g. LTM Limited'); card.appendChild(field('Company name in reports (Guest Circle Name in the weekly GH report)', ln));
   const gr = h('textarea', 'inp'); gr.rows = 2; gr.value = c.grades.join(', '); card.appendChild(field('Grades used by this client (comma separated, in order)', gr));
+  const em = inp(c.elig_male || '', 'e.g. M6–M8, P6–P8, L6–L8, E1–E8'), ef = inp(c.elig_female || '', 'e.g. M5–M8, P5–P8, L5–L8, E1–E8');
+  const eg = h('div', 'grid sm:grid-cols-2 gap-3'); eg.append(field('Male guests', em), field('Female guests', ef)); card.appendChild(field('Guest house eligibility (grades that may book; ranges like M6–M8; leave both empty for no rule)', eg));
   const mc = inp(c.mail_cc || '', 'e.g. travel.desk@zuna.ai, admin@client.com'); card.appendChild(field('Booking emails · default CC (every booking, change and cancellation; comma separated)', mc));
   const mb = inp(c.mail_bcc || '', 'e.g. records@zuna.ai'); card.appendChild(field('Booking emails · default BCC', mb));
   const act = switchEl('Client active (users can log in)', c.active); card.appendChild(act);
-  const save = h('button', 'btn-primary', 'Save settings'); save.onclick = async () => { try { await api('client', {id: c.id, name: n.value, legal_name: ln.value, mail_cc: mc.value, mail_bcc: mb.value, grades: gr.value.split(/\s*[,\n]\s*/).map((g) => g.trim()).filter(Boolean), active: act.input.checked}); toast('Saved'); load(true); } catch (er) { toast(er.message, true); } };
+  const save = h('button', 'btn-primary', 'Save settings'); save.onclick = async () => { try { await api('client', {id: c.id, name: n.value, legal_name: ln.value, elig_male: em.value, elig_female: ef.value, mail_cc: mc.value, mail_bcc: mb.value, grades: gr.value.split(/\s*[,\n]\s*/).map((g) => g.trim()).filter(Boolean), active: act.input.checked}); toast('Saved'); load(true); } catch (er) { toast(er.message, true); } };
   card.appendChild(save); D.appendChild(card);
 };
 

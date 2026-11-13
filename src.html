@@ -1180,7 +1180,10 @@ const buildBook = () => {
 const bkGender = () => BK.v.gender || (BK.v.title === 'Mr.' ? 'Male' : 'Female');
 const bkGuest = () => (BK.v.title ? BK.v.title + ' ' : '') + (BK.v.name.trim() || 'Guest name');
 const bkHouse = () => props.find((p) => p.property === BK.prop) || {};
-const bkFits = (r) => !r.grades.length || !BK.v.grade || r.grades.includes(BK.v.grade);
+const bkElig = () => { const e = DATA.client && DATA.client.elig, l = e && e[bkGender()]; return l && l.length ? l : null; };
+const gradeRanges = (l) => { const out = [], ser = [...new Set(l.map((g) => g.replace(/\d+$/, '')))]; ser.forEach((sr) => { const n = l.filter((g) => g.replace(/\d+$/, '') === sr).map((g) => +(g.match(/\d+$/) || [0])[0]).sort((a, b) => a - b); for (let i = 0; i < n.length;) { let j = i; while (j + 1 < n.length && n[j + 1] === n[j] + 1) j++; out.push(j > i ? sr + n[i] + '–' + sr + n[j] : sr + n[i]); i = j + 1; } }); return out.join(', '); };
+const bkGradeOk = () => { const l = bkElig(); return !l || !BK.v.grade || l.includes(BK.v.grade); };
+const bkFits = (r) => bkGradeOk() && (!r.grades.length || !BK.v.grade || r.grades.includes(BK.v.grade));
 const bkWhy = (r) => r.state === 'full' ? 'Taken' : !bkFits(r) ? 'Not for ' + BK.v.grade : r.state === 'shared' && r.guests.some((g) => g.gender !== bkGender()) ? 'Shared · ' + String((r.guests[0] || {}).gender || '').toLowerCase() + ' guest' : '';
 const bkNights = () => nightsOf(BK.ci, BK.co);
 const bkVal = (k, el, ev) => { el.value = BK.v[k] == null ? '' : BK.v[k]; el.addEventListener(ev || 'input', () => { BK.v[k] = el.value; if (BK.onEdit) BK.onEdit(k); }); return el; };
@@ -1216,6 +1219,7 @@ const bkNext = async (btn) => {
   if (BK.step === 0 && BK.ci < today && !BK.edit) return bkFail("Check-in can't be in the past.");
   if (BK.step === 1) { if (!v.name.trim()) return bkFail("Enter the guest's name."); if (!v.grade) return bkFail("Choose the guest's grade.");
     if (v.email.trim() && !/^[^@\s]+@[^@\s]+\.[^@\s]+$/.test(v.email.trim())) return bkFail("The guest's email address doesn't look right.");
+    if (!bkGradeOk()) return bkFail('Grade ' + v.grade + ' is not eligible for a guest house stay. ' + bkGender() + ' guests: ' + gradeRanges(bkElig()) + '.');
     if (!phoneOk(v.phone)) return bkFail(splitPhone(v.phone)[0] === '+91' ? 'Enter a 10-digit Indian mobile number, e.g. 98450 12345.' : 'The mobile number looks too short or too long.');
     if (BK.from === 'timeline') { const r = (BK.tlRoom || {}); if (r.grades && r.grades.length && !r.grades.includes(v.grade)) return bkFail('Room ' + BK.room + ' is for grades ' + gradeSpan(r.grades) + ' only. Go back to the timeline and pick another room.'); BK.step = 3; bkDraw(); return; } }
   if (BK.step < 3) { BK.step++; bkDraw(); return; }
@@ -1399,7 +1403,7 @@ const bkTimeline = (body) => { const live = props.filter((p) => p.status === 'Li
   const top = h('div', 'flex flex-wrap items-end gap-3 mb-3');
   const hs = bSelect(live.map((p) => [p.property, p.property + (p.city ? ' · ' + p.city : '')]), BK.prop); hs.onchange = () => { BK.prop = hs.value; BK.room = ''; T.start = null; T.data = null; bkDraw(); };
   const hw = bField('Guest house', hs); hw.classList.add('w-full', 'sm:w-72'); top.appendChild(hw);
-  const ttl = bkVal('title', bSelect(['Mr.', 'Ms.', 'Mrs.', 'Dr.']), 'change'); ttl.addEventListener('change', () => paint());
+  const ttl = bkVal('title', bSelect(['Mr.', 'Ms.', 'Mrs.', 'Dr.']), 'change'); ttl.addEventListener('change', () => { if (v.title === 'Mr.') v.gender = 'Male'; else if (v.title === 'Ms.' || v.title === 'Mrs.') v.gender = 'Female'; paint(); });
   const gr = bkVal('grade', (() => { const x = gradeSelect(); x.options[0].textContent = 'Any grade'; return x; })(), 'change'); gr.addEventListener('change', () => paint());
   const tw = bField('Title', ttl); tw.classList.add('w-24'); const gw = bField('Guest grade', gr); gw.classList.add('w-32'); top.append(tw, gw);
   const nav = h('div', 'flex items-center gap-1 ml-auto'); const mk = (ic, lab, fn) => { const b = h('button', 'iconbtn'); b.type = 'button'; b.setAttribute('aria-label', lab); b.title = lab; b.appendChild(icon(ic, 'w-4 h-4')); b.onclick = fn; nav.appendChild(b); return b; };
@@ -1422,7 +1426,7 @@ const bkTimeline = (body) => { const live = props.filter((p) => p.status === 'Li
     if (!T.data) { for (let i = 0; i < 6; i++) grid.appendChild(h('div', 'chart-skel h-[34px] rounded-lg')); hint.textContent = 'Loading rooms…'; return; }
     hint.textContent = T.start ? 'Now click the last night of the stay in room ' + T.start.room + '.' : 'Click the first night in a free room, then the last night. ' + MON[D(days[0]).getUTCMonth()] + ' ' + D(days[0]).getUTCDate() + ' – ' + MON[D(days[13]).getUTCMonth()] + ' ' + D(days[13]).getUTCDate() + '.';
     T.data.forEach((r) => { const row = h('div', 'grid grid-cols-[84px_repeat(14,minmax(0,1fr))] gap-[3px] items-center'); const rn = h('div', 'min-w-0 pr-1'); rn.appendChild(h('p', 'text-xs font-bold truncate', r.room)); rn.appendChild(h('p', 'text-[10px] text-zuna-500 truncate', r.type || r.occupancy)); row.appendChild(rn);
-      const notG = v.grade && r.grades.length && !r.grades.includes(v.grade);
+      const notG = v.grade && !bkFits(r);
       days.forEach((d, i) => { const st = nightOf(r, d), c = h('button', 'h-[34px] rounded-md transition-shadow'); c.type = 'button';
         const inSel = picked() && BK.room === r.room && d >= BK.ci && d < BK.co, isStart = T.start && T.start.room === r.room && T.start.d === d;
         let lab = 'free'; if (inSel) c.className += ' bg-mint-500'; else if (isStart) c.className += ' bg-mint-500 ring-2 ring-inset ring-zuna-900';
@@ -1439,7 +1443,7 @@ const bkTimeline = (body) => { const live = props.filter((p) => p.status === 'Li
     goB.onclick = () => { if (!v.name.trim()) { nm.focus(); toast("Enter the guest's name.", true); return; } BK.tlRoom = T.data.find((x) => x.room === BK.room); if (BK.tlRoom && BK.tlRoom.guests.some((g) => g.check_in < BK.co && g.check_out > BK.ci)) v.occupancy = 'Double'; BK.step = 1; bkDraw(); }; dock.appendChild(goB); }
   function pick(r, d) {
     if (!T.start || T.start.room !== r.room || d < T.start.d) { T.start = {room: r.room, d}; if (BK.from === 'timeline') BK.room = ''; paint(); return; }
-    for (let x = T.start.d; x <= d; x = addDays(x, 1)) { const st = nightOf(r, x); if (st.blocked || (v.grade && r.grades.length && !r.grades.includes(v.grade))) { T.start = {room: r.room, d}; toast('Room ' + r.room + ' is not free on ' + fShort(x) + '. Start again from there.', true); paint(); return; } }
+    for (let x = T.start.d; x <= d; x = addDays(x, 1)) { const st = nightOf(r, x); if (st.blocked || (v.grade && !bkFits(r))) { T.start = {room: r.room, d}; toast('Room ' + r.room + ' is not free on ' + fShort(x) + '. Start again from there.', true); paint(); return; } }
     BK.ci = T.start.d; BK.co = addDays(d, 1); BK.room = r.room; BK.from = 'timeline'; BK.rooms = null; T.start = null; paint(); }
   paint();
   if (!T.data) { const seq = ++T.seq; bApi('book/avail', {property: BK.prop, check_in: days[0], check_out: addDays(days[13], 1)})

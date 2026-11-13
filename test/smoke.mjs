@@ -336,6 +336,10 @@ check('old host redirects to PRIMARY_HOST', r.status === 301 && r.headers.get('l
     x = await B(admin, 'book', {client_id: acme, property: 'Acme House', check_in: D(210), check_out: D(211), title: 'Dr.', gender: 'Female', name: 'Neha Iyer', grade: 'E2', emp_code: 'EMP-77', wbs: 'WBS-123'});
     check('Zuna admin books on behalf and the free room is picked', x.status === 200 && x.j.trip.booked_by === 'boss@zuna.example' && ['A1', 'A2'].includes(x.j.trip.room));
     check('WBS ID and employee code are kept on the trip and the stay', x.j.trip.wbs === 'WBS-123' && (await B(asha, 'bookings', {})).j.bookings.some((b) => b.guest === 'Dr. Neha Iyer' && b.wbs === 'WBS-123' && b.emp_code === 'EMP-77'));
+    await A('client', {id: acme, name: 'Acme', legal_name: 'Acme Industries Limited', grades: ['M1', 'M5', 'M6', 'E1', 'E2'], elig_male: 'M6-M8, E1-E8', elig_female: 'M5–M8, E1–E8'});
+    check('admin saves eligibility by gender', (await A('state', {})).j.clients.find((c) => c.id === acme).elig_male === 'M6–M8, E1–E8');
+    check('a male M5 guest is not eligible', (await B(asha, 'book', {property: 'Acme House', check_in: D(230), check_out: D(231), title: 'Mr.', name: 'Ajay Low', grade: 'M5'})).status === 400);
+    check('a female M5 guest is eligible', (await B(asha, 'book', {property: 'Acme House', check_in: D(230), check_out: D(231), title: 'Ms.', name: 'Rina Low', grade: 'M5'})).status === 200);
     await M('user/access', {email: 'asha@acme.example', book: false});
     check('switching Book rooms off blocks booking', (await B(asha, 'book', {property: 'Acme House', check_in: D(220), check_out: D(221), title: 'Mr.', name: 'X Y', grade: 'E1'})).status === 403); }
   x = await A('user', {email: 'asha@acme.example', name: 'Asha Rao', active: false});

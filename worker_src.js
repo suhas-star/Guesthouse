@@ -411,7 +411,7 @@ let schemaReady = false;
 async function ensureSchema(env) {
   if (schemaReady) return;
   for (const q of SCHEMA) await env.DB.prepare(q).run();
-  for (const c of ["users ADD COLUMN role TEXT", "users ADD COLUMN client_id INTEGER", "guesthouses ADD COLUMN state TEXT", "guesthouses ADD COLUMN country TEXT", "room_types ADD COLUMN bed_type TEXT", "clients ADD COLUMN legal_name TEXT", "users ADD COLUMN tx_access INTEGER", "tx_uploads ADD COLUMN hash TEXT", "tx_uploads ADD COLUMN file_id INTEGER", "transactions ADD COLUMN held INTEGER", "users ADD COLUMN book_access INTEGER", "clients ADD COLUMN mail_cc TEXT", "clients ADD COLUMN mail_bcc TEXT", "trips ADD COLUMN wbs TEXT"]) { try { await env.DB.prepare("ALTER TABLE " + c).run(); } catch (e) { /* exists */ } }
+  for (const c of ["users ADD COLUMN role TEXT", "users ADD COLUMN client_id INTEGER", "guesthouses ADD COLUMN state TEXT", "guesthouses ADD COLUMN country TEXT", "room_types ADD COLUMN bed_type TEXT", "clients ADD COLUMN legal_name TEXT", "users ADD COLUMN tx_access INTEGER", "tx_uploads ADD COLUMN hash TEXT", "tx_uploads ADD COLUMN file_id INTEGER", "transactions ADD COLUMN held INTEGER", "users ADD COLUMN book_access INTEGER", "clients ADD COLUMN mail_cc TEXT", "clients ADD COLUMN mail_bcc TEXT", "trips ADD COLUMN wbs TEXT", "clients ADD COLUMN elig TEXT"]) { try { await env.DB.prepare("ALTER TABLE " + c).run(); } catch (e) { /* exists */ } }
   schemaReady = true;
 }
 const DEFAULT_GRADES = "M1,M2,M3,M4,M5,M6,M7,M8,P1,P2,P3,E1,E2,E3,E4,E5,E6,E7";
@@ -419,6 +419,17 @@ const SHOW_DEFAULT = {amenities: true, inclusions: true, cancellation: true, pho
 const jparse = (t, d) => { try { const v = JSON.parse(t); return v == null ? d : v; } catch (e) { return d; } };
 const list = (t) => jparse(t, []).filter((x) => typeof x === "string" && x.trim()).map((x) => x.trim().slice(0, 120));
 // "E1,E2,E3,P1,P2,P3" -> "E1–E3, P1–P3"; every grade -> "All grades"
+// "M6-M8, E1-E8" -> ["M6","M7","M8","E1",...,"E8"]
+function parseGrades(str) {
+  const out = [];
+  String(str || "").toUpperCase().split(/[,;\n]+/).map((x) => x.trim()).filter(Boolean).forEach((tok) => {
+    const m = tok.match(/^([A-Z]+)\s*(\d+)\s*(?:-|–|TO)\s*([A-Z]+)?\s*(\d+)$/);
+    if (m && (!m[3] || m[3] === m[1])) { const a = +m[2], z = +m[4]; for (let n = Math.min(a, z); n <= Math.max(a, z) && n - a < 40; n++) out.push(m[1] + n); }
+    else if (/^[A-Z]+\d*$/.test(tok.replace(/\s+/g, ""))) out.push(tok.replace(/\s+/g, "")); });
+  return [...new Set(out)].slice(0, 120);
+}
+// guest house eligibility by gender for a client: {Male: [...], Female: [...]}; null when not set
+const eligOf = (client) => { const e = jparse(client && client.elig, null); return e && (Array.isArray(e.Male) || Array.isArray(e.Female)) ? e : null; };
 function gradeText(grades, all) {
   if (!grades.length) return "—";
   if (all.length && all.every((g) => grades.includes(g))) return "All grades";
@@ -441,12 +452,13 @@ function expandRooms(t) {
 async function multiClient(env) { await ensureSchema(env); return !!(await env.DB.prepare("SELECT id FROM clients LIMIT 1").first()); }
 async function adminState(env, user) {
   await ensureSchema(env);
-  const {results: clients} = await env.DB.prepare("SELECT id, name, logo_file, grades, active, legal_name, mail_cc, mail_bcc FROM clients ORDER BY id").all();
+  const {results: clients} = await env.DB.prepare("SELECT id, name, logo_file, grades, active, legal_name, mail_cc, mail_bcc, elig FROM clients ORDER BY id").all();
   const [bk, mn] = await Promise.all([readSet(env, "bookings"), readSet(env, "manual")]), manualKeys = new Set(mn.rows.filter((x) => x.status !== "Cancelled").map(guestKey));
   const out = await Promise.all(clients.map(async (c) => {
     const [users, guesthouses] = await Promise.all([clientUsers(env, c.id), clientGuestHouses(env, c, true)]);
     const names = new Set(guesthouses.map((g) => g.property));
-    return {id: c.id, name: c.name, legal_name: c.legal_name || "", mail_cc: c.mail_cc || "", mail_bcc: c.mail_bcc || "", active: !!c.active, logo: c.logo_file ? "/files/" + c.logo_file : "", grades: (c.grades || DEFAULT_GRADES).split(",").filter(Boolean), users, guesthouses,
+    const el = eligOf(c);
+    return {id: c.id, name: c.name, legal_name: c.legal_name || "", mail_cc: c.mail_cc || "", mail_bcc: c.mail_bcc || "", elig_male: el && el.Male && el.Male.length ? gradeText(el.Male, []) : "", elig_female: el && el.Female && el.Female.length ? gradeText(el.Female, []) : "", active: !!c.active, logo: c.logo_file ? "/files/" + c.logo_file : "", grades: (c.grades || DEFAULT_GRADES).split(",").filter(Boolean), users, guesthouses,
       bookings: bk.rows.filter((x) => names.has(x.property) && x.status !== "Cancelled").map((x) => Object.assign({}, x, {manual: manualKeys.has(guestKey(x))}))}; }));
   return {clients: out, me: user.email};
 }
@@ -665,7 +677,7 @@ const dayAfter = (d) => new Date(Date.parse(d) + 864e5).toISOString().slice(0, 1
 const genderRow = (x) => /^(m|male)$/i.test(x.gender || "") ? "Male" : /^(f|female)$/i.test(x.gender || "") ? "Female" : /^\s*mr\b/i.test(x.guest || "") ? "Male" : /^\s*(ms|mrs|miss)\b/i.test(x.guest || "") ? "Female" : "Not stated";
 const fmtD = (d) => { const t = new Date(d + "T00:00:00Z"); return t.getUTCDate() + " " + ["Jan", "Feb", "Mar", "Apr", "May", "Jun", "Jul", "Aug", "Sep", "Oct", "Nov", "Dec"][t.getUTCMonth()] + " " + t.getUTCFullYear(); };
 const esc = (s) => String(s == null ? "" : s).replace(/[&<>"]/g, (c) => ({"&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;"})[c]);
-async function bookClient(env, cid) { return env.DB.prepare("SELECT id, name, grades, legal_name, mail_cc, mail_bcc FROM clients WHERE id = ? AND active = 1").bind(+cid || 0).first(); }
+async function bookClient(env, cid) { return env.DB.prepare("SELECT id, name, grades, legal_name, mail_cc, mail_bcc, elig FROM clients WHERE id = ? AND active = 1").bind(+cid || 0).first(); }
 // every room of a guest house with its state for the chosen nights: free, shared (a double room with space left) or full
 async function roomAvailability(env, client, property, ci, co, skipKey) {
   const gh = (await clientGuestHouses(env, client, true)).find((g) => g.property === property);
@@ -705,6 +717,8 @@ const guestOf = (t) => (t.title ? t.title + " " : "") + t.name;
 async function placeTrip(env, user, cid, b, trip) {
   const client = await bookClient(env, cid); if (!client) return json({error: "No such client."}, 404);
   const v = tripInput(b, client, !trip); if (v.err) return json({error: v.err}, 400); const t = v.t;
+  const el = eligOf(client), ok = el && el[t.gender];
+  if (ok && ok.length && !ok.includes(t.grade)) return json({error: "Grade " + t.grade + " is not eligible for a guest house stay (" + t.gender.toLowerCase() + " guests: " + gradeText(ok, (client.grades || DEFAULT_GRADES).split(",")) + ")."}, 400);
   const oldKey = trip ? guestKey({guest: guestOf(trip), check_in: trip.check_in}) : null;
   const av = await roomAvailability(env, client, t.property, t.check_in, t.check_out, oldKey); if (av.error) return json({error: av.error}, 400);
   const fits = (r) => !r.grades.length || r.grades.includes(t.grade);
@@ -1018,6 +1032,8 @@ async function adminApi(req, env, user, path) {
         const name = clean(b.name, 120); if (!name) return json({error: "Enter the client name."}, 400);
         const grades = (Array.isArray(b.grades) ? b.grades : String(b.grades || DEFAULT_GRADES).split(",")).map((g) => clean(g, 20)).filter(Boolean).join(",") || DEFAULT_GRADES;
         if (b.id) await env.DB.prepare("UPDATE clients SET name = ?, grades = ?, active = ?, legal_name = ?, mail_cc = ?, mail_bcc = ? WHERE id = ?").bind(name, grades, b.active === false ? 0 : 1, clean(b.legal_name, 160), emailList(b.mail_cc).join(", "), emailList(b.mail_bcc).join(", "), +b.id).run();
+        if (b.id && ("elig_male" in b || "elig_female" in b)) { const M = parseGrades(b.elig_male), F = parseGrades(b.elig_female);
+          await env.DB.prepare("UPDATE clients SET elig = ? WHERE id = ?").bind(M.length || F.length ? JSON.stringify({Male: M, Female: F}) : null, +b.id).run(); }
         else { const r = await env.DB.prepare("INSERT INTO clients (name, grades, active, created) VALUES (?, ?, 1, ?)").bind(name, grades, now).run(); return json({ok: true, id: r.meta ? r.meta.last_row_id : r.lastInsertRowid}); }
         return json({ok: true, id: +b.id});
       }
@@ -1135,7 +1151,7 @@ async function dashboard(env, user, url) {
   for (const r of results) { data[r.id] = JSON.parse(r.json); if (r.id === "bookings") updated = r.updated_at; }
   data.bookings = (data.bookings || []).filter((b) => b.status !== "Cancelled");
   if (await multiClient(env)) {
-    const {results: clients} = await env.DB.prepare("SELECT id, name, logo_file, grades, legal_name, mail_cc, mail_bcc FROM clients WHERE active = 1 ORDER BY id").all();
+    const {results: clients} = await env.DB.prepare("SELECT id, name, logo_file, grades, legal_name, mail_cc, mail_bcc, elig FROM clients WHERE active = 1 ORDER BY id").all();
     const want = user.admin ? (+url.searchParams.get("client") || (clients[0] || {}).id) : user.client_id;
     const client = clients.find((c) => c.id === want);
     if (!client) return html(LOGIN.replace("</body>", "<script>document.getElementById('err').textContent='Your account is not linked to a client yet. Please contact the Zuna Hotel Desk.';document.getElementById('err').classList.remove('hidden');</script></body>"));
@@ -1143,7 +1159,7 @@ async function dashboard(env, user, url) {
     const names = new Set(data.properties.map((p) => p.property));
     data.bookings = (data.bookings || []).filter((b) => names.has(b.property));
     data.client = {id: client.id, name: client.name, legal_name: client.legal_name || "", logo: client.logo_file ? "/files/" + client.logo_file : ""};
-    if (user.book) { data.client.mail_cc = client.mail_cc || ""; data.client.mail_bcc = client.mail_bcc || ""; data.client.grades = (client.grades || DEFAULT_GRADES).split(",").filter(Boolean); }
+    if (user.book) { data.client.mail_cc = client.mail_cc || ""; data.client.mail_bcc = client.mail_bcc || ""; data.client.grades = (client.grades || DEFAULT_GRADES).split(",").filter(Boolean); const el = eligOf(client); if (el) data.client.elig = el; }
     if (user.admin) data.clients = clients.map((c) => ({id: c.id, name: c.name}));
     if (user.tx) {   // travel policy caps (hotel rate per night by grade group and city zone) for the consolidated report's Eligibility column
       const pol = await env.DB.prepare("SELECT json FROM datasets WHERE id = ?").bind("policy:" + client.id).first();

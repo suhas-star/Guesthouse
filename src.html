@@ -1368,8 +1368,7 @@ const bkConfirm = (pane) => { const v = BK.v, p = bkHouse();
   left.appendChild(dl);
   const g = h('div', 'grid gap-4 sm:grid-cols-2'); g.append(bkLabel('Guest email', bkVal('email', bInput('name@company.com', 'email'))), bkLabel('Mobile', bkPhone()));
   const nt = bkLabel('Remarks', bkVal('note', bInput('e.g. late arrival'))); nt.classList.add('sm:col-span-2'); g.appendChild(nt); left.appendChild(g);
-  const mw = h('label', 'flex items-center gap-2 text-sm font-semibold cursor-pointer'); const send = h('input', 'w-4 h-4 accent-[#02C988]'); send.type = 'checkbox'; send.checked = v.send; mw.append(send, document.createTextNode(BK.edit ? 'Email the change to the guest' : 'Email the booking to the guest')); left.appendChild(mw);
-  send.onchange = () => { v.send = send.checked; };
+  v.send = true;   // the guest is always emailed; copies are set by Zuna
   wrap.appendChild(left); pane.appendChild(wrap); };
 
 const bkSuccess = (card) => { const t = BK.done.trip, w = h('div', 'p-8 sm:p-10 text-center');

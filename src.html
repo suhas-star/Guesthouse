@@ -37,7 +37,7 @@ if(document.readyState!=='loading')setTimeout(hide,150);else document.addEventLi
       <button id="sbCloseM" title="Close menu" aria-label="Close menu" class="lg:hidden grid place-items-center w-8 h-8 rounded-lg text-zuna-200 hover:text-white hover:bg-white/10"><i data-i="x" class="w-[18px] h-[18px]"></i></button>
     </div>
     
-    <nav id="nav" class="mt-5 px-3 flex flex-col gap-1">
+    <nav id="nav" class="sb-nav mt-5 px-3 pb-2 flex-1 min-h-0 overflow-y-auto overscroll-contain flex flex-col gap-1">
       <p class="nav-h" aria-hidden="true"><span>Guest houses</span></p>
       <button data-view="overview" class="navbtn" title="Overview"><i data-i="layout-dashboard"></i><span class="sb-label">Overview</span></button>
       <button data-view="rack" class="navbtn" title="Room rack"><i data-i="bed-double"></i><span class="sb-label">Room rack</span></button>
@@ -231,7 +231,7 @@ if(document.readyState!=='loading')setTimeout(hide,150);else document.addEventLi
 
       <!-- BOOK A ROOM (users with the Book rooms switch, and the Zuna team on the client's behalf) -->
       <section data-view="book" class="view hidden">
-        <div id="bookView" class="grid xl:grid-cols-[minmax(0,1fr)_340px] gap-4 items-start"></div>
+        <div id="bookView" class="grid lg:grid-cols-[minmax(0,1fr)_300px] xl:grid-cols-[minmax(0,1fr)_340px] gap-4 items-start"></div>
       </section>
 
       <!-- TRIPS (bookings made in the portal) -->
@@ -1163,55 +1163,67 @@ const buildBook = () => {
   BK.prop = e ? e.property : (live.some((p) => p.property === BK.prop) ? BK.prop : (live.find((p) => p.property === state.prop) || live[0]).property);
   BK.ci = e ? e.check_in : (BK.ci && BK.ci >= today ? BK.ci : addDays(today, 1)); BK.co = e ? e.check_out : (BK.co > BK.ci ? BK.co : addDays(BK.ci, 1));
   BK.room = e ? e.room : ''; BK.rooms = null; BK.err = '';
-  const left = h('div', 'space-y-4 min-w-0'), right = h('div', 'space-y-4 xl:sticky xl:top-4');
+  const left = h('div', 'space-y-4 min-w-0'), right = h('div', 'space-y-4 lg:sticky lg:top-4');
   // 1 · where and when
   const c1 = h('div', 'card'); const h1 = h('div', 'card-h'); const t1 = h('div'); t1.appendChild(h('h2', 'card-t', e ? 'Change booking ' + (e.code || '') : 'Where and when')); t1.appendChild(h('p', 'card-s', e ? cleanName(e.guest) + ' · pick new dates or another room' : 'Pick the guest house and the stay dates'));
   h1.appendChild(t1); if (e) { const x = h('button', 'btn ml-auto'); x.type = 'button'; x.appendChild(icon('x', 'w-4 h-4')); x.appendChild(document.createTextNode('Stop changing')); x.onclick = () => { BK.edit = null; BK.built = false; go('trips'); }; h1.appendChild(x); }
-  c1.appendChild(h1); const b1 = h('div', 'p-5 grid gap-3 sm:grid-cols-[minmax(0,1.3fr)_minmax(0,1fr)] items-end');
+  c1.appendChild(h1); const b1 = h('div', 'p-5 grid gap-3 grid-cols-2 2xl:grid-cols-[minmax(0,1fr)_158px_158px] items-end');
   const ps = bSelect(live.map((p) => [p.property, p.property + (p.city ? ' · ' + p.city : '')]), BK.prop); ps.setAttribute('aria-label', 'Guest house');
-  const dg = h('div', 'grid grid-cols-2 gap-2'); const ci = h('input', fldCls); ci.type = 'date'; ci.min = e && e.check_in < today ? e.check_in : today; ci.value = BK.ci; ci.setAttribute('aria-label', 'Check-in');
+  const ci = h('input', fldCls); ci.type = 'date'; ci.min = e && e.check_in < today ? e.check_in : today; ci.value = BK.ci; ci.setAttribute('aria-label', 'Check-in');
   const co = h('input', fldCls); co.type = 'date'; co.min = addDays(today, 1); co.value = BK.co; co.setAttribute('aria-label', 'Check-out');
-  dg.append(bField('Check-in', ci), bField('Check-out', co)); b1.append(bField('Guest house', ps), dg); c1.appendChild(b1); left.appendChild(c1);
+  const hf = bField('Guest house', ps); hf.classList.add('col-span-2', '2xl:col-span-1'); b1.append(hf, bField('Check-in', ci), bField('Check-out', co)); c1.appendChild(b1); left.appendChild(c1);
   // 2 · rooms
   const c2 = h('div', 'card'); const h2 = h('div', 'card-h'); const t2 = h('div'); t2.appendChild(h('h2', 'card-t', 'Choose a room')); const rs = h('p', 'card-s', 'Checking rooms…'); t2.appendChild(rs); h2.appendChild(t2);
-  const lg = h('div', 'ml-auto hidden sm:flex items-center gap-3 text-[11px] font-semibold text-zuna-500'); [['bg-mint-500', 'Free'], ['bg-amber-400', 'One bed left'], ['bg-zuna-200', 'Taken / not eligible']].forEach(([c, t]) => { const s = h('span', 'flex items-center gap-1.5'); s.appendChild(h('span', 'w-2.5 h-2.5 rounded-full ' + c)); s.appendChild(document.createTextNode(t)); lg.appendChild(s); }); h2.appendChild(lg);
-  c2.appendChild(h2); const grid = h('div', 'p-5 grid grid-cols-2 sm:grid-cols-3 2xl:grid-cols-4 gap-2.5'); grid.setAttribute('role', 'radiogroup'); grid.setAttribute('aria-label', 'Rooms'); c2.appendChild(grid); left.appendChild(c2);
+  const lg = h('div', 'ml-auto hidden xl:flex items-center gap-3 text-[11px] font-semibold text-zuna-500'); [['bg-mint-500', 'Free'], ['bg-amber-400', 'One bed left'], ['bg-zuna-200', 'Taken / not eligible']].forEach(([c, t]) => { const s = h('span', 'flex items-center gap-1.5'); s.appendChild(h('span', 'w-2.5 h-2.5 rounded-full ' + c)); s.appendChild(document.createTextNode(t)); lg.appendChild(s); }); h2.appendChild(lg);
+  c2.appendChild(h2); const grid = h('div', 'p-5 grid grid-cols-2 sm:grid-cols-3 xl:grid-cols-4 2xl:grid-cols-5 gap-2'); grid.setAttribute('role', 'radiogroup'); grid.setAttribute('aria-label', 'Rooms'); c2.appendChild(grid);
   // 3 · guest
   const c3 = h('div', 'card'); const h3 = h('div', 'card-h'); const t3 = h('div'); t3.appendChild(h('h2', 'card-t', 'Guest details')); t3.appendChild(h('p', 'card-s', 'Gender and grade decide which rooms the guest can have')); h3.appendChild(t3); c3.appendChild(h3);
-  const g = h('div', 'p-5 grid gap-3 sm:grid-cols-2 xl:grid-cols-3');
+  const g = h('div', 'p-5 grid gap-3 sm:grid-cols-2 2xl:grid-cols-3');
   const f = BK.f = {title: bSelect([['Mr.', 'Mr.'], ['Ms.', 'Ms.'], ['Mrs.', 'Mrs.'], ['Dr.', 'Dr.']], e ? e.title || 'Mr.' : 'Mr.'), name: bInput('Full name'), gender: bSelect([['Male', 'Male'], ['Female', 'Female']], e ? e.gender : 'Male'),
     grade: bSelect([['', 'Choose grade']].concat(gradeList()), e ? e.grade : ''), emp_code: bInput('e.g. 104523'), email: bInput('guest@company.com', 'email'), phone: bInput('+91 …', 'tel'), base: bInput('e.g. Mumbai'),
     concur_tr: bInput('Travel request no.'), occupancy: bSelect([['Single', 'Single'], ['Double', 'Double · shares the room']], e ? e.occupancy : 'Single'), note: bInput('e.g. late arrival, veg meals')};
   if (e) ['name', 'emp_code', 'email', 'phone', 'base', 'concur_tr', 'note'].forEach((k) => { f[k].value = e[k] || ''; });
   const syncGender = () => { const t = f.title.value; if (t === 'Mr.') f.gender.value = 'Male'; else if (t === 'Ms.' || t === 'Mrs.') f.gender.value = 'Female'; f.gender.disabled = t !== 'Dr.'; if (f.gender._zd) f.gender._zd.disabled = f.gender.disabled; };
-  const nameRow = h('div', 'grid grid-cols-[96px_minmax(0,1fr)] gap-2 sm:col-span-2 xl:col-span-1'); nameRow.append(bField('Title', f.title), bField('Guest name', f.name));
+  const nameRow = h('div', 'grid grid-cols-[96px_minmax(0,1fr)] gap-2 sm:col-span-2'); nameRow.append(bField('Title', f.title), bField('Guest name', f.name));
   g.append(nameRow, bField('Gender', f.gender), bField('Grade', f.grade), bField('Employee code', f.emp_code), bField('Email', f.email, 'The booking is emailed here'), bField('Mobile', f.phone),
     bField('Base location', f.base), bField('Concur TR', f.concur_tr), bField('Occupancy', f.occupancy));
-  const nt = bField('Remarks', f.note); nt.classList.add('sm:col-span-2', 'xl:col-span-3'); g.appendChild(nt); c3.appendChild(g); left.appendChild(c3);
+  const nt = bField('Remarks', f.note); nt.classList.add('sm:col-span-2'); g.appendChild(nt); c3.appendChild(g); left.append(c3, c2); c3.id = 'bkGuest'; c2.id = 'bkRooms';
   // summary + confirm
   const c4 = h('div', 'card'); const h4 = h('div', 'card-h'); const t4 = h('div'); t4.appendChild(h('h2', 'card-t', 'Summary')); t4.appendChild(h('p', 'card-s', 'Confirmed as soon as you book')); h4.appendChild(t4); c4.appendChild(h4);
   const sb = h('div', 'p-5 space-y-4'); const sum = h('div'); sb.appendChild(sum);
   const cc = bInput('Comma-separated', 'text'), bcc = bInput('Comma-separated', 'text'); cc.value = e ? e.cc : (DATA.client && DATA.client.mail_cc) || ''; bcc.value = e ? e.bcc : (DATA.client && DATA.client.mail_bcc) || '';
   const mw = h('label', 'flex items-center gap-2 text-sm font-semibold cursor-pointer'); const send = h('input', 'w-4 h-4 accent-[#02C988]'); send.type = 'checkbox'; send.checked = true; mw.append(send, document.createTextNode(e ? 'Email the change to the guest' : 'Email the booking to the guest'));
-  const copies = h('div', 'space-y-3'); copies.append(bField('CC', cc), bField('BCC', bcc)); send.onchange = () => copies.classList.toggle('opacity-50', !send.checked);
+  const copies = h('div', 'hidden space-y-3'); copies.append(bField('CC', cc), bField('BCC', bcc));
+  const cpRow = h('div', 'flex items-start gap-2 text-xs text-zuna-500'); const cpTxt = h('p', 'flex-1 min-w-0 break-words'); const cpEd = h('button', 'shrink-0 font-semibold text-mint-700 hover:underline', 'Edit'); cpEd.type = 'button';
+  const paintCp = () => { cpTxt.textContent = [cc.value.trim() && 'CC ' + cc.value.trim(), bcc.value.trim() && 'BCC ' + bcc.value.trim()].filter(Boolean).join(' · ') || 'No copies'; };
+  cpEd.onclick = () => { const op = copies.classList.toggle('hidden'); cpEd.textContent = op ? 'Edit' : 'Done'; cpRow.classList.toggle('hidden', !op); if (!op) cc.focus(); paintCp(); };
+  cc.oninput = bcc.oninput = paintCp; paintCp(); cpRow.append(icon('mail', 'w-3.5 h-3.5 mt-0.5 shrink-0'), cpTxt, cpEd);
+  const cpDone = h('button', 'text-xs font-semibold text-mint-700 hover:underline', 'Done'); cpDone.type = 'button'; cpDone.onclick = () => { copies.classList.add('hidden'); cpRow.classList.remove('hidden'); paintCp(); }; copies.appendChild(cpDone);
+  send.onchange = () => { cpRow.classList.toggle('opacity-50', !send.checked); copies.classList.toggle('opacity-50', !send.checked); };
   const err = h('p', 'hidden rounded-xl bg-rose-50 ring-1 ring-rose-200 px-3 py-2 text-xs font-semibold text-rose-700'); err.setAttribute('role', 'alert');
   const ok = h('button', 'btn-primary w-full justify-center !py-3 !text-sm'); ok.type = 'button'; ok.appendChild(icon(e ? 'check' : 'calendar-plus', 'w-4 h-4')); ok.appendChild(document.createTextNode(e ? 'Save changes' : 'Confirm booking'));
-  sb.append(mw, copies, err, ok); c4.appendChild(sb); right.appendChild(c4); V.append(left, right);
+  const todo = h('div', 'space-y-1.5'); sum.after(todo); sb.append(mw, cpRow, copies, err, ok); c4.appendChild(sb); right.appendChild(c4); V.append(left, right);
   const fit = (r) => !r.grades.length || !f.grade.value || r.grades.includes(f.grade.value);
   const shareOk = (r) => r.guests.every((x) => x.gender === f.gender.value);
   const why = (r) => r.state === 'full' ? 'Taken' : !fit(r) ? 'Not for ' + f.grade.value : r.state === 'shared' && !shareOk(r) ? 'Shared · ' + (r.guests[0] || {}).gender.toLowerCase() + ' guest' : '';
   const paintSum = () => { sum.replaceChildren(); const n = nightsOf(BK.ci, BK.co), r = (BK.rooms || []).find((x) => x.room === BK.room);
-    sum.appendChild(stat3([[BK.ci ? fShort(BK.ci) : '—', 'Check-in'], [BK.co ? fShort(BK.co) : '—', 'Check-out'], [n > 0 ? n : '—', n === 1 ? 'Night' : 'Nights']])); const k = h('div', 'mt-4');
-    k.appendChild(kv([['Guest house', BK.prop], ['Room', BK.room ? BK.room + (r && r.type ? ' · ' + r.type : '') + (r && r.state === 'shared' ? ' · shared' : '') : 'Any free room'], ['Guest', f.name.value.trim() ? f.title.value + ' ' + f.name.value.trim() : ''], ['Grade', f.grade.value]])); sum.appendChild(k); };
-  const paintRooms = () => { grid.replaceChildren(); if (!BK.rooms) { for (let i = 0; i < 6; i++) grid.appendChild(h('div', 'chart-skel h-[84px] rounded-xl')); return; }
-    const tile = (val, top, sub, tag, dis, tone) => { const b = h('button', 'relative text-left rounded-xl p-3 ring-1 transition-all min-w-0 ' + (dis ? 'ring-zuna-100 bg-zuna-50/60 text-zuna-400 cursor-not-allowed' : 'ring-zuna-100 bg-white hover:ring-mint-500 hover:-translate-y-0.5'));
+    { const st = h('div', 'grid grid-cols-[1fr_1fr_auto] gap-2'); [[BK.ci ? fShort(BK.ci) : '—', 'Check-in'], [BK.co ? fShort(BK.co) : '—', 'Check-out'], [n > 0 ? n : '—', n === 1 ? 'Night' : 'Nights']].forEach(([v, l]) => { const c = h('div', 'rounded-xl bg-zuna-50 ring-1 ring-zuna-100 px-2.5 py-2 text-center min-w-0'); c.appendChild(h('div', 'text-base xl:text-lg font-bold tabular-nums whitespace-nowrap', String(v))); c.appendChild(h('div', 'text-[11px] text-zuna-500', l)); st.appendChild(c); }); sum.appendChild(st); } const k = h('div', 'mt-4');
+    todo.replaceChildren(); const gOk = !!f.name.value.trim() && !!f.grade.value;
+    [[gOk, 'Guest', gOk ? f.title.value + ' ' + f.name.value.trim() + ' · ' + f.grade.value : 'Name and grade needed', 'bkGuest'], [true, 'Room', BK.room ? 'Room ' + BK.room : 'Any free room', 'bkRooms']].forEach(([d, l, t, id]) => {
+      const r = h(id ? 'button' : 'div', 'w-full flex items-center gap-2 rounded-lg px-2.5 py-1.5 text-xs text-left ' + (d ? 'bg-mint-50 text-mint-800' : 'bg-amber-50 text-amber-800 ring-1 ring-amber-200 hover:ring-amber-400'));
+      r.appendChild(icon(d ? 'circle-check' : 'triangle-alert', 'w-3.5 h-3.5 shrink-0')); r.appendChild(h('span', 'font-bold', l)); if (t) r.appendChild(h('span', 'truncate', t)); if (id) { r.type = 'button'; r.appendChild(icon('arrow-right', 'w-3 h-3 ml-auto shrink-0 opacity-60'));
+        r.onclick = () => { const el = document.getElementById(id); el.scrollIntoView({behavior: 'smooth', block: 'start'}); if (id === 'bkGuest' && !d) setTimeout(() => (f.name.value.trim() ? (f.grade._zd || f.grade) : f.name).focus({preventScroll: true}), 350); }; } todo.appendChild(r); });
+    k.appendChild(kv([['Guest house', BK.prop + (r && r.state === 'shared' ? ' · shared room' : '')]])); sum.appendChild(k); };
+  const paintRooms = () => { grid.replaceChildren(); if (!BK.rooms) { for (let i = 0; i < 8; i++) grid.appendChild(h('div', 'chart-skel h-[52px] rounded-xl')); return; }
+    const tile = (val, top, sub, tag, dis, tone) => { const b = h('button', 'relative text-left rounded-xl px-3 py-2 ring-1 transition-all min-w-0 ' + (dis ? 'ring-zuna-100 bg-zuna-50/60 text-zuna-400 cursor-not-allowed' : 'ring-zuna-100 bg-white hover:ring-mint-500'));
       b.type = 'button'; b.setAttribute('role', 'radio'); const on = BK.room === val; b.setAttribute('aria-checked', on ? 'true' : 'false'); if (on) b.className += ' !ring-2 !ring-mint-500 bg-mint-50';
-      const hd = h('div', 'flex items-center gap-2'); hd.appendChild(h('span', 'w-2.5 h-2.5 rounded-full shrink-0 ' + tone)); hd.appendChild(h('span', 'font-bold text-base truncate', top)); if (on) { const ck = icon('circle-check', 'w-4 h-4 text-mint-600 ml-auto shrink-0'); hd.appendChild(ck); } b.appendChild(hd);
-      b.appendChild(h('p', 'text-xs mt-1 truncate ' + (dis ? '' : 'text-zuna-500'), sub)); b.appendChild(h('p', 'text-[11px] font-semibold mt-0.5 truncate ' + (dis ? '' : 'text-zuna-700'), tag));
+      b.title = [top, sub, tag].filter(Boolean).join(' · ');
+      const hd = h('div', 'flex items-center gap-2 min-w-0'); hd.appendChild(h('span', 'w-2 h-2 rounded-full shrink-0 ' + tone)); hd.appendChild(h('span', 'font-bold text-sm truncate', top)); if (on) { const ck = icon('circle-check', 'w-4 h-4 text-mint-600 ml-auto shrink-0'); hd.appendChild(ck); } b.appendChild(hd);
+      b.appendChild(h('p', 'text-[11px] mt-0.5 truncate pl-4 ' + (dis ? '' : 'text-zuna-500'), [sub, tag].filter(Boolean).join(' · ')));
       if (dis) b.disabled = true; else b.onclick = () => { BK.room = val; if (val) { const r = BK.rooms.find((x) => x.room === val); if (r && r.state === 'shared') f.occupancy.value = 'Double'; } paintRooms(); paintSum(); }; return b; };
     const usable = BK.rooms.filter((r) => !why(r));
-    grid.appendChild(tile('', 'Any room', 'We pick a free one', usable.filter((r) => r.state === 'free').length + ' free for these nights', false, 'bg-mint-500'));
-    BK.rooms.forEach((r) => { const w = why(r); grid.appendChild(tile(r.room, 'Room ' + r.room, [r.type, r.bed_type].filter(Boolean).join(' · ') || r.occupancy, w || (r.state === 'shared' ? 'One bed left · ' + gradeSpan(r.grades) : gradeSpan(r.grades)), !!w, w ? 'bg-zuna-200' : r.state === 'shared' ? 'bg-amber-400' : 'bg-mint-500')); });
+    grid.appendChild(tile('', 'Any room', 'We pick one', usable.filter((r) => r.state === 'free').length + ' free', false, 'bg-mint-500'));
+    BK.rooms.forEach((r) => { const w = why(r); grid.appendChild(tile(r.room, r.room, r.type || r.occupancy, w || (r.state === 'shared' ? 'One bed left · ' + gradeSpan(r.grades) : gradeSpan(r.grades)), !!w, w ? 'bg-zuna-200' : r.state === 'shared' ? 'bg-amber-400' : 'bg-mint-500')); });
     if (BK.room && !usable.some((r) => r.room === BK.room)) { BK.room = ''; paintRooms(); return; }
     const free = BK.rooms.filter((r) => r.state === 'free').length; rs.textContent = BK.rooms.length + ' rooms · ' + free + ' free · ' + BK.nights + (BK.nights === 1 ? ' night' : ' nights') + (BK.unassigned ? ' · ' + BK.unassigned + ' stays without a room yet' : ''); };
   const load = async () => { err.classList.add('hidden'); if (!(BK.co > BK.ci)) { BK.rooms = []; grid.replaceChildren(h('p', 'col-span-full text-sm text-rose-600 font-semibold', 'Check-out must be after check-in.')); rs.textContent = 'Fix the dates'; paintSum(); return; }
@@ -1220,7 +1232,7 @@ const buildBook = () => {
     catch (x) { if (seq !== BK.seq) return; BK.rooms = []; grid.replaceChildren(h('p', 'col-span-full text-sm text-rose-600 font-semibold', x.message)); rs.textContent = 'Could not check rooms'; } };
   ps.onchange = () => { BK.prop = ps.value; BK.room = ''; load(); };
   ci.onchange = () => { BK.ci = ci.value; if (!(BK.co > BK.ci)) { BK.co = addDays(BK.ci, 1); co.value = BK.co; } load(); }; co.onchange = () => { BK.co = co.value; load(); };
-  f.title.onchange = () => { syncGender(); paintRooms(); paintSum(); }; f.gender.onchange = () => { paintRooms(); }; f.grade.onchange = () => { paintRooms(); paintSum(); }; f.name.oninput = paintSum;
+  f.title.onchange = () => { syncGender(); paintRooms(); paintSum(); }; f.grade.onchange = () => { paintRooms(); paintSum(); }; f.name.oninput = paintSum; f.gender.onchange = () => { paintRooms(); paintSum(); };
   ok.onclick = async () => { err.classList.add('hidden');
     const fail = (m, el) => { err.textContent = m; err.classList.remove('hidden'); toast(m); if (el) (el._zd || el).focus(); };
     if (!f.name.value.trim()) return fail("Enter the guest's name.", f.name); if (!f.grade.value) return fail("Choose the guest's grade.", f.grade); if (!(BK.co > BK.ci)) return fail('Check-out must be after check-in.', co);

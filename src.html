@@ -1150,6 +1150,10 @@ const bField = (label, el, hint) => { const w = h('label', 'block min-w-0'); w.a
 const bInput = (ph, type) => { const i = h('input', fldCls); i.type = type || 'text'; if (ph) i.placeholder = ph; i.autocomplete = 'off'; return i; };
 const bSelect = (opts, val) => { const s = h('select', fldCls); opts.forEach((o) => { const [v, t] = Array.isArray(o) ? o : [o, o]; const op = h('option', null, t); op.value = v; s.appendChild(op); }); if (val != null) s.value = val; return s; };
 const gradeList = () => (DATA.client && DATA.client.grades && DATA.client.grades.length ? DATA.client.grades : ['E1', 'E2', 'E3', 'E4', 'E5', 'E6', 'E7', 'M1', 'M2', 'M3', 'M4', 'M5', 'M6', 'M7', 'M8', 'P1', 'P2', 'P3']);
+const gradeSelect = () => { const s = h('select', fldCls); const ph = h('option', null, 'Choose grade'); ph.value = ''; ph.dataset.placeholder = '1'; s.appendChild(ph);
+  const groups = {}; gradeList().forEach((g) => { const k = (String(g).match(/^[A-Za-z]+(?=\d)/) || ['Other'])[0].toUpperCase(); (groups[k] = groups[k] || []).push(g); });
+  Object.keys(groups).forEach((k) => { const list = groups[k]; const og = h('optgroup'); og.label = k === 'OTHER' ? 'Other' : (list.length > 1 ? list[0] + ' – ' + list[list.length - 1] : list[0]); list.forEach((g) => { const o = h('option', null, g); o.value = g; og.appendChild(o); }); s.appendChild(og); });
+  return s; };
 const gradeSpan = (gs) => !gs || !gs.length ? 'All grades' : gs.length <= 3 ? gs.join(', ') : gs[0] + '–' + gs[gs.length - 1];
 const tripState = (t) => t.status === 'Cancelled' ? 'Cancelled' : t.check_out <= today ? 'Completed' : t.check_in <= today ? 'In stay' : 'Upcoming';
 const TRIP_CHIP = {Upcoming: '', 'In stay': 'zchip-live', Completed: 'zchip-muted', Cancelled: 'zchip-bad'};
@@ -1173,7 +1177,7 @@ const buildBook = () => {
   if (!live.length) { $('#bookView').replaceChildren(h('div', 'card p-8 text-center text-sm text-zuna-500', 'No live guest house to book yet.')); return; }
   bkDraw();
 };
-const bkGender = () => { const t = BK.v.title; return t === 'Mr.' ? 'Male' : t === 'Ms.' || t === 'Mrs.' ? 'Female' : BK.v.gender; };
+const bkGender = () => BK.v.gender || (BK.v.title === 'Mr.' ? 'Male' : 'Female');
 const bkGuest = () => (BK.v.title ? BK.v.title + ' ' : '') + (BK.v.name.trim() || 'Guest name');
 const bkHouse = () => props.find((p) => p.property === BK.prop) || {};
 const bkFits = (r) => !r.grades.length || !BK.v.grade || r.grades.includes(BK.v.grade);
@@ -1281,20 +1285,20 @@ const bkGuestStep = (pane) => { const v = BK.v;
   bkHead(pane, 'Who is staying?', BK.from === 'timeline' ? 'Room ' + BK.room + ' · ' + BK.prop + ' · ' + fShort(BK.ci) + ' → ' + fShort(BK.co) + ' · ' + bkNights() + (bkNights() === 1 ? ' night' : ' nights') : 'Fields marked * are needed. Grade and gender decide which rooms are offered next.');
   const ttl = bkVal('title', bSelect(['Mr.', 'Ms.', 'Mrs.', 'Dr.']), 'change'), gen = bkVal('gender', bSelect(['Male', 'Female']), 'change');
   const nm = bkVal('name', bInput('First and last name')); nm.required = true;
-  const syncG = () => { if (v.title !== 'Dr.') { v.gender = bkGender(); gen.value = v.gender; } gen.disabled = v.title !== 'Dr.'; if (gen._zd) { gen._zd.disabled = gen.disabled; gen._zd.title = gen.disabled ? 'Set by the title' : ''; } }; ttl.addEventListener('change', syncG);
+  const syncG = () => { if (v.title === 'Mr.') v.gender = 'Male'; else if (v.title === 'Ms.' || v.title === 'Mrs.') v.gender = 'Female'; gen.value = v.gender; }; ttl.addEventListener('change', syncG);
   const em = bkVal('email', bInput('name@company.com', 'email')), ph = bkPhone();
   const sec = h('div', 'divide-y divide-zuna-50');
   sec.append(
-    bkSection('Guest', 'As on the guest\'s ID. Gender is set by the title (choose it for Dr.).', [
+    bkSection('Guest', 'As on the guest\'s ID. Gender follows the title; change it if needed.', [
       ['col-span-4 sm:col-span-3 lg:col-span-2', bkLabel('Title', ttl, true)], ['col-span-8 sm:col-span-9 lg:col-span-7', bkLabel('Full name', nm, true)], ['col-span-12 sm:col-span-6 lg:col-span-3', bkLabel('Gender', gen, true)]]),
     bkSection('Contact', 'The booking confirmation is emailed to this address.', [
       ['sm:col-span-6', bkLabel('Email', em)], ['sm:col-span-6', bkLabel('Mobile', ph)]]),
     bkSection('Employee & billing', 'Used for eligibility and in the reports.', [
-      ['col-span-6 sm:col-span-4', bkLabel('Grade', bkVal('grade', bSelect([['', 'Choose grade']].concat(gradeList())), 'change'), true)], ['col-span-6 sm:col-span-4', bkLabel('Employee code', bkVal('emp_code', bInput('e.g. 104523')))], ['sm:col-span-4', bkLabel('Base location', bkVal('base', bInput('e.g. Mumbai')))],
+      ['col-span-6 sm:col-span-4', bkLabel('Grade', bkVal('grade', gradeSelect(), 'change'), true)], ['col-span-6 sm:col-span-4', bkLabel('Employee code', bkVal('emp_code', bInput('e.g. 104523')))], ['sm:col-span-4', bkLabel('Base location', bkVal('base', bInput('e.g. Mumbai')))],
       ['sm:col-span-6', bkLabel('Concur ID', bkVal('concur_tr', bInput('Travel request ID')))], ['sm:col-span-6', bkLabel('WBS ID', bkVal('wbs', bInput('WBS / cost code')))]]),
     bkSection('Stay preferences', null, [
       ['sm:col-span-4', bkLabel('Occupancy', bkVal('occupancy', bSelect([['Single', 'Single'], ['Double', 'Double · shares the room']]), 'change'))], ['sm:col-span-8', bkLabel('Remarks', bkVal('note', bInput('e.g. late arrival, veg meals')))]]));
-  pane.appendChild(sec); setTimeout(syncG); };
+  pane.appendChild(sec); };
 
 // step 3 · room (only rooms this guest can have)
 const bkRoom = (pane) => { const p = bkHouse(), v = BK.v;
@@ -1369,7 +1373,7 @@ const bkTimeline = (body) => { const live = props.filter((p) => p.status === 'Li
   const hs = bSelect(live.map((p) => [p.property, p.property + (p.city ? ' · ' + p.city : '')]), BK.prop); hs.onchange = () => { BK.prop = hs.value; BK.room = ''; T.start = null; T.data = null; bkDraw(); };
   const hw = bField('Guest house', hs); hw.classList.add('w-full', 'sm:w-72'); top.appendChild(hw);
   const ttl = bkVal('title', bSelect(['Mr.', 'Ms.', 'Mrs.', 'Dr.']), 'change'); ttl.addEventListener('change', () => paint());
-  const gr = bkVal('grade', bSelect([['', 'Any grade']].concat(gradeList())), 'change'); gr.addEventListener('change', () => paint());
+  const gr = bkVal('grade', (() => { const x = gradeSelect(); x.options[0].textContent = 'Any grade'; return x; })(), 'change'); gr.addEventListener('change', () => paint());
   const tw = bField('Title', ttl); tw.classList.add('w-24'); const gw = bField('Guest grade', gr); gw.classList.add('w-32'); top.append(tw, gw);
   const nav = h('div', 'flex items-center gap-1 ml-auto'); const mk = (ic, lab, fn) => { const b = h('button', 'iconbtn'); b.type = 'button'; b.setAttribute('aria-label', lab); b.title = lab; b.appendChild(icon(ic, 'w-4 h-4')); b.onclick = fn; nav.appendChild(b); return b; };
   const pv = mk('chevron-left', 'Earlier week', () => { T.from = addDays(T.from, -7) < today ? today : addDays(T.from, -7); T.data = null; T.start = null; bkDraw(); }); if (T.from <= today) pv.disabled = true;

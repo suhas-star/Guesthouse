@@ -620,7 +620,7 @@ async function saveBooking(env, client, b) {
   if (!iso.test(r.check_in || "") || !iso.test(r.check_out || "") || r.check_out <= r.check_in) return json({error: "Check-out must be after check-in."}, 400);
   const status = r.status === "Not available" ? "Not available" : "Confirmed";
   const room = status === "Confirmed" && gh.rooms_list.includes(r.room) ? r.room : status === "Confirmed" ? "Not assigned" : "\u2014";
-  const gender = title === "Mr." ? "Male" : title === "Ms." || title === "Mrs." ? "Female" : ["Male", "Female"].includes(r.gender) ? r.gender : "Not stated";
+  const gender = ["Male", "Female"].includes(r.gender) ? r.gender : title === "Mr." ? "Male" : title === "Ms." || title === "Mrs." ? "Female" : "Not stated";
   const row = {property: gh.property, guest: (title ? title + " " : "") + name, grade: clean(r.grade, 20) || "Not stated", base: clean(r.base, 60) || "Not stated", check_in: r.check_in, check_out: r.check_out,
     nights: String(Math.round((Date.parse(r.check_out) - Date.parse(r.check_in)) / 864e5)), room, status, concur_tr: clean(r.concur_tr, 40), note: clean(r.note, 300), gender, occupancy: r.occupancy === "Double" ? "Double" : "Single"};
   if (r.emp_code) row.emp_code = clean(r.emp_code, 30); if (r.wbs) row.wbs = clean(r.wbs, 60);
@@ -687,7 +687,7 @@ function tripInput(b, client, isNew) {
     title: ["Mr.", "Ms.", "Mrs.", "Dr."].includes(b.title) ? b.title : "", name: clean(b.name, 100).replace(/^\s*(mr|mrs|ms|miss|dr)\b\.?\s*/i, ""), grade: clean(b.grade, 20),
     emp_code: clean(b.emp_code, 30), email: emailList(b.email)[0] || "", phone: clean(b.phone, 20).replace(/[^\d+\-\s]/g, ""), base: clean(b.base, 60), concur_tr: clean(b.concur_tr, 40), wbs: clean(b.wbs, 60),
     occupancy: b.occupancy === "Double" ? "Double" : "Single", note: clean(b.note, 300), cc: emailList(b.cc).join(", "), bcc: emailList(b.bcc).join(", ")};
-  t.gender = t.title === "Mr." ? "Male" : t.title === "Ms." || t.title === "Mrs." ? "Female" : ["Male", "Female"].includes(b.gender) ? b.gender : "";
+  t.gender = ["Male", "Female"].includes(b.gender) ? b.gender : t.title === "Mr." ? "Male" : t.title === "Ms." || t.title === "Mrs." ? "Female" : "";
   if (!t.property) return {err: "Choose the guest house."};
   if (!iso.test(t.check_in) || !iso.test(t.check_out) || t.check_out <= t.check_in) return {err: "Check-out must be after check-in."};
   if (isNew && t.check_in < istToday()) return {err: "Check-in can't be in the past."};

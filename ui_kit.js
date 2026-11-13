@@ -9,7 +9,7 @@ const ZUI = (() => {
 .zd-ph{color:#716b9b;font-weight:400}
 .zd-chev{width:16px;height:16px;flex-shrink:0;color:#8a83b3;transition:transform .18s ease}
 [aria-expanded=true]>.zd-chev,[aria-expanded=true]+.zd-chev{transform:rotate(180deg);color:#02C988}
-.zd-panel{position:fixed;z-index:1000;max-height:288px;max-width:min(520px,calc(100vw - 16px));overflow:auto;padding:6px;border-radius:14px;background:#fff;
+.zd-panel{position:fixed;z-index:1000;max-height:min(420px,calc(100vh - 24px));max-width:min(520px,calc(100vw - 16px));overflow:auto;padding:6px;border-radius:14px;background:#fff;
   box-shadow:0 0 0 1px #e6e2f6,0 18px 40px -12px rgba(18,0,90,.28),0 4px 12px -4px rgba(18,0,90,.12);animation:zdIn .14s ease-out;
   font-family:inherit;scrollbar-width:thin;scrollbar-color:#cdc5ec transparent}
 @keyframes zdIn{from{opacity:0;transform:translateY(-4px) scale(.985)}to{opacity:1;transform:none}}

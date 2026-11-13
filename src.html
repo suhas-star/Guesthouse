@@ -1212,6 +1212,7 @@ const bkNext = async (btn) => {
   if (BK.step === 0 && BK.ci < today && !BK.edit) return bkFail("Check-in can't be in the past.");
   if (BK.step === 1) { if (!v.name.trim()) return bkFail("Enter the guest's name."); if (!v.grade) return bkFail("Choose the guest's grade.");
     if (v.email.trim() && !/^[^@\s]+@[^@\s]+\.[^@\s]+$/.test(v.email.trim())) return bkFail("The guest's email address doesn't look right.");
+    if (!phoneOk(v.phone)) return bkFail(splitPhone(v.phone)[0] === '+91' ? 'Enter a 10-digit Indian mobile number, e.g. 98450 12345.' : 'The mobile number looks too short or too long.');
     if (BK.from === 'timeline') { const r = (BK.tlRoom || {}); if (r.grades && r.grades.length && !r.grades.includes(v.grade)) return bkFail('Room ' + BK.room + ' is for grades ' + gradeSpan(r.grades) + ' only. Go back to the timeline and pick another room.'); BK.step = 3; bkDraw(); return; } }
   if (BK.step < 3) { BK.step++; bkDraw(); return; }
   // confirm
@@ -1255,19 +1256,45 @@ const bkStay = (pane) => { const live = props.filter((p) => p.status === 'Live')
   co.onchange = () => { BK.co = co.value; BK.rooms = null; paintN(); };
   dg.append(bField('Check-in', ci), bField('Check-out', co)); pane.append(dg, nn); paintN(); };
 
+// mobile number: country code dropdown + number, stored as "+91 98450 12345"
+const DIAL = [['+91', 'India'], ['+971', 'UAE'], ['+966', 'Saudi Arabia'], ['+974', 'Qatar'], ['+968', 'Oman'], ['+973', 'Bahrain'], ['+965', 'Kuwait'], ['+1', 'USA / Canada'], ['+44', 'United Kingdom'], ['+65', 'Singapore'],
+  ['+60', 'Malaysia'], ['+61', 'Australia'], ['+64', 'New Zealand'], ['+49', 'Germany'], ['+33', 'France'], ['+31', 'Netherlands'], ['+41', 'Switzerland'], ['+81', 'Japan'], ['+82', 'South Korea'], ['+86', 'China'],
+  ['+852', 'Hong Kong'], ['+66', 'Thailand'], ['+62', 'Indonesia'], ['+63', 'Philippines'], ['+84', 'Vietnam'], ['+94', 'Sri Lanka'], ['+977', 'Nepal'], ['+880', 'Bangladesh'], ['+27', 'South Africa'], ['+254', 'Kenya']];
+const splitPhone = (s) => { const t = String(s || '').trim(); const m = t.match(/^(\+\d{1,4})\s*(.*)$/); if (m && DIAL.some((d) => d[0] === m[1])) return [m[1], m[2]]; return ['+91', t.replace(/^\+?91\s*/, '')]; };
+const bkPhone = () => { const [cc0, num0] = splitPhone(BK.v.phone);
+  const box = h('div', 'flex rounded-xl bg-white ring-1 ring-zuna-100 focus-within:ring-2 focus-within:ring-mint-500 transition-shadow');
+  const cc = h('select', 'w-[92px] shrink-0 rounded-l-xl bg-zuna-50/70 border-r border-zuna-100 px-3 py-2.5 text-sm font-semibold focus:outline-none'); cc.setAttribute('aria-label', 'Country code');
+  DIAL.forEach(([c, n]) => { const o = h('option', null, n + '  ' + c); o.value = c; o.dataset.short = c; cc.appendChild(o); }); cc.value = cc0;
+  const num = h('input', 'flex-1 min-w-0 rounded-r-xl bg-transparent px-3 py-2.5 text-sm focus:outline-none'); num.type = 'tel'; num.inputMode = 'tel'; num.autocomplete = 'off'; num.placeholder = cc0 === '+91' ? '98450 12345' : 'Mobile number'; num.value = num0; num.setAttribute('aria-label', 'Mobile number');
+  const sync = () => { const d = num.value.replace(/[^\d\s-]/g, ''); if (d !== num.value) num.value = d; BK.v.phone = d.trim() ? cc.value + ' ' + d.trim() : ''; num.placeholder = cc.value === '+91' ? '98450 12345' : 'Mobile number'; if (BK.onEdit) BK.onEdit('phone'); };
+  num.addEventListener('input', sync); cc.addEventListener('change', sync); box.append(cc, num); box._sel = cc; return box; };
+const phoneOk = (p) => { if (!p) return true; const [c, n] = splitPhone(p), d = n.replace(/\D/g, ''); return c === '+91' ? /^[6-9]\d{9}$/.test(d) : d.length >= 6 && d.length <= 14; };
+
+// a labelled form section: title + one line on the left, fields on a 12-column grid on the right
+const bkSection = (title, desc, fields) => { const s = h('section', 'grid gap-4 lg:grid-cols-[200px_minmax(0,1fr)] lg:gap-8 py-5 first:pt-1 last:pb-1');
+  const l = h('div'); l.appendChild(h('h4', 'text-sm font-bold', title)); if (desc) l.appendChild(h('p', 'text-xs text-zuna-500 mt-1 leading-relaxed', desc)); s.appendChild(l);
+  const g = h('div', 'grid grid-cols-12 gap-x-4 gap-y-4 items-start'); fields.forEach(([span, el]) => { if (!/(^|\s)col-span-/.test(span)) el.classList.add('col-span-12'); span.split(' ').forEach((c) => c && el.classList.add(c)); g.appendChild(el); }); s.appendChild(g); return s; };
+const bkLabel = (label, el, req) => { const w = h('label', 'block min-w-0'); const t = h('span', 'flex items-center gap-1 text-xs font-semibold text-zuna-600 mb-1.5'); t.appendChild(document.createTextNode(label)); if (req) { const r = h('span', 'text-rose-500', '*'); r.setAttribute('aria-hidden', 'true'); t.appendChild(r); } w.append(t, el); return w; };
+
 // step 2 · guest
 const bkGuestStep = (pane) => { const v = BK.v;
-  bkHead(pane, 'Who is staying?', BK.from === 'timeline' ? 'Room ' + BK.room + ' · ' + BK.prop + ' · ' + fShort(BK.ci) + ' → ' + fShort(BK.co) + ' · ' + bkNights() + (bkNights() === 1 ? ' night' : ' nights') : 'Grade and gender decide which rooms are offered next.');
-  const g = h('div', 'grid gap-3 sm:grid-cols-2 lg:grid-cols-3');
-  const ttl = bkVal('title', bSelect(['Mr.', 'Ms.', 'Mrs.', 'Dr.']), 'change'), nm = bkVal('name', bInput('Full name')), gen = bkVal('gender', bSelect(['Male', 'Female']), 'change');
-  const syncG = () => { if (v.title !== 'Dr.') { v.gender = bkGender(); gen.value = v.gender; } gen.disabled = v.title !== 'Dr.'; if (gen._zd) gen._zd.disabled = gen.disabled; }; ttl.addEventListener('change', syncG);
-  const nr = h('div', 'grid grid-cols-[96px_minmax(0,1fr)] gap-2 sm:col-span-2'); nr.append(bField('Title', ttl), bField('Guest name', nm));
-  g.append(nr, bField('Gender', gen), bField('Grade', bkVal('grade', bSelect([['', 'Choose grade']].concat(gradeList())), 'change')), bField('Employee code', bkVal('emp_code', bInput('e.g. 104523'))),
-    bField('Base location', bkVal('base', bInput('e.g. Mumbai'))), bField('Concur ID', bkVal('concur_tr', bInput('Travel request ID'))), bField('WBS ID', bkVal('wbs', bInput('Cost code'))),
-    bField('Email', bkVal('email', bInput('guest@company.com', 'email')), 'The booking is emailed here'), bField('Mobile', bkVal('phone', bInput('+91 …', 'tel'))),
-    bField('Occupancy', bkVal('occupancy', bSelect([['Single', 'Single'], ['Double', 'Double · shares the room']]), 'change')));
-  const nt = bField('Remarks', bkVal('note', bInput('e.g. late arrival, veg meals'))); nt.classList.add('sm:col-span-2', 'lg:col-span-3'); g.appendChild(nt);
-  pane.appendChild(g); setTimeout(syncG); };
+  bkHead(pane, 'Who is staying?', BK.from === 'timeline' ? 'Room ' + BK.room + ' · ' + BK.prop + ' · ' + fShort(BK.ci) + ' → ' + fShort(BK.co) + ' · ' + bkNights() + (bkNights() === 1 ? ' night' : ' nights') : 'Fields marked * are needed. Grade and gender decide which rooms are offered next.');
+  const ttl = bkVal('title', bSelect(['Mr.', 'Ms.', 'Mrs.', 'Dr.']), 'change'), gen = bkVal('gender', bSelect(['Male', 'Female']), 'change');
+  const nm = bkVal('name', bInput('First and last name')); nm.required = true;
+  const syncG = () => { if (v.title !== 'Dr.') { v.gender = bkGender(); gen.value = v.gender; } gen.disabled = v.title !== 'Dr.'; if (gen._zd) { gen._zd.disabled = gen.disabled; gen._zd.title = gen.disabled ? 'Set by the title' : ''; } }; ttl.addEventListener('change', syncG);
+  const em = bkVal('email', bInput('name@company.com', 'email')), ph = bkPhone();
+  const sec = h('div', 'divide-y divide-zuna-50');
+  sec.append(
+    bkSection('Guest', 'As on the guest\'s ID. Gender is set by the title (choose it for Dr.).', [
+      ['col-span-4 sm:col-span-3 lg:col-span-2', bkLabel('Title', ttl, true)], ['col-span-8 sm:col-span-9 lg:col-span-7', bkLabel('Full name', nm, true)], ['col-span-12 sm:col-span-6 lg:col-span-3', bkLabel('Gender', gen, true)]]),
+    bkSection('Contact', 'The booking confirmation is emailed to this address.', [
+      ['sm:col-span-6', bkLabel('Email', em)], ['sm:col-span-6', bkLabel('Mobile', ph)]]),
+    bkSection('Employee & billing', 'Used for eligibility and in the reports.', [
+      ['col-span-6 sm:col-span-4', bkLabel('Grade', bkVal('grade', bSelect([['', 'Choose grade']].concat(gradeList())), 'change'), true)], ['col-span-6 sm:col-span-4', bkLabel('Employee code', bkVal('emp_code', bInput('e.g. 104523')))], ['sm:col-span-4', bkLabel('Base location', bkVal('base', bInput('e.g. Mumbai')))],
+      ['sm:col-span-6', bkLabel('Concur ID', bkVal('concur_tr', bInput('Travel request ID')))], ['sm:col-span-6', bkLabel('WBS ID', bkVal('wbs', bInput('WBS / cost code')))]]),
+    bkSection('Stay preferences', null, [
+      ['sm:col-span-4', bkLabel('Occupancy', bkVal('occupancy', bSelect([['Single', 'Single'], ['Double', 'Double · shares the room']]), 'change'))], ['sm:col-span-8', bkLabel('Remarks', bkVal('note', bInput('e.g. late arrival, veg meals')))]]));
+  pane.appendChild(sec); setTimeout(syncG); };
 
 // step 3 · room (only rooms this guest can have)
 const bkRoom = (pane) => { const p = bkHouse(), v = BK.v;
@@ -1304,10 +1331,10 @@ const bkConfirm = (pane) => { const v = BK.v, p = bkHouse();
   dl.lastChild.children[1].classList.add('whitespace-pre-line');
   row('Room', BK.room ? 'Room ' + BK.room + (v.occupancy === 'Double' ? ' · shared' : '') : 'Any free room · picked when you confirm', 2);
   left.appendChild(dl);
-  const g = h('div', 'grid gap-3 sm:grid-cols-2'); g.append(bField('Guest email', bkVal('email', bInput('guest@company.com', 'email'))), bField('Mobile', bkVal('phone', bInput('+91 …', 'tel'))));
-  const nt = bField('Remarks', bkVal('note', bInput('e.g. late arrival'))); nt.classList.add('sm:col-span-2'); g.appendChild(nt); left.appendChild(g);
+  const g = h('div', 'grid gap-4 sm:grid-cols-2'); g.append(bkLabel('Guest email', bkVal('email', bInput('name@company.com', 'email'))), bkLabel('Mobile', bkPhone()));
+  const nt = bkLabel('Remarks', bkVal('note', bInput('e.g. late arrival'))); nt.classList.add('sm:col-span-2'); g.appendChild(nt); left.appendChild(g);
   const mw = h('label', 'flex items-center gap-2 text-sm font-semibold cursor-pointer'); const send = h('input', 'w-4 h-4 accent-[#02C988]'); send.type = 'checkbox'; send.checked = v.send; mw.append(send, document.createTextNode(BK.edit ? 'Email the change to the guest' : 'Email the booking to the guest')); left.appendChild(mw);
-  const cp = h('div', 'grid gap-3 sm:grid-cols-2'); cp.append(bField('CC', bkVal('cc', bInput('Comma-separated'))), bField('BCC', bkVal('bcc', bInput('Comma-separated')))); left.appendChild(cp);
+  const cp = h('div', 'grid gap-3 sm:grid-cols-2'); cp.append(bkLabel('CC', bkVal('cc', bInput('Comma-separated'))), bkLabel('BCC', bkVal('bcc', bInput('Comma-separated')))); left.appendChild(cp);
   const lab = h('p', 'flex items-center gap-2 text-[11px] font-bold uppercase tracking-wider text-zuna-500 mb-2'); lab.appendChild(document.createTextNode('What the guest will receive')); const lv = h('span', 'inline-flex items-center gap-1.5 text-mint-700'); lv.appendChild(h('span', 'w-1.5 h-1.5 rounded-full bg-mint-500 animate-pulse')); lv.appendChild(document.createTextNode('Live')); lab.appendChild(lv); right.appendChild(lab);
   const mail = h('div', 'rounded-2xl overflow-hidden bg-white ring-1 ring-zuna-100 shadow-xl shadow-zuna-900/10 transition-opacity'); right.appendChild(mail);
   const paint = (k) => { mail.replaceChildren(); mail.style.opacity = v.send ? '1' : '.45';

@@ -147,7 +147,7 @@ html.dark .zc-list{background:rgba(245,158,11,.13);color:#fcd34d;box-shadow:inse
     const b = el('button', (s.className || '') + ' zd-btn'); b.type = 'button'; b.setAttribute('aria-haspopup', 'listbox'); b.setAttribute('aria-expanded', 'false');
     if (s.getAttribute('aria-label')) b.setAttribute('aria-label', s.getAttribute('aria-label'));
     const lab = el('span', 'zd-val'); b.append(lab, chevron()); s.after(b); s.classList.add('zd-hide'); s.tabIndex = -1; s.setAttribute('aria-hidden', 'true'); s._zd = b;
-    const sync = () => { const o = s.options[IDX.get.call(s)]; lab.textContent = o ? o.textContent : ''; lab.classList.toggle('zd-ph', !!o && o.value === '' && !!o.dataset.placeholder); b.disabled = s.disabled; };
+    const sync = () => { const o = s.options[IDX.get.call(s)]; lab.textContent = o ? (o.dataset.short || o.textContent) : ''; lab.classList.toggle('zd-ph', !!o && o.value === '' && !!o.dataset.placeholder); b.disabled = s.disabled; };
     Object.defineProperty(s, 'value', {configurable: true, get() { return VAL.get.call(s); }, set(v) { VAL.set.call(s, v); sync(); }});
     Object.defineProperty(s, 'selectedIndex', {configurable: true, get() { return IDX.get.call(s); }, set(v) { IDX.set.call(s, v); sync(); }});
     s.addEventListener('change', sync); new MutationObserver(sync).observe(s, {childList: true, subtree: true, characterData: true, attributes: true});

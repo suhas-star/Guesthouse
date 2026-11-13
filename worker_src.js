@@ -700,7 +700,7 @@ function tripInput(b, client, isNew) {
   const iso = /^\d{4}-\d{2}-\d{2}$/, t = {property: clean(b.property, 120), check_in: String(b.check_in || ""), check_out: String(b.check_out || ""), room: clean(b.room, 40),
     title: ["Mr.", "Ms.", "Mrs.", "Dr."].includes(b.title) ? b.title : "", name: clean(b.name, 100).replace(/^\s*(mr|mrs|ms|miss|dr)\b\.?\s*/i, ""), grade: clean(b.grade, 20),
     emp_code: clean(b.emp_code, 30), email: emailList(b.email)[0] || "", phone: clean(b.phone, 20).replace(/[^\d+\-\s]/g, ""), base: clean(b.base, 60), concur_tr: clean(b.concur_tr, 40), wbs: clean(b.wbs, 60),
-    occupancy: b.occupancy === "Double" ? "Double" : "Single", note: clean(b.note, 300), cc: emailList(b.cc).join(", "), bcc: emailList(b.bcc).join(", ")};
+    occupancy: b.occupancy === "Double" ? "Double" : "Single", note: clean(b.note, 300), cc: emailList(client.mail_cc).join(", "), bcc: emailList(client.mail_bcc).join(", ")};   // email copies are set by Zuna in Client settings, never by the booker
   t.gender = ["Male", "Female"].includes(b.gender) ? b.gender : t.title === "Mr." ? "Male" : t.title === "Ms." || t.title === "Mrs." ? "Female" : "";
   if (!t.property) return {err: "Choose the guest house."};
   if (!iso.test(t.check_in) || !iso.test(t.check_out) || t.check_out <= t.check_in) return {err: "Check-out must be after check-in."};
@@ -752,10 +752,10 @@ async function placeTrip(env, user, cid, b, trip) {
   const saved = await env.DB.prepare("SELECT * FROM trips WHERE id = ?").bind(id).first();
   const mail = b.send_mail === false ? "not sent" : await tripMail(env, client, saved, av.gh, trip ? "changed" : "confirmed");
   await env.DB.prepare("UPDATE trips SET mail_status = ? WHERE id = ?").bind(mail, id).run();
-  return json({ok: true, trip: tripOut(Object.assign(saved, {mail_status: mail}))});
+  return json({ok: true, trip: tripOut(Object.assign(saved, {mail_status: mail}), user.admin)});
 }
-const tripOut = (x) => ({id: x.id, code: x.code || "", property: x.property, room: x.room, title: x.title || "", name: x.name, guest: guestOf(x), gender: x.gender, grade: x.grade, emp_code: x.emp_code || "", email: x.email || "", phone: x.phone || "",
-  base: x.base || "", concur_tr: x.concur_tr || "", wbs: x.wbs || "", occupancy: x.occupancy, check_in: x.check_in, check_out: x.check_out, note: x.note || "", status: x.status, cc: x.cc || "", bcc: x.bcc || "",
+const tripOut = (x, admin) => ({id: x.id, code: x.code || "", property: x.property, room: x.room, title: x.title || "", name: x.name, guest: guestOf(x), gender: x.gender, grade: x.grade, emp_code: x.emp_code || "", email: x.email || "", phone: x.phone || "",
+  base: x.base || "", concur_tr: x.concur_tr || "", wbs: x.wbs || "", occupancy: x.occupancy, check_in: x.check_in, check_out: x.check_out, note: x.note || "", status: x.status, cc: admin ? x.cc || "" : "", bcc: admin ? x.bcc || "" : "",
   booked_by: x.booked_by, booked_at: x.booked_at, changed_by: x.changed_by || "", changed_at: x.changed_at || "", cancelled_by: x.cancelled_by || "", cancelled_at: x.cancelled_at || "", cancel_reason: x.cancel_reason || "", mail_status: x.mail_status || "", history: jparse(x.history, [])});
 async function tripFor(env, user, cid, id) { return env.DB.prepare("SELECT * FROM trips WHERE id = ? AND client_id = ?").bind(+id || 0, cid).first(); }
 async function cancelTrip(env, user, cid, b) {
@@ -769,7 +769,7 @@ async function cancelTrip(env, user, cid, b) {
   const saved = await env.DB.prepare("SELECT * FROM trips WHERE id = ?").bind(trip.id).first(), gh = (await clientGuestHouses(env, client, true)).find((g) => g.property === trip.property) || {property: trip.property};
   const mail = b.send_mail === false ? "not sent" : await tripMail(env, client, saved, gh, "cancelled");
   await env.DB.prepare("UPDATE trips SET mail_status = ? WHERE id = ?").bind(mail, trip.id).run();
-  return json({ok: true, trip: tripOut(Object.assign(saved, {mail_status: mail}))});
+  return json({ok: true, trip: tripOut(Object.assign(saved, {mail_status: mail}), user.admin)});
 }
 // confirmation / change / cancellation e-mail to the guest, copies to the CC and BCC addresses
 async function tripMail(env, client, trip, gh, kind) {
@@ -823,7 +823,7 @@ async function bookApi(req, env, user, path) {
   let b; try { b = await req.json(); } catch (e) { return json({error: "Bad request."}, 400); }
   const cid = user.admin ? +b.client_id : user.client_id; if (!cid) return json({error: "No client."}, 400);
   if (path === "/api/trips") { if (!user.book && !user.manager) return json({error: "You don't have access to bookings. Ask your admin."}, 403);
-    const {results} = await env.DB.prepare("SELECT * FROM trips WHERE client_id = ? ORDER BY check_in DESC, id DESC LIMIT 3000").bind(cid).all(); return json({trips: results.map(tripOut)}); }
+    const {results} = await env.DB.prepare("SELECT * FROM trips WHERE client_id = ? ORDER BY check_in DESC, id DESC LIMIT 3000").bind(cid).all(); return json({trips: results.map((t) => tripOut(t, user.admin))}); }
   if (path === "/api/bookings") {   // fresh stay list for the dashboard after a booking changes
     const client = await bookClient(env, cid); if (!client) return json({error: "No client."}, 404);
     const names = new Set((await clientGuestHouses(env, client, false)).map((g) => g.property)), bk = await readSet(env, "bookings");
@@ -1159,7 +1159,7 @@ async function dashboard(env, user, url) {
     const names = new Set(data.properties.map((p) => p.property));
     data.bookings = (data.bookings || []).filter((b) => names.has(b.property));
     data.client = {id: client.id, name: client.name, legal_name: client.legal_name || "", logo: client.logo_file ? "/files/" + client.logo_file : ""};
-    if (user.book) { data.client.mail_cc = client.mail_cc || ""; data.client.mail_bcc = client.mail_bcc || ""; data.client.grades = (client.grades || DEFAULT_GRADES).split(",").filter(Boolean); const el = eligOf(client); if (el) data.client.elig = el; }
+    if (user.book) { if (user.admin) { data.client.mail_cc = client.mail_cc || ""; data.client.mail_bcc = client.mail_bcc || ""; } data.client.grades = (client.grades || DEFAULT_GRADES).split(",").filter(Boolean); const el = eligOf(client); if (el) data.client.elig = el; }
     if (user.admin) data.clients = clients.map((c) => ({id: c.id, name: c.name}));
     if (user.tx) {   // travel policy caps (hotel rate per night by grade group and city zone) for the consolidated report's Eligibility column
       const pol = await env.DB.prepare("SELECT json FROM datasets WHERE id = ?").bind("policy:" + client.id).first();

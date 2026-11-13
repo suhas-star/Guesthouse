@@ -296,13 +296,14 @@ check('old host redirects to PRIMARY_HOST', r.status === 301 && r.headers.get('l
     check('client admin switches Book rooms on', (await M('user/access', {email: 'asha@acme.example', book: true})).status === 200);
     await A('client', {id: acme, name: 'Acme', legal_name: 'Acme Industries Limited', grades: ['E1', 'E2'], mail_cc: 'desk@zuna.example, bad-address', mail_bcc: 'audit@zuna.example'});
     { const pg = await (await call('/', {cookie: asha})).text(); const dd = JSON.parse(pg.match(/window\.__LTMGH_DATA = (.*?);\nconst REPORT_DATE/s)[1]);
-      check('dashboard carries default CC/BCC for bookers', dd.client.mail_cc === 'desk@zuna.example' && dd.client.mail_bcc === 'audit@zuna.example' && pg.includes('"book":true')); }
+      check('client dashboard does not carry the email copies', dd.client.mail_cc === undefined && dd.client.mail_bcc === undefined && pg.includes('"book":true')); }
     x = await B(asha, 'book/avail', {property: 'Acme House', check_in: D(200), check_out: D(203)});
     check('availability lists every room as free', x.status === 200 && x.j.rooms.length === 3 && x.j.rooms.every((r) => r.state === 'free') && x.j.nights === 3);
     check('past check-in refused', (await B(asha, 'book', {property: 'Acme House', check_in: D(-2), check_out: D(1), title: 'Mr.', name: 'Old Guest', grade: 'E1'})).status === 400);
     const m0 = mails.length;
-    x = await B(asha, 'book', {property: 'Acme House', check_in: D(200), check_out: D(203), room: 'A1', title: 'Mr.', name: 'Karan Mehta', grade: 'E1', email: 'karan@acme.example', cc: 'desk@zuna.example', bcc: 'audit@zuna.example', note: 'Late arrival'});
+    x = await B(asha, 'book', {property: 'Acme House', check_in: D(200), check_out: D(203), room: 'A1', title: 'Mr.', name: 'Karan Mehta', grade: 'E1', email: 'karan@acme.example', cc: 'someone@else.example', bcc: 'spy@else.example', note: 'Late arrival'});
     const t1 = x.j.trip;
+    check('booker never sees or sets the email copies', t1.cc === '' && t1.bcc === '');
     check('booking is confirmed instantly with a ZUNA code', x.status === 200 && /^ZUNA\d+$/.test(t1.code) && t1.status === 'Confirmed' && t1.room === 'A1');
     const em = mails[m0];
     check('confirmation e-mail goes to the guest with CC and BCC', mails.length === m0 + 1 && em.to[0] === 'karan@acme.example' && em.cc[0] === 'desk@zuna.example' && em.bcc[0] === 'audit@zuna.example' && /Booking confirmed/.test(em.subject) && em.text.includes(t1.code) && em.text.includes('Late arrival') && t1.mail_status === 'sent');

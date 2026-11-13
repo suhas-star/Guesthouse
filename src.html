@@ -1369,13 +1369,13 @@ const bkConfirm = (pane) => { const v = BK.v, p = bkHouse();
   const g = h('div', 'grid gap-4 sm:grid-cols-2'); g.append(bkLabel('Guest email', bkVal('email', bInput('name@company.com', 'email'))), bkLabel('Mobile', bkPhone()));
   const nt = bkLabel('Remarks', bkVal('note', bInput('e.g. late arrival'))); nt.classList.add('sm:col-span-2'); g.appendChild(nt); left.appendChild(g);
   const mw = h('label', 'flex items-center gap-2 text-sm font-semibold cursor-pointer'); const send = h('input', 'w-4 h-4 accent-[#02C988]'); send.type = 'checkbox'; send.checked = v.send; mw.append(send, document.createTextNode(BK.edit ? 'Email the change to the guest' : 'Email the booking to the guest')); left.appendChild(mw);
-  const cp = h('div', 'grid gap-3 sm:grid-cols-2'); cp.append(bkLabel('CC', bkVal('cc', bInput('Comma-separated'))), bkLabel('BCC', bkVal('bcc', bInput('Comma-separated')))); left.appendChild(cp);
+  const cl = DATA.client || {}, ccs = USER.admin ? [cl.mail_cc, cl.mail_bcc] : ['', ''];   // copies are set by Zuna in Client settings
   const lab = h('p', 'flex items-center gap-2 text-[11px] font-bold uppercase tracking-wider text-zuna-500 mb-2'); lab.appendChild(document.createTextNode('What the guest will receive')); const lv = h('span', 'inline-flex items-center gap-1.5 text-mint-700'); lv.appendChild(h('span', 'w-1.5 h-1.5 rounded-full bg-mint-500 animate-pulse')); lv.appendChild(document.createTextNode('Live')); lab.appendChild(lv); right.appendChild(lab);
   const mail = h('div', 'rounded-2xl overflow-hidden bg-white ring-1 ring-zuna-100 shadow-xl shadow-zuna-900/10 transition-opacity'); right.appendChild(mail);
   const paint = (k) => { mail.replaceChildren(); mail.style.opacity = v.send ? '1' : '.45';
     const code = BK.edit ? BK.edit.code : 'ZUNA·····', n = bkNights(), head = BK.edit ? 'Your booking has been changed' : 'Your stay is confirmed';
     const env = h('div', 'px-4 py-2.5 text-[11.5px] text-zuna-500 border-b border-zuna-50 space-y-0.5 break-words'); const line = (a, b) => { const q = h('p'); q.appendChild(document.createTextNode(a + ' ')); q.appendChild(h('b', 'font-semibold text-zuna-900', b)); env.appendChild(q); };
-    line('To', v.email.trim() || (v.cc.trim() ? '(no guest email · sent to CC)' : '(no email address)')); if (v.cc.trim()) line('CC', v.cc.trim()); if (v.bcc.trim()) line('BCC', v.bcc.trim());
+    line('To', v.email.trim() || '(no guest email)'); if (ccs[0]) line('CC', ccs[0]); if (ccs[1]) line('BCC', ccs[1]);
     line('Subject', (BK.edit ? 'Booking changed' : 'Booking confirmed') + ' · ' + BK.prop + ' · ' + fLong(BK.ci) + ' – ' + fLong(BK.co) + ' · ' + code); mail.appendChild(env);
     const hb = h('div', 'bg-zuna-900 text-white px-5 py-4'); hb.appendChild(h('p', 'font-bold', head)); hb.appendChild(h('p', 'text-xs text-zuna-200 mt-0.5', ((DATA.client && DATA.client.name) || '') + ' · guest house booking')); mail.appendChild(hb);
     const bd = h('div', 'px-5 py-4'); const kvs = h('dl', 'grid grid-cols-[96px_minmax(0,1fr)] gap-x-3 gap-y-1.5 text-[13px]');
@@ -1385,7 +1385,7 @@ const bkConfirm = (pane) => { const v = BK.v, p = bkHouse();
     const ct = (p.contacts || []).filter((c) => c.phone || c.email).slice(0, 2).map((c) => c.name + (c.designation ? ' (' + c.designation + ')' : '') + (c.phone ? ' · ' + c.phone : ''));
     if (p.map_url || ct.length) { const mp = h('p', 'text-xs text-zuna-500 mt-3'); if (p.map_url) mp.appendChild(h('span', 'font-semibold text-mint-700', 'Open in Google Maps')); if (ct.length) mp.appendChild(document.createTextNode((p.map_url ? ' · ' : '') + 'Guest house contact: ' + ct.join('; '))); bd.appendChild(mp); }
     mail.appendChild(bd); mail.appendChild(h('div', 'px-5 py-2.5 border-t border-zuna-50 text-[11px] text-zuna-400', 'Zuna Hotel Desk · Zuna Travel Solutions')); };
-  send.onchange = () => { v.send = send.checked; cp.classList.toggle('opacity-50', !send.checked); paint(); };
+  send.onchange = () => { v.send = send.checked; paint(); };
   BK.onEdit = (k) => paint(k); paint(); wrap.append(left, right); pane.appendChild(wrap); };
 
 const bkSuccess = (card) => { const t = BK.done.trip, w = h('div', 'p-8 sm:p-10 text-center');
@@ -1488,7 +1488,7 @@ const tripDrawer = (t) => {
     mk('Resend email', 'send').onclick = async (ev) => { const b = ev.currentTarget; b.disabled = true; try { const j = await bApi('book/resend', {id: t.id}); t.mail_status = j.mail_status; toast(j.mail_status === 'sent' ? 'Email sent again' : mailTxt(j.mail_status)); paintTrips(); } catch (x) { toast(x.message, true); } b.disabled = false; };
     box.appendChild(acts); }
   box.appendChild(kv([['Guest', t.guest], ['Gender', t.gender], ['Grade', t.grade], ['Employee code', t.emp_code], ['Email', t.email], ['Mobile', t.phone], ['Base location', t.base], ['Concur ID', t.concur_tr], ['WBS ID', t.wbs], ['Occupancy', t.occupancy === 'Double' ? 'Double · shares the room' : 'Single'], ['Remarks', t.note],
-    ['Email copies', [t.cc && 'CC ' + t.cc, t.bcc && 'BCC ' + t.bcc].filter(Boolean).join(' · ')], ['Email status', mailTxt(t.mail_status)], ['Booked by', t.booked_by + ' · ' + fLong(String(t.booked_at).slice(0, 10))]]));
+    ...(USER.admin ? [['Email copies', [t.cc && 'CC ' + t.cc, t.bcc && 'BCC ' + t.bcc].filter(Boolean).join(' · ')]] : []), ['Email status', mailTxt(t.mail_status)], ['Booked by', t.booked_by + ' · ' + fLong(String(t.booked_at).slice(0, 10))]]));
   const hs = h('div', 'space-y-2'); hs.appendChild(h('p', 'text-xs font-bold uppercase tracking-wider text-zuna-500', 'History'));
   const ol = h('ol', 'relative border-l-2 border-zuna-100 ml-1.5 space-y-3'); (t.history || []).slice().reverse().forEach((x) => { const li = h('li', 'pl-4 relative'); li.appendChild(h('span', 'absolute -left-[7px] top-1 w-3 h-3 rounded-full ring-2 ring-white ' + (x.what === 'Cancelled' ? 'bg-rose-500' : x.what === 'Changed' ? 'bg-amber-400' : 'bg-mint-500')));
     li.appendChild(h('p', 'text-sm font-semibold', x.what + (x.detail ? ' · ' + x.detail : ''))); li.appendChild(h('p', 'text-xs text-zuna-500', x.by + ' · ' + fLong(String(x.at).slice(0, 10)) + ' ' + String(x.at).slice(11, 16) + ' UTC')); ol.appendChild(li); }); hs.appendChild(ol); box.appendChild(hs);

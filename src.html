@@ -1249,12 +1249,13 @@ const bkHead = (pane, title, sub) => { pane.appendChild(h('h3', 'text-lg font-bo
 // right of the Stay step: the chosen guest house with live availability for the chosen nights
 const bkPreview = (box) => { const p = bkHouse(); box.replaceChildren(); if (!p.property) return;
   const c = h('div', 'rounded-2xl overflow-hidden bg-white ring-1 ring-zuna-100 shadow-sm');
-  const im = h('img', 'w-full h-36 object-cover bg-zuna-50'); im.src = (p.photos && p.photos[0] && p.photos[0].url) || ZUI.art.gh; im.alt = (p.photos && p.photos[0] && p.photos[0].caption) || ''; c.appendChild(im);
-  const bd = h('div', 'p-4 space-y-3'); const t = h('div'); t.appendChild(h('p', 'font-bold text-base leading-snug', p.property)); t.appendChild(h('p', 'text-xs text-zuna-500 mt-0.5', p.address ? (p.city && !p.address.toLowerCase().includes(p.city.toLowerCase()) ? p.address + ', ' + p.city : p.address) : (p.city || ''))); bd.appendChild(t);
+  const head = h('div', 'flex items-stretch gap-0 border-b border-zuna-50');
+  const im = h('img', 'w-28 sm:w-32 shrink-0 object-cover bg-zuna-50 self-stretch min-h-[96px]'); im.src = (p.photos && p.photos[0] && p.photos[0].url) || ZUI.art.gh; im.alt = (p.photos && p.photos[0] && p.photos[0].caption) || ''; head.appendChild(im);
+  const bd = h('div', 'p-4 space-y-3'); const t = h('div', 'min-w-0 flex-1 px-4 py-3'); t.appendChild(h('p', 'font-bold text-[15px] leading-snug truncate', p.property)); t.appendChild(h('p', 'text-xs text-zuna-500 mt-0.5 line-clamp-2', p.address ? (p.city && !p.address.toLowerCase().includes(p.city.toLowerCase()) ? p.address + ', ' + p.city : p.address) : (p.city || ''))); head.appendChild(t); c.appendChild(head);
   const av = h('div', 'rounded-xl bg-zuna-50 ring-1 ring-zuna-100 px-3 py-2.5'); av.appendChild(h('div', 'chart-skel h-9 rounded-lg')); bd.appendChild(av);
-  const tags = [].concat(p.inclusions || [], p.amenities || []).filter(Boolean).slice(0, 6);
+  const tags = [].concat(p.inclusions || [], p.amenities || []).filter(Boolean).slice(0, 4);
   if (tags.length) { const tg = h('div', 'flex flex-wrap gap-1.5'); tags.forEach((x) => tg.appendChild(h('span', 'rounded-md bg-white ring-1 ring-zuna-100 px-2 py-0.5 text-[11px] font-semibold text-zuna-600', x))); bd.appendChild(tg); }
-  const hd = (p.contacts || []).filter((x) => x.phone)[0]; if (hd) { const r = h('p', 'flex items-center gap-2 text-xs text-zuna-500 pt-2 border-t border-zuna-50'); r.appendChild(icon('phone', 'w-3.5 h-3.5 text-mint-600 shrink-0')); r.appendChild(document.createTextNode('Helpdesk · ' + hd.name + ' · ')); r.appendChild(h('b', 'text-zuna-900 font-semibold', hd.phone)); bd.appendChild(r); }
+  const hd = (p.contacts || []).filter((x) => x.phone)[0]; if (hd) { const r = h('p', 'flex items-center gap-2 text-xs text-zuna-500 truncate'); r.appendChild(icon('phone', 'w-3.5 h-3.5 text-mint-600 shrink-0')); r.appendChild(document.createTextNode('Helpdesk · ' + hd.name + ' · ')); r.appendChild(h('b', 'text-zuna-900 font-semibold', hd.phone)); bd.appendChild(r); }
   c.appendChild(bd); box.appendChild(c);
   const paintAv = () => { av.replaceChildren(); const rs = BK.rooms || [], tot = rs.length, free = rs.filter((r) => r.state === 'free').length, one = rs.filter((r) => r.state === 'shared').length;
     if (!(BK.co > BK.ci)) { av.appendChild(h('p', 'text-xs font-semibold text-rose-600', 'Pick a check-out after check-in.')); return; }
@@ -1269,7 +1270,7 @@ const bkPreview = (box) => { const p = bkHouse(); box.replaceChildren(); if (!p.
     .catch((x) => { if (av.isConnected) { av.replaceChildren(h('p', 'text-xs font-semibold text-rose-600', x.message)); } }); };
 const bkStay = (outer) => { const live = props.filter((p) => p.status === 'Live');
   bkHead(outer, 'Where and when?', 'Pick the guest house and the stay dates.');
-  const cols = h('div', 'grid gap-6 lg:grid-cols-[minmax(0,1fr)_minmax(0,360px)] items-start'), pane = h('div', 'min-w-0'), side = h('div', 'min-w-0'); cols.append(pane, side); outer.appendChild(cols);
+  const cols = h('div', 'grid gap-6 lg:grid-cols-[minmax(0,1fr)_minmax(0,380px)] items-start'), pane = h('div', 'min-w-0'), side = h('div', 'min-w-0'); cols.append(pane, side); outer.appendChild(cols);
   const prev = () => bkPreview(side);
   if (live.length <= 3) {   // a few guest houses: big choices; more than three: a dropdown
     const g = h('div', 'grid gap-2 sm:grid-cols-2 xl:grid-cols-3 mb-4'); g.setAttribute('role', 'radiogroup'); g.setAttribute('aria-label', 'Guest house');

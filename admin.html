@@ -231,20 +231,27 @@ const renderRates = (D, c) => {
   const rates = (c.rates || []).filter((r) => r.gh_id === g.id), blocks = (c.blocks || []).filter((b) => b.gh_id === g.id);
   const grid = h('div', 'grid gap-4 2xl:grid-cols-[minmax(0,1.7fr)_minmax(0,1fr)] items-start'); const L = h('div', 'space-y-4 min-w-0'), R = h('div', 'space-y-4 min-w-0'); grid.append(L, R); D.appendChild(grid);
 
+  // service charge: one amount per client, once per booking
+  const sc0 = h('div', 'card px-5 py-4 flex flex-wrap items-end gap-4'); const sct = h('div', 'min-w-[220px] flex-1'); sct.appendChild(h('h3', 'font-bold', 'Service charge · ' + c.name));
+  sct.appendChild(h('p', 'text-xs text-zuna-500', 'Charged once per booking, for every guest house of this client, plus 18% GST. Applies even when the fare is Nil.')); sc0.appendChild(sct);
+  const sv = inp(c.svc_fee || '', 'e.g. 250', 'number'); sv.min = '0'; sv.step = '0.01'; const svw = field('Per booking (₹, before GST)', sv); svw.classList.add('w-48'); sc0.appendChild(svw);
+  const svp = h('p', 'text-sm pb-2.5 tabular-nums'); const paintSv = () => { const v = +sv.value || 0; svp.replaceChildren(); svp.appendChild(h('span', 'text-zuna-500', '+ GST ' + money(Math.round(v * 18) / 100) + ' = ')); svp.appendChild(h('b', null, money(Math.round(v * 118) / 100) + ' per booking')); }; sv.addEventListener('input', paintSv); paintSv(); sc0.appendChild(svp);
+  const svs = ib('button', 'btn-primary', 'Save', 'check'); svs.onclick = async () => { svs.disabled = true; try { await api('svc', {client_id: c.id, svc_fee: +sv.value || 0}); toast('Service charge saved'); load(true); } catch (er) { toast(er.message, true); svs.disabled = false; } }; sc0.appendChild(svs);
+  L.appendChild(sc0);
+
   // rates list
-  const rc = h('div', 'card overflow-hidden'); const rh = h('div', 'flex flex-wrap items-center gap-3 px-5 py-4 border-b border-zuna-100'); const rt = h('div'); rt.appendChild(h('h3', 'font-bold', 'Rates')); rt.appendChild(h('p', 'text-xs text-zuna-500', 'Fare tax: 5% below ₹7,500 a night, 18% from ₹7,500 · GST on service charge: 18%')); rh.appendChild(rt);
+  const rc = h('div', 'card overflow-hidden'); const rh = h('div', 'flex flex-wrap items-center gap-3 px-5 py-4 border-b border-zuna-100'); const rt = h('div'); rt.appendChild(h('h3', 'font-bold', 'Rates')); rt.appendChild(h('p', 'text-xs text-zuna-500', 'Basic fare per night. Tax: 5% below ₹7,500 a night, 18% from ₹7,500.')); rh.appendChild(rt);
   const add = ib('button', 'ml-auto btn-primary', 'Add rate', 'plus'); add.onclick = () => rateForm(c, g, null); rh.appendChild(add); rc.appendChild(rh);
   if (!rates.length) rc.appendChild(h('p', 'px-5 py-8 text-center text-sm text-zuna-500', 'No rates yet for ' + g.property + '. Add one for the whole guest house or a room type.'));
   else { const sc = h('div', 'overflow-x-auto'); const tb = h('table', 'w-full text-sm'); const hr = h('tr', 'text-left text-xs font-semibold text-zuna-500 bg-zuna-50');
-    ['Applies to', 'Nights', 'Basic fare / night', 'Service charge', 'Per night, all in', ''].forEach((x) => { const th = h('th', 'px-4 py-2.5 whitespace-nowrap', x); if (!x) th.appendChild(h('span', 'sr-only', 'Actions')); th.scope = 'col'; hr.appendChild(th); }); const th0 = h('thead'); th0.appendChild(hr); tb.appendChild(th0);
+    ['Applies to', 'Nights', 'Basic fare / night', 'Fare with tax / night', ''].forEach((x) => { const th = h('th', 'px-4 py-2.5 whitespace-nowrap', x); if (!x) th.appendChild(h('span', 'sr-only', 'Actions')); th.scope = 'col'; hr.appendChild(th); }); const th0 = h('thead'); th0.appendChild(hr); tb.appendChild(th0);
     const bd = h('tbody', 'divide-y divide-zuna-50'); const today = new Date().toISOString().slice(0, 10);
     rates.forEach((r) => { const tr = h('tr', 'align-top hover:bg-zuna-50/50'); const live = r.from <= today && r.to >= today;
       const c1 = h('td', 'px-4 py-3'); c1.appendChild(h('p', 'font-semibold whitespace-nowrap', tName(r.room_type_id))); if (r.note) c1.appendChild(h('p', 'text-xs text-zuna-500', r.note)); tr.appendChild(c1);
       const c2 = h('td', 'px-4 py-3 whitespace-nowrap'); c2.appendChild(h('p', 'font-medium', fD(r.from) + ' – ' + fD(r.to))); if (live) c2.appendChild(h('span', 'text-[11px] font-bold text-mint-700', 'In use today')); tr.appendChild(c2);
       const c3 = h('td', 'px-4 py-3 whitespace-nowrap'); if (r.nil) { c3.appendChild(h('span', 'rounded-md bg-zuna-900 text-white px-2 py-0.5 text-xs font-bold', 'Nil')); } else { c3.appendChild(h('p', 'font-semibold tabular-nums', money(r.fare))); c3.appendChild(h('p', 'text-xs text-zuna-500', '+ ' + Math.round(fareTax(r.fare) * 100) + '% tax')); } tr.appendChild(c3);
-      const c4 = h('td', 'px-4 py-3 whitespace-nowrap'); c4.appendChild(h('p', 'font-semibold tabular-nums', r.svc ? money(r.svc) : '—')); if (r.svc) c4.appendChild(h('p', 'text-xs text-zuna-500', (r.svc_unit === 'booking' ? 'per booking' : 'per night') + ' + 18% GST')); tr.appendChild(c4);
-      const fare = r.nil ? 0 : r.fare, pn = fare + fare * fareTax(fare) + (r.svc_unit === 'night' ? r.svc * 1.18 : 0);
-      const c5 = h('td', 'px-4 py-3 whitespace-nowrap'); c5.appendChild(h('p', 'font-bold tabular-nums', money(Math.round(pn * 100) / 100))); if (r.svc_unit === 'booking' && r.svc) c5.appendChild(h('p', 'text-xs text-zuna-500', '+ ' + money(Math.round(r.svc * 118) / 100) + ' per booking')); tr.appendChild(c5);
+      const fare = r.nil ? 0 : r.fare, pn = fare + fare * fareTax(fare);
+      const c5 = h('td', 'px-4 py-3 whitespace-nowrap'); c5.appendChild(h('p', 'font-bold tabular-nums', r.nil ? 'Nil' : money(Math.round(pn * 100) / 100))); tr.appendChild(c5);
       const c6 = h('td', 'px-3 py-3 text-right whitespace-nowrap'); const iconBtn = (ic, lab, cls) => { const x2 = h('button', 'iconbtn ' + (cls || '')); x2.type = 'button'; x2.title = lab; x2.setAttribute('aria-label', lab); x2.appendChild(icon(ic, 'w-4 h-4')); return x2; };
       const e = iconBtn('pencil', 'Edit rate'); e.onclick = () => rateForm(c, g, r);
       const x = iconBtn('trash-2', 'Delete rate', 'text-rose-600'); x.onclick = async () => { if (!(await ZUI.confirm({title: 'Delete this rate?', message: tName(r.room_type_id) + ' · ' + fD(r.from) + ' – ' + fD(r.to), ok: 'Delete rate', tone: 'danger'}))) return; try { await api('rate', {gh_id: g.id, id: r.id, delete: true}); toast('Rate deleted'); load(true); } catch (er) { toast(er.message, true); } };
@@ -279,19 +286,18 @@ const renderRates = (D, c) => {
 const rateForm = (c, g, r) => { const types = g.room_types || [], f = h('div', 'space-y-4');
   const ap = sel(String(r ? r.room_type_id : 0), [['0', 'Whole guest house (all rooms)']].concat(types.map((t) => [String(t.id), 'Room type · ' + (t.name || 'Rooms') + (t.room_nos ? ' (' + t.room_nos + ')' : '')]))); f.appendChild(field('Applies to', ap));
   const today = new Date(); const dp = datePair(r ? r.from : isoDay(new Date(Date.UTC(today.getFullYear(), today.getMonth(), 1))), r ? r.to : today.getFullYear() + '-12-31', 'First night', 'Last night'); f.appendChild(dp.el);
-  const nilSw = switchEl('Nil fare (this client pays only the service charge)', r ? r.nil : false); f.appendChild(nilSw);
+  const nilSw = switchEl('Nil fare (only the client\'s service charge applies)', r ? r.nil : false); f.appendChild(nilSw);
   const fa = inp(r && !r.nil ? r.fare : '', 'e.g. 3500', 'number'); fa.min = '0'; fa.step = '0.01'; const fw = field('Basic fare per night (₹, before tax)', fa); f.appendChild(fw);
-  const sg = h('div', 'grid grid-cols-[minmax(0,1fr)_160px] gap-3'); const sv = inp(r ? r.svc : '', 'e.g. 250', 'number'); sv.min = '0'; sv.step = '0.01'; const su = sel(r ? r.svc_unit : 'night', [['night', 'Per night'], ['booking', 'Per booking']]); sg.append(field('Service charge (₹, before GST)', sv), field('Charged', su)); f.appendChild(sg);
   const nt = inp(r ? r.note : '', 'Optional, e.g. 2027 contract rate'); f.appendChild(field('Note', nt));
   const pv = h('div', 'rounded-xl bg-zuna-50 ring-1 ring-zuna-100 px-4 py-3 text-sm'); f.appendChild(pv);
-  const paint = () => { const nil = nilSw.input.checked; fw.classList.toggle('hidden', nil); const fare = nil ? 0 : +fa.value || 0, s = +sv.value || 0, tx = fare * fareTax(fare), gst = s * 0.18; pv.replaceChildren();
+  const paint = () => { const nil = nilSw.input.checked; fw.classList.toggle('hidden', nil); const fare = nil ? 0 : +fa.value || 0, tx = fare * fareTax(fare); pv.replaceChildren();
     const ln = (k, v, b) => { const d = h('div', 'flex justify-between gap-3 py-0.5' + (b ? ' font-bold border-t border-zuna-100 mt-1 pt-1.5' : '')); d.append(h('span', b ? '' : 'text-zuna-500', k), h('span', 'tabular-nums font-semibold', v)); pv.appendChild(d); };
-    pv.appendChild(h('p', 'text-[11px] font-bold uppercase tracking-wider text-zuna-500 mb-1', su.value === 'night' ? 'One night costs' : 'One night costs (service charge once per booking)'));
-    ln('Basic fare', nil ? 'Nil' : money(fare)); if (!nil) ln('Tax on fare (' + Math.round(fareTax(fare) * 100) + '%)', money(Math.round(tx * 100) / 100)); ln('Service charge', money(s)); ln('GST on service charge (18%)', money(Math.round(gst * 100) / 100));
-    ln(su.value === 'night' ? 'Per night, all in' : 'First night, all in', money(Math.round((fare + tx + s + gst) * 100) / 100), true); };
-  [fa, sv].forEach((x) => x.addEventListener('input', paint)); su.addEventListener('change', paint); nilSw.input.addEventListener('change', paint); paint();
+    pv.appendChild(h('p', 'text-[11px] font-bold uppercase tracking-wider text-zuna-500 mb-1', 'One night costs'));
+    ln('Basic fare', nil ? 'Nil' : money(fare)); if (!nil) ln('Tax on fare (' + Math.round(fareTax(fare) * 100) + '%)', money(Math.round(tx * 100) / 100)); ln('Per night, with tax', nil ? 'Nil' : money(Math.round((fare + tx) * 100) / 100), true);
+    pv.appendChild(h('p', 'text-xs text-zuna-500 mt-1.5', 'Plus ' + c.name + "'s service charge " + money(c.svc_fee || 0) + ' + 18% GST, once per booking.')); };
+  fa.addEventListener('input', paint); nilSw.input.addEventListener('change', paint); paint();
   const save = ib('button', 'btn-primary w-full justify-center', r ? 'Save rate' : 'Add rate', 'check'); f.appendChild(save);
-  save.onclick = async () => { save.disabled = true; try { await api('rate', {gh_id: g.id, id: r ? r.id : undefined, room_type_id: +ap.value, from: dp.from.value, to: dp.to.value, nil: nilSw.input.checked, fare: +fa.value || 0, svc: +sv.value || 0, svc_unit: su.value, note: nt.value}); closeModal(); toast(r ? 'Rate saved' : 'Rate added'); load(true); } catch (er) { toast(er.message, true); save.disabled = false; } };
+  save.onclick = async () => { save.disabled = true; try { await api('rate', {gh_id: g.id, id: r ? r.id : undefined, room_type_id: +ap.value, from: dp.from.value, to: dp.to.value, nil: nilSw.input.checked, fare: +fa.value || 0, note: nt.value}); closeModal(); toast(r ? 'Rate saved' : 'Rate added'); load(true); } catch (er) { toast(er.message, true); save.disabled = false; } };
   modal((r ? 'Edit rate · ' : 'Add rate · ') + g.property, f); };
 const blockForm = (c, g, b) => { const f = h('div', 'space-y-4'), rooms = g.rooms_list || [];
   const whole = switchEl('Whole guest house (all rooms)', b ? !b.rooms.length : true); f.appendChild(whole);

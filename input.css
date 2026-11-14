@@ -415,7 +415,9 @@ html.dark .tl-ng { background: #1a1440 repeating-linear-gradient(45deg, #2a2160 
 @keyframes okDraw { to { stroke-dashoffset: 0; } }
 @media (prefers-reduced-motion: reduce) { .ok-tick svg path, .ok-tick svg polyline { animation: none; stroke-dashoffset: 0; } }
 
-/* Book a room · Guest step: the open part slides in */
-.gs-open { animation: gsIn .28s cubic-bezier(.2,.8,.2,1); }
-@keyframes gsIn { from { opacity: 0; transform: translateY(-6px); } to { opacity: 1; transform: none; } }
-@media (prefers-reduced-motion: reduce) { .gs-open { animation: none; } }
+/* Book a room · Guest step: slides come in from the right (Next) or the left (Back) */
+.gs-from-right { animation: gsR .32s cubic-bezier(.2,.8,.2,1); }
+.gs-from-left { animation: gsL .32s cubic-bezier(.2,.8,.2,1); }
+@keyframes gsR { from { opacity: 0; transform: translateX(28px); } to { opacity: 1; transform: none; } }
+@keyframes gsL { from { opacity: 0; transform: translateX(-28px); } to { opacity: 1; transform: none; } }
+@media (prefers-reduced-motion: reduce) { .gs-from-right, .gs-from-left { animation: none; } }

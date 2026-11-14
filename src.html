@@ -1167,7 +1167,7 @@ const BK_STEPS = ['Stay', 'Guest', 'Room', 'Confirm'];
 const BK_TL_DAYS = 14;
 const buildBook = () => {
   BK.built = true; const e = BK.edit, live = props.filter((p) => p.status === 'Live');
-  BK.step = 0; BK.done = null; BK.showAll = false; BK.gopen = e ? -1 : 0; BK.gskip = {}; BK.gdone = e ? {guest: true, contact: true, work: true, prefs: true} : {}; BK.rooms = null; BK.err = ''; BK.from = 'steps';
+  BK.step = 0; BK.done = null; BK.showAll = false; BK.gopen = 0; BK.gdir = 1; BK.rooms = null; BK.err = ''; BK.from = 'steps';
   BK.mode = 'steps';
   BK.prop = e ? e.property : (live.some((p) => p.property === BK.prop) ? BK.prop : ((live.find((p) => p.property === state.prop) || live[0] || {}).property || ''));
   BK.ci = e ? e.check_in : (BK.ci && BK.ci >= today ? BK.ci : addDays(today, 1)); BK.co = e ? e.check_out : (BK.co > BK.ci ? BK.co : addDays(BK.ci, 1));
@@ -1204,9 +1204,9 @@ const bkDraw = () => {
   [bkStay, bkGuestStep, bkRoom, bkConfirm][BK.step](pane); body.appendChild(err);
   const foot = h('div', 'sticky bottom-0 z-20 -mx-5 -mb-5 mt-5 px-5 py-3 flex items-center justify-between gap-3 bg-white/95 backdrop-blur border-t border-zuna-100 rounded-b-2xl shadow-[0_-8px_20px_-14px_rgba(18,0,90,.35)]');
   const back = h('button', 'btn'); back.type = 'button'; back.appendChild(document.createTextNode(BK.step === 1 && BK.from === 'timeline' ? '← Back to timeline' : '← Back')); back.style.visibility = BK.step ? 'visible' : 'hidden';
-  back.onclick = () => { if (BK.from === 'timeline' && BK.step === 3) BK.step = 1; else if (BK.from === 'timeline' && BK.step <= 1) BK.step = 0; else BK.step = Math.max(0, BK.step - 1); bkDraw(); };
+  back.onclick = () => { if (BK.step === 1 && BK.gopen > 0) { BK.gdir = -1; BK.gopen--; bkDraw(); return; } if (BK.step === 2) { BK.gopen = BK_GPARTS.length - 1; BK.gdir = -1; } BK.step = Math.max(0, BK.step - 1); bkDraw(); };
   const next = h('button', 'btn-primary !py-2.5 !px-5'); next.type = 'button';
-  const last = BK.step === 3; if (last) next.appendChild(icon(BK.edit ? 'check' : 'calendar-plus', 'w-4 h-4')); next.appendChild(document.createTextNode(last ? (BK.edit ? 'Save changes' : 'Confirm booking') : 'Next: ' + BK_STEPS[BK.from === 'timeline' && BK.step === 1 ? 3 : BK.step + 1])); if (!last) next.appendChild(icon('arrow-right', 'w-4 h-4'));
+  const last = BK.step === 3; if (last) next.appendChild(icon(BK.edit ? 'check' : 'calendar-plus', 'w-4 h-4')); next.appendChild(document.createTextNode(last ? (BK.edit ? 'Save changes' : 'Confirm booking') : BK.step === 1 && BK.gopen < BK_GPARTS.length - 1 ? 'Next: ' + BK_GPARTS[BK.gopen + 1].title : 'Next: ' + BK_STEPS[BK.step + 1])); if (!last) next.appendChild(icon('arrow-right', 'w-4 h-4'));
   next.onclick = () => bkNext(next); foot.append(back, next); body.appendChild(foot);
   ZUI.auto(V); hydrateIcons(V);
 };
@@ -1215,6 +1215,7 @@ const bkNext = async (btn) => {
   const v = BK.v;
   if (BK.step === 0 && !(BK.co > BK.ci)) return bkFail('Check-out must be after check-in.');
   if (BK.step === 0 && BK.ci < today && !BK.edit) return bkFail("Check-in can't be in the past.");
+  if (BK.step === 1 && BK.gopen < BK_GPARTS.length - 1) { const m = BK_GPARTS[BK.gopen].check(); if (m) return bkFail(m); BK.gdir = 1; BK.gopen++; bkDraw(); return; }
   if (BK.step === 1) { if (!v.name.trim()) return bkFail("Enter the guest's name."); if (!v.grade) return bkFail("Choose the guest's grade.");
     if (v.email.trim() && !/^[^@\s]+@[^@\s]+\.[^@\s]+$/.test(v.email.trim())) return bkFail("The guest's email address doesn't look right.");
     if (!bkGradeOk()) return bkFail('Grade ' + v.grade + ' is not eligible for a guest house stay. ' + bkGender() + ' guests: ' + gradeRanges(bkElig()) + '.');
@@ -1355,7 +1356,7 @@ const bkSuggest = (inp, wrap) => {
     try { const r = await fetch('/api/guests', {method: 'POST', headers: {'content-type': 'application/json'}, credentials: 'same-origin', body: JSON.stringify({client_id: DATA.client && DATA.client.id, q: q.length >= 3 ? q : ''})});
       const j = await r.json(); if (my !== seq || document.activeElement !== inp) return; items = j.guests || []; act = -1; head = q.length >= 3 ? 'Matching guests' : 'Recent guests'; paint(); } catch (e) { /* suggestions are optional */ } };
   const choose = (g) => { const v = BK.v; ['title', 'name', 'gender', 'email', 'phone', 'grade', 'emp_code', 'base'].forEach((k) => { if (g[k]) v[k] = g[k]; }); close();
-    BK.gdone = Object.assign(BK.gdone || {}, {guest: true, contact: true}); BK.gopen = 2; bkDraw(); toast('Filled in ' + full(g) + "'s details"); };
+    BK.gdir = 1; BK.gopen = 2; bkDraw(); toast('Filled in ' + full(g) + "'s details"); };
   inp.addEventListener('focus', () => { if (inp.value.trim().length < 3) load(); });
   inp.addEventListener('input', () => { clearTimeout(timer); const q = inp.value.trim(); if (q.length > 0 && q.length < 3) { close(); return; } timer = setTimeout(load, 160); });
   inp.addEventListener('keydown', (e) => { if (pan.classList.contains('hidden') || !items.length) return;
@@ -1364,52 +1365,43 @@ const bkSuggest = (inp, wrap) => {
   inp.addEventListener('blur', () => setTimeout(close, 120));
 };
 
-// step 2 · guest: four short parts that open one after another; a finished part folds into a one-line summary
+// step 2 · guest: one part per slide (Guest → Contact → Employee & billing → Stay preferences) with its own progress bar
+const BK_GPARTS = [
+  {k: 'guest', title: 'Guest', sub: "As on the guest's ID. Grade and gender decide which rooms are offered.", ic: 'user-round', req: true,
+    check: () => { const v = BK.v; return !v.name.trim() ? "Enter the guest's name." : !v.grade ? "Choose the guest's grade." : !bkGradeOk() ? 'Grade ' + v.grade + ' is not eligible for a guest house stay.' : ''; }},
+  {k: 'contact', title: 'Contact', sub: 'The booking confirmation is emailed to the guest.', ic: 'mail',
+    check: () => { const v = BK.v; return v.email.trim() && !/^[^@\s]+@[^@\s]+\.[^@\s]+$/.test(v.email.trim()) ? "The guest's email address doesn't look right." : !phoneOk(v.phone) ? 'Check the mobile number.' : ''; }},
+  {k: 'work', title: 'Employee & billing', sub: 'Used in the reports and on the voucher.', ic: 'receipt', check: () => ''},
+  {k: 'prefs', title: 'Stay preferences', sub: 'Anything the guest house should know.', ic: 'bed', check: () => ''}];
 const bkGuestStep = (pane) => { const v = BK.v; bkQuotes();   // charges are ready by the Room step
-  bkHead(pane, 'Who is staying?', 'One part at a time. Pick a saved guest to fill everything in.');
-  if (BK.gopen == null) BK.gopen = 0; BK.gdone = BK.gdone || {};
-  const ph = (x) => x.trim() ? x : '';
-  const sum = {
-    guest: () => v.name.trim() ? [bkGuest(), v.gender, v.grade].filter(Boolean).join(' · ') : '',
-    contact: () => [ph(v.email), ph(v.phone)].filter(Boolean).join(' · ') || 'Not added',
-    work: () => [v.emp_code && 'Emp ' + v.emp_code, v.base, v.concur_tr && 'Concur ' + v.concur_tr, v.wbs && 'WBS ' + v.wbs].filter(Boolean).join(' · ') || 'Not added',
-    prefs: () => [v.occupancy === 'Double' ? 'Double · shares the room' : 'Single', v.note].filter(Boolean).join(' · ')};
-  const parts = [
-    {k: 'guest', title: 'Guest', ic: 'user-round', req: true, build: (g) => {
-      const ttl = bkVal('title', bSelect(['Mr.', 'Ms.', 'Mrs.', 'Dr.']), 'change'), gen = bkVal('gender', bSelect(['Male', 'Female']), 'change');
-      const nm = bkVal('name', bInput('Type 3 letters to find a saved guest')); nm.required = true; const nmw = h('div', 'relative'); nmw.appendChild(nm); bkSuggest(nm, nmw);
-      ttl.addEventListener('change', () => { if (v.title === 'Mr.') v.gender = 'Male'; else if (v.title === 'Ms.' || v.title === 'Mrs.') v.gender = 'Female'; gen.value = v.gender; paintElig(); });
-      const gr = bkVal('grade', gradeSelect(), 'change'); const el = h('p', 'text-xs font-semibold mt-1.5 min-h-[1rem]');
-      const paintElig = () => { const ok = bkGradeOk(); el.textContent = !v.grade ? '' : ok ? '✓ ' + v.grade + ' can book a guest house' : '✕ ' + v.grade + ' ' + bkGender().toLowerCase() + ' guests can’t book a guest house'; el.className = 'text-xs font-semibold mt-1.5 min-h-[1rem] ' + (ok ? 'text-mint-700' : 'text-rose-600'); };
-      gr.addEventListener('change', paintElig); gen.addEventListener('change', paintElig);
-      const gw = h('div'); gw.append(bkLabel('Grade', gr, true), el);
-      g.append(bkLabel('Title', ttl, true), bkLabel('Full name', nmw, true), bkLabel('Gender', gen, true), gw); g.className = 'grid gap-4 grid-cols-[96px_minmax(0,1fr)] lg:grid-cols-[96px_minmax(0,1fr)_150px_170px] items-start';
-      setTimeout(paintElig); return nm; },
-      check: () => !v.name.trim() ? "Enter the guest's name." : !v.grade ? "Choose the guest's grade." : !bkGradeOk() ? 'Grade ' + v.grade + ' is not eligible for a guest house stay.' : ''},
-    {k: 'contact', title: 'Contact', ic: 'mail', build: (g) => { const em = bkVal('email', bInput('name@company.com', 'email')); g.append(bkLabel('Email · the booking is sent here', em), bkLabel('Mobile', bkPhone())); g.className = 'grid gap-4 sm:grid-cols-2'; return em; },
-      check: () => v.email.trim() && !/^[^@\s]+@[^@\s]+\.[^@\s]+$/.test(v.email.trim()) ? "The guest's email address doesn't look right." : !phoneOk(v.phone) ? 'Check the mobile number.' : ''},
-    {k: 'work', title: 'Employee & billing', ic: 'receipt', build: (g) => { const ec = bkVal('emp_code', bInput('e.g. 104523'));
-      g.append(bkLabel('Employee code', ec), bkLabel('Base location', bkVal('base', bInput('e.g. Mumbai'))), bkLabel('Concur ID', bkVal('concur_tr', bInput('Travel request ID'))), bkLabel('WBS ID', bkVal('wbs', bInput('WBS / cost code')))); g.className = 'grid gap-4 sm:grid-cols-2 lg:grid-cols-4'; return ec; }, check: () => ''},
-    {k: 'prefs', title: 'Stay preferences', ic: 'bed', build: (g) => { const oc = bkVal('occupancy', bSelect([['Single', 'Single'], ['Double', 'Double · shares the room']]), 'change');
-      g.append(bkLabel('Occupancy', oc), bkLabel('Remarks', bkVal('note', bInput('e.g. late arrival, veg meals')))); g.className = 'grid gap-4 sm:grid-cols-[220px_minmax(0,1fr)]'; return oc; }, check: () => ''}];
-  const list = h('div', 'space-y-2.5'); pane.appendChild(list);
-  parts.forEach((p, i) => { const open = BK.gopen === i, done = !!BK.gdone[p.k] && !open;
-    const card = h('section', 'rounded-2xl ring-1 transition-shadow ' + (open ? 'ring-mint-500/60 bg-white shadow-[0_8px_24px_-16px_rgba(18,0,90,.35)]' : 'ring-zuna-100 bg-white'));
-    const hd = h(open ? 'div' : 'button', 'w-full flex items-center gap-3 px-4 py-3 text-left'); if (!open) { hd.type = 'button'; hd.onclick = () => { BK.gopen = i; bkDraw(); }; hd.setAttribute('aria-expanded', 'false'); }
-    const dot = h('span', 'grid place-items-center w-7 h-7 rounded-full shrink-0 ' + (done ? 'bg-mint-500 text-zuna-900' : open ? 'bg-zuna-900 text-white' : 'bg-zuna-50 text-zuna-400 ring-1 ring-zuna-100'));
-    dot.appendChild(icon(done ? 'check' : p.ic, 'w-3.5 h-3.5')); hd.appendChild(dot);
-    const tt = h('div', 'min-w-0 flex-1'); const tl = h('p', 'text-sm font-bold flex items-center gap-2'); tl.appendChild(document.createTextNode(p.title)); if (p.req) tl.appendChild(h('span', 'text-[10px] font-bold uppercase tracking-wider text-rose-500', 'Required')); else if (open) tl.appendChild(h('span', 'text-[10px] font-bold uppercase tracking-wider text-zuna-400', 'Optional')); tt.appendChild(tl);
-    if (!open) tt.appendChild(h('p', 'text-xs truncate ' + (done ? 'text-zuna-600' : 'text-zuna-400'), done ? sum[p.k]() : (BK.gskip || {})[p.k] ? 'Skipped · click to add' : 'Next'));
-    hd.appendChild(tt); if (!open && done) hd.appendChild(h('span', 'text-xs font-semibold text-mint-700 shrink-0', 'Edit')); card.appendChild(hd);
-    if (open) { const body = h('div', 'px-4 pb-4 gs-open'); const g = h('div'); const first = p.build(g); body.appendChild(g);
-      const ft = h('div', 'flex items-center justify-end gap-2 mt-4');
-      const nextIdx = parts.findIndex((q, j) => j > i && !BK.gdone[q.k]); const last = i === parts.length - 1;
-      if (!p.req && !last) { const sk = h('button', 'text-xs font-semibold text-zuna-500 hover:text-zuna-900 px-2', 'Skip'); sk.type = 'button'; sk.onclick = () => { BK.gskip = Object.assign(BK.gskip || {}, {[p.k]: true}); BK.gopen = i + 1; bkDraw(); }; ft.appendChild(sk); }
-      const go = h('button', 'btn !py-2 !px-3.5 !text-xs'); go.type = 'button'; go.appendChild(document.createTextNode(last ? 'Done' : 'Continue')); go.appendChild(icon(last ? 'check' : 'arrow-right', 'w-3.5 h-3.5'));
-      go.onclick = () => { const m = p.check(); if (m) { bkFail(m); return; } BK.gdone[p.k] = true; BK.gopen = last ? -1 : (nextIdx > -1 ? nextIdx : i + 1); bkDraw(); }; ft.appendChild(go); body.appendChild(ft); card.appendChild(body);
-      if (BK.gfocus) { BK.gfocus = false; setTimeout(() => { first && (first._zd || first).focus({preventScroll: true}); card.scrollIntoView({behavior: 'smooth', block: 'nearest'}); }, 60); } }
-    list.appendChild(card); });
-  BK.gfocus = true; };
+  if (BK.gopen == null || BK.gopen < 0) BK.gopen = 0; const i = BK.gopen, p = BK_GPARTS[i];
+  // progress: four parts
+  const pr = h('div', 'mb-5'); const top = h('div', 'flex items-baseline justify-between gap-3 mb-2'); top.appendChild(h('p', 'text-xs font-bold uppercase tracking-wider text-zuna-500', 'Guest details · ' + (i + 1) + ' of ' + BK_GPARTS.length));
+  top.appendChild(h('p', 'text-xs text-zuna-400', 'Pick a saved guest to fill everything in')); pr.appendChild(top);
+  const bars = h('div', 'grid grid-cols-4 gap-1.5'); BK_GPARTS.forEach((q, j) => { const b = h(j < i ? 'button' : 'div', 'text-left group'); if (j < i) { b.type = 'button'; b.onclick = () => { BK.gdir = -1; BK.gopen = j; bkDraw(); }; b.setAttribute('aria-label', 'Back to ' + q.title); }
+    const t = h('div', 'h-1.5 rounded-full overflow-hidden bg-zuna-100'); t.appendChild(h('div', 'h-full rounded-full transition-all duration-500 ' + (j < i ? 'w-full bg-mint-500' : j === i ? 'w-1/2 bg-mint-500' : 'w-0')));
+    b.appendChild(t); b.appendChild(h('p', 'text-[11px] font-semibold mt-1.5 truncate ' + (j === i ? 'text-zuna-900' : j < i ? 'text-mint-700 group-hover:underline' : 'text-zuna-400'), q.title)); bars.appendChild(b); });
+  pr.appendChild(bars); pane.appendChild(pr);
+  // the slide
+  const sl = h('section', 'gs-slide ' + (BK.gdir === -1 ? 'gs-from-left' : 'gs-from-right')); BK.gdir = 1;
+  const hd = h('div', 'flex items-center gap-3 mb-4'); const dot = h('span', 'grid place-items-center w-10 h-10 rounded-xl bg-zuna-900 text-white shrink-0'); dot.appendChild(icon(p.ic, 'w-5 h-5')); hd.appendChild(dot);
+  const tt = h('div'); const tl = h('h3', 'text-lg font-bold flex items-center gap-2'); tl.appendChild(document.createTextNode(p.title)); tl.appendChild(h('span', 'text-[10px] font-bold uppercase tracking-wider ' + (p.req ? 'text-rose-500' : 'text-zuna-400'), p.req ? 'Required' : 'Optional')); tt.append(tl, h('p', 'text-sm text-zuna-500', p.sub)); hd.appendChild(tt); sl.appendChild(hd);
+  const g = h('div'); let first = null;
+  if (p.k === 'guest') {
+    const ttl = bkVal('title', bSelect(['Mr.', 'Ms.', 'Mrs.', 'Dr.']), 'change'), gen = bkVal('gender', bSelect(['Male', 'Female']), 'change');
+    const nm = bkVal('name', bInput('Type 3 letters to find a saved guest')); nm.required = true; const nmw = h('div', 'relative'); nmw.appendChild(nm); bkSuggest(nm, nmw); first = nm;
+    const gr = bkVal('grade', gradeSelect(), 'change'); const el = h('p', 'text-xs font-semibold mt-1.5 min-h-[1rem]');
+    const paintElig = () => { const ok = bkGradeOk(); el.textContent = !v.grade ? '' : ok ? '✓ ' + v.grade + ' can book a guest house' : '✕ ' + v.grade + ' ' + bkGender().toLowerCase() + ' guests can’t book a guest house'; el.className = 'text-xs font-semibold mt-1.5 min-h-[1rem] ' + (ok ? 'text-mint-700' : 'text-rose-600'); };
+    ttl.addEventListener('change', () => { if (v.title === 'Mr.') v.gender = 'Male'; else if (v.title === 'Ms.' || v.title === 'Mrs.') v.gender = 'Female'; gen.value = v.gender; paintElig(); });
+    gr.addEventListener('change', paintElig); gen.addEventListener('change', paintElig); const gw = h('div'); gw.append(bkLabel('Grade', gr, true), el);
+    g.className = 'grid gap-4 grid-cols-[96px_minmax(0,1fr)] lg:grid-cols-[96px_minmax(0,1fr)_150px_170px] items-start'; g.append(bkLabel('Title', ttl, true), bkLabel('Full name', nmw, true), bkLabel('Gender', gen, true), gw); setTimeout(paintElig); }
+  if (p.k === 'contact') { const em = bkVal('email', bInput('name@company.com', 'email')); first = em; g.className = 'grid gap-4 sm:grid-cols-2'; g.append(bkLabel('Email', em), bkLabel('Mobile', bkPhone())); }
+  if (p.k === 'work') { const ec = bkVal('emp_code', bInput('e.g. 104523')); first = ec; g.className = 'grid gap-4 sm:grid-cols-2';
+    g.append(bkLabel('Employee code', ec), bkLabel('Base location', bkVal('base', bInput('e.g. Mumbai'))), bkLabel('Concur ID', bkVal('concur_tr', bInput('Travel request ID'))), bkLabel('WBS ID', bkVal('wbs', bInput('WBS / cost code')))); }
+  if (p.k === 'prefs') { const oc = bkVal('occupancy', bSelect([['Single', 'Single'], ['Double', 'Double · shares the room']]), 'change'); first = oc; g.className = 'grid gap-4 sm:grid-cols-[240px_minmax(0,1fr)]';
+    g.append(bkLabel('Occupancy', oc), bkLabel('Remarks', bkVal('note', bInput('e.g. late arrival, veg meals')))); }
+  sl.appendChild(g); pane.appendChild(sl);
+  setTimeout(() => { if (first && document.activeElement === document.body) (first._zd || first).focus({preventScroll: true}); }, 80); };
 
 // step 3 · room (only rooms this guest can have)
 const bkRoom = (pane) => { const p = bkHouse(), v = BK.v;
@@ -1441,7 +1433,7 @@ const bkConfirm = (pane) => { const v = BK.v, p = bkHouse();
   const wrap = h('div', 'grid gap-6 lg:grid-cols-[minmax(0,1fr)_340px] items-start'); const left = h('div', 'space-y-4 min-w-0'), rightC = h('div', 'min-w-0 lg:sticky lg:top-4');
   const dl = h('dl', 'rounded-xl ring-1 ring-zuna-100 divide-y divide-zuna-50 text-sm');
   const row = (k, val, step) => { const d = h('div', 'grid grid-cols-[72px_minmax(0,1fr)_auto] gap-3 px-4 py-2.5 items-start'); d.append(h('dt', 'text-zuna-500 text-xs pt-0.5', k), h('dd', 'font-semibold break-words', val));
-    const ed = h('button', 'text-xs font-semibold text-mint-700 hover:underline', 'Edit'); ed.type = 'button'; ed.onclick = () => { BK.step = step; if (BK.from === 'timeline' && (step === 0 || step === 2)) BK.step = 0; bkDraw(); }; d.appendChild(ed); dl.appendChild(d); };
+    const ed = h('button', 'text-xs font-semibold text-mint-700 hover:underline', 'Edit'); ed.type = 'button'; ed.onclick = () => { BK.step = step; if (step === 1) { BK.gopen = 0; BK.gdir = -1; } bkDraw(); }; d.appendChild(ed); dl.appendChild(d); };
   row('Stay', BK.prop + ' · ' + fShort(BK.ci) + ' → ' + fShort(BK.co) + ' · ' + bkNights() + (bkNights() === 1 ? ' night' : ' nights'), 0);
   row('Guest', [bkGuest(), v.grade, v.emp_code].filter(Boolean).join(' · ') + ([v.base, v.concur_tr && 'Concur ' + v.concur_tr, v.wbs && 'WBS ' + v.wbs].filter(Boolean).length ? '\n' + [v.base, v.concur_tr && 'Concur ' + v.concur_tr, v.wbs && 'WBS ' + v.wbs].filter(Boolean).join(' · ') : ''), 1);
   dl.lastChild.children[1].classList.add('whitespace-pre-line');

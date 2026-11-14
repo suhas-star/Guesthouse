@@ -409,6 +409,29 @@ check('old host redirects to PRIMARY_HOST', r.status === 301 && r.headers.get('l
       check('admin state lists rates and blocks', st2.rates.length === 6 && st2.blocks.length === 2);
       await A('block', {gh_id: g0.id, id: st2.blocks[0].id, delete: true}); check('a block can be removed', (await A('state', {})).j.clients.find((c) => c.id === acme).blocks.length === 1);
     }
+    { // audit log + backups (Zuna admin only)
+      let x = await call('/api/login', {method: 'POST', body: {email: 'asha@acme.example', password: 'wrong-password-1'}});
+      x = await A('audit', {kind: 'signin'});
+      check('failed sign-in is in the audit log, without the password', x.status === 200 && x.j.rows.some((r) => r.action === 'Sign-in failed' && r.email === 'asha@acme.example') && !JSON.stringify(x.j.rows).includes('wrong-password-1'));
+      x = await A('audit', {kind: 'bookings'});
+      check('bookings are in the audit log with who and what', x.j.rows.some((r) => r.action === 'Booked a stay' && r.email === 'asha@acme.example' && r.role && /Acme House/.test(r.target)));
+      x = await A('audit', {kind: 'rates'});
+      check('rate changes are in the audit log', x.j.rows.some((r) => r.action === 'Saved a rate') && x.j.rows.some((r) => r.action === 'Changed the service charge'));
+      x = await A('audit', {q: 'Plan Test'}); check('audit log can be searched', x.j.rows.length > 0 && x.j.rows.every((r) => JSON.stringify(r).includes('Plan Test')));
+      const before = (await A('audit', {limit: 5000})).j.rows.length; await A('state', {}); await A('quote', {gh_id: 1, check_in: D(1), check_out: D(2)});
+      check('reading screens is not logged', (await A('audit', {limit: 5000})).j.rows.length === before);
+      check('client users cannot read the audit log', (await call('/api/admin/audit', {method: 'POST', body: {}, cookie: meera})).status === 403);
+      const kv = new Map(); env.BACKUPS = {put: async (k, v, o) => kv.set(k, {v, m: o && o.metadata}), get: async (k) => (kv.get(k) || {}).v || null, delete: async (k) => kv.delete(k), list: async ({prefix}) => ({keys: [...kv].filter(([k]) => k.startsWith(prefix)).map(([k, x]) => ({name: k, metadata: x.m}))})};
+      x = await A('backup', {}); check('back up now saves a compressed copy', x.status === 200 && x.j.backup.rows > 0 && x.j.backup.tables > 5);
+      x = await A('backups', {}); check('backups are listed', x.j.ready && x.j.backups.length === 1 && x.j.backups[0].by === 'boss@zuna.example');
+      const dl = await call('/api/admin/backup/download', {method: 'POST', body: {key: x.j.backups[0].key}, cookie: admin});
+      const bk = JSON.parse(await new Response((await dl.blob()).stream().pipeThrough(new DecompressionStream('gzip'))).text());
+      check('backup download has every table, but no sign-in sessions or reset codes', dl.status === 200 && bk.format === 'ltmgh-backup-1' && bk.tables.trips.length > 0 && bk.tables.gh_rates.length > 0 && !('sessions' in bk.tables) && !('resets' in bk.tables));
+      check('a backup outside the backup folder cannot be downloaded', (await call('/api/admin/backup/download', {method: 'POST', body: {key: '../x'}, cookie: admin})).status === 404);
+      kv.set('backup/old.json.gz', {v: new ArrayBuffer(1), m: {at: new Date(Date.now() - 40 * 864e5).toISOString()}}); await A('backup', {});
+      check('backups older than 30 days are deleted', !kv.has('backup/old.json.gz') && [...kv.keys()].length === 2);
+      delete env.BACKUPS;
+    }
     await M('user/access', {email: 'asha@acme.example', book: false});
     check('switching Book rooms off blocks booking', (await B(asha, 'book', {property: 'Acme House', check_in: D(220), check_out: D(221), title: 'Mr.', name: 'X Y', grade: 'E1'})).status === 403); }
   x = await A('user', {email: 'asha@acme.example', name: 'Asha Rao', active: false});

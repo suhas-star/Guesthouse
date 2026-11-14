@@ -59,6 +59,7 @@ html.dark .sw{background:#3a2c8a}html.dark #acctMenu{background:#150c45;color:#e
   <aside id="aside" class="space-y-3">
     <div class="flex items-center justify-between"><h2 class="text-sm font-bold">Clients</h2><button id="newClient" class="btn-primary !py-1.5 !px-3 text-xs"><svg class="w-3.5 h-3.5" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" aria-hidden="true"><path d="M5 12h14M12 5v14"/></svg>New client</button></div>
     <div id="clients" class="space-y-2"></div>
+    <div id="sysNav" class="pt-3 mt-1 border-t border-zuna-100 space-y-1.5"></div>
   </aside>
 
   <!-- client detail -->
@@ -190,6 +191,90 @@ const combo = (v, src, ph, onPick, emptyMsg) => { const w = h('div', 'zd-cwrap')
 const photon = async (q, extra) => { if (q.length < 3) return []; const r = await fetch('https://photon.komoot.io/api/?limit=8&lang=en&q=' + encodeURIComponent(q) + (extra || '')); if (!r.ok) return []; return ((await r.json()).features || []).map((f) => ({p: f.properties || {}, ll: (f.geometry || {}).coordinates})); };
 
 // ---------- render ----------
+// ---------- System: audit log + backups (Zuna team) ----------
+let SYS = null; const AU = {kind: '', q: '', client: '', from: '', to: '', rows: null, more: false, open: null};
+const sysNav = () => { const n = $('#sysNav'); if (!n) return; n.replaceChildren(); if (CLIENT_MODE) { n.classList.add('hidden'); return; }
+  n.appendChild(h('p', 'text-[11px] font-bold uppercase tracking-wider text-zuna-400 px-1 pb-1', 'System'));
+  [['audit', 'Audit log', 'scroll-text', 'Who changed what, and every sign-in'], ['backups', 'Backups', 'database-backup', 'Nightly copy of all data']].forEach(([k, l, ic, sub]) => {
+    const b = h('button', 'w-full flex items-center gap-3 rounded-xl px-3 py-2.5 text-left transition-colors ' + (SYS === k ? 'bg-zuna-900 text-white' : 'hover:bg-white')); b.type = 'button';
+    b.appendChild(icon(ic, 'w-4 h-4 shrink-0 ' + (SYS === k ? 'text-mint-300' : 'text-zuna-400'))); const t = h('div', 'min-w-0'); t.append(h('p', 'text-sm font-semibold', l), h('p', 'text-[11px] truncate ' + (SYS === k ? 'text-white/60' : 'text-zuna-500'), sub)); b.appendChild(t);
+    b.onclick = () => { SYS = k; render(); $('#detail').focus({preventScroll: true}); }; n.appendChild(b); }); };
+const renderSys = (D) => (SYS === 'audit' ? renderAudit : renderBackups)(D);
+const istTime = (iso) => { try { return new Date(iso).toLocaleString('en-IN', {timeZone: 'Asia/Kolkata', day: 'numeric', month: 'short', year: 'numeric', hour: 'numeric', minute: '2-digit'}); } catch (e) { return iso; } };
+const kb = (n) => n >= 1048576 ? (n / 1048576).toFixed(1) + ' MB' : Math.max(1, Math.round(n / 1024)) + ' KB';
+
+const renderAudit = (D) => {
+  const top = h('div', 'flex flex-wrap items-end gap-3 mb-4'); const tt = h('div'); tt.append(h('h1', 'text-xl font-bold', 'Audit log'), h('p', 'text-sm text-zuna-500', 'Every change made in the portal and every sign-in, newest first. Passwords and files are never recorded.')); top.appendChild(tt); D.appendChild(top);
+  const card = h('div', 'card overflow-hidden'); D.appendChild(card);
+  const bar = h('div', 'flex flex-wrap items-center gap-2 px-4 py-3 border-b border-zuna-100');
+  const seg = h('div', 'flex flex-wrap gap-1 rounded-xl bg-zuna-50 ring-1 ring-zuna-100 p-1');
+  [['', 'All'], ['changes', 'Changes'], ['bookings', 'Bookings'], ['rates', 'Rates & charges'], ['signin', 'Sign-ins']].forEach(([k, l]) => { const b = h('button', 'rounded-lg px-3 py-1.5 text-xs font-semibold ' + (AU.kind === k ? 'bg-zuna-900 text-white' : 'text-zuna-600 hover:text-zuna-900'), l); b.type = 'button'; b.onclick = () => { AU.kind = k; AU.rows = null; render(); }; seg.appendChild(b); });
+  bar.appendChild(seg);
+  const q = inp(AU.q, 'Search person, action, guest, code…'); q.classList.add('!w-64'); q.setAttribute('aria-label', 'Search the audit log'); let tm = null; q.oninput = () => { clearTimeout(tm); tm = setTimeout(() => { AU.q = q.value; AU.rows = null; fetchRows(); }, 350); }; bar.appendChild(q);
+  const cs = sel(String(AU.client), [['', 'All clients']].concat(S.clients.map((c) => [String(c.id), c.name]))); cs.classList.add('!w-44'); cs.setAttribute('aria-label', 'Client'); cs.onchange = () => { AU.client = cs.value; AU.rows = null; fetchRows(); }; bar.appendChild(cs);
+  const df = inp(AU.from, '', 'date'), dt = inp(AU.to, '', 'date'); [df, dt].forEach((x, i) => { x.classList.add('!w-40'); x.setAttribute('aria-label', i ? 'To date' : 'From date'); x.onchange = () => { AU.from = df.value; AU.to = dt.value; AU.rows = null; fetchRows(); }; });
+  bar.append(df, h('span', 'text-xs text-zuna-400', 'to'), dt);
+  const ex = ib('button', 'ml-auto btn', 'Download CSV', 'download'); ex.onclick = async () => { ex.disabled = true; try { const j = await api('audit', Object.assign(params(), {limit: 5000}));
+      const cells = (r) => [istTime(r.at), r.email, r.role, (S.clients.find((c) => c.id === r.client_id) || {}).name || '', r.action + (r.ok ? '' : ' (failed)'), r.target, r.ip, JSON.stringify(r.detail)];
+      const csv = [['When (IST)', 'Who', 'Role', 'Client', 'Action', 'About', 'IP address', 'Details']].concat(j.rows.map(cells)).map((row) => row.map((v) => '"' + String(v == null ? '' : v).replace(/"/g, '""') + '"').join(',')).join('\r\n');
+      const a = document.createElement('a'); a.href = URL.createObjectURL(new Blob(['﻿' + csv], {type: 'text/csv'})); a.download = 'Audit-log-' + new Date().toISOString().slice(0, 10) + '.csv'; document.body.appendChild(a); a.click(); a.remove(); toast('Downloaded ' + j.rows.length + ' entries'); }
+    catch (er) { toast(er.message, true); } ex.disabled = false; }; bar.appendChild(ex);
+  card.appendChild(bar);
+  const body = h('div'); card.appendChild(body);
+  const params = () => ({kind: AU.kind, q: AU.q, client_id: AU.client ? +AU.client : undefined, from: AU.from || undefined, to: AU.to || undefined});
+  const paint = () => { body.replaceChildren();
+    if (!AU.rows) { for (let i = 0; i < 6; i++) body.appendChild(h('div', 'chart-skel h-12 mx-4 my-2 rounded-lg')); return; }
+    if (!AU.rows.length) { body.appendChild(h('p', 'px-5 py-12 text-center text-sm text-zuna-500', 'Nothing recorded for these filters yet.')); return; }
+    const sc = h('div', 'overflow-x-auto'); const t = h('table', 'w-full text-sm'); const hd = h('thead'); const hr = h('tr', 'text-left text-xs font-semibold text-zuna-500');
+    ['When', 'Who', 'Action', 'About', 'Client', ''].forEach((x) => { const e = h('th', 'px-4 py-2.5 whitespace-nowrap border-b border-zuna-100', x); e.scope = 'col'; hr.appendChild(e); }); hd.appendChild(hr); t.appendChild(hd);
+    const tb = h('tbody', 'divide-y divide-zuna-50');
+    AU.rows.forEach((r) => { const tr = h('tr', 'hover:bg-zuna-50/50 cursor-pointer'); tr.tabIndex = 0; tr.setAttribute('aria-expanded', AU.open === r.id ? 'true' : 'false');
+      tr.appendChild(h('td', 'px-4 py-2.5 whitespace-nowrap tabular-nums text-zuna-600', istTime(r.at)));
+      const w = h('td', 'px-4 py-2.5 min-w-0'); w.appendChild(h('p', 'font-semibold truncate max-w-[220px]', r.email || '—')); w.appendChild(h('p', 'text-[11px] text-zuna-500', r.role || '')); tr.appendChild(w);
+      const ac = h('td', 'px-4 py-2.5 whitespace-nowrap'); ac.appendChild(h('span', 'inline-flex items-center gap-1.5 rounded-md px-2 py-0.5 text-xs font-semibold ' + (!r.ok ? 'bg-rose-50 text-rose-700 ring-1 ring-rose-200' : /Cancel|Delet|Remov|Undid/.test(r.action) ? 'bg-amber-50 text-amber-800 ring-1 ring-amber-200' : /Booked/.test(r.action) ? 'bg-mint-50 text-mint-700 ring-1 ring-mint-200' : 'bg-zuna-50 text-zuna-700'), r.action)); tr.appendChild(ac);
+      tr.appendChild(h('td', 'px-4 py-2.5 text-zuna-600 max-w-[260px] truncate', r.target || '—'));
+      tr.appendChild(h('td', 'px-4 py-2.5 text-zuna-500 whitespace-nowrap', (S.clients.find((c) => c.id === r.client_id) || {}).name || '—'));
+      const ch = h('td', 'px-3 py-2.5 text-right'); ch.appendChild(icon(AU.open === r.id ? 'chevron-up' : 'chevron-down', 'w-4 h-4 text-zuna-400 inline')); tr.appendChild(ch);
+      const tog = () => { AU.open = AU.open === r.id ? null : r.id; paint(); }; tr.onclick = tog; tr.onkeydown = (e) => { if (e.key === 'Enter' || e.key === ' ') { e.preventDefault(); tog(); } }; tb.appendChild(tr);
+      if (AU.open === r.id) { const dr = h('tr', 'bg-zuna-50/60'); const td = h('td', 'px-4 py-3'); td.colSpan = 6;
+        const g = h('dl', 'grid gap-x-6 gap-y-1.5 sm:grid-cols-2 lg:grid-cols-3 text-xs'); const kv = (k, v) => { const d = h('div', 'min-w-0'); d.append(h('dt', 'text-zuna-500', k), h('dd', 'font-semibold break-words', v)); g.appendChild(d); };
+        kv('Time (IST)', istTime(r.at)); kv('IP address', r.ip || '—'); kv('Result', r.ok ? 'Done' : 'Refused');
+        Object.entries(r.detail || {}).forEach(([k, v]) => { if (v === '' || v == null || k === 'client_id') return; kv(k.replace(/_/g, ' '), typeof v === 'object' ? JSON.stringify(v) : String(v)); });
+        td.appendChild(g); dr.appendChild(td); tb.appendChild(dr); } });
+    t.appendChild(tb); sc.appendChild(t); body.appendChild(sc);
+    if (AU.more) { const m = ib('button', 'btn mx-auto my-3 flex', 'Load older entries', 'chevron-down'); m.onclick = async () => { m.disabled = true; try { const j = await api('audit', Object.assign(params(), {before: AU.rows[AU.rows.length - 1].id})); AU.rows = AU.rows.concat(j.rows); AU.more = j.more; paint(); } catch (er) { toast(er.message, true); m.disabled = false; } }; body.appendChild(m); } };
+  const fetchRows = async () => { paint(); try { const j = await api('audit', params()); AU.rows = j.rows; AU.more = j.more; } catch (er) { AU.rows = []; toast(er.message, true); } if (body.isConnected) paint(); };
+  if (AU.rows) paint(); else fetchRows(); };
+
+const renderBackups = (D) => {
+  const top = h('div', 'flex flex-wrap items-end gap-3 mb-4'); const tt = h('div'); tt.append(h('h1', 'text-xl font-bold', 'Backups'), h('p', 'text-sm text-zuna-500', 'A full copy of the portal data is made every night at 8:00 AM IST and kept for 30 days.')); top.appendChild(tt);
+  const now = ib('button', 'ml-auto btn-primary', 'Back up now', 'database-backup'); top.appendChild(now); D.appendChild(top);
+  const card = h('div', 'card overflow-hidden'); D.appendChild(card); card.appendChild(h('div', 'chart-skel h-40 m-4 rounded-xl'));
+  const info = h('div', 'card p-4 mt-4 text-sm text-zuna-600 space-y-1.5'); info.appendChild(ib('p', 'font-bold text-zuna-900', 'What a backup contains', 'info', 'w-4 h-4 text-mint-600'));
+  info.appendChild(h('p', '', 'Every client, guest house, room type, rate, blackout date, booking, trip, guest, user (without passwords), hotel report, document, photo and the audit log, as one compressed JSON file. Sign-in sessions are not included.'));
+  info.appendChild(h('p', '', 'Keep a downloaded copy somewhere safe, such as Google Drive. To restore data from a backup, contact the Zuna tech team with the file and the date to go back to.')); D.appendChild(info);
+  const paint = (j) => { card.replaceChildren();
+    if (!j.ready) { card.appendChild(h('p', 'px-5 py-10 text-center text-sm text-zuna-500', 'Backup storage is not connected yet.')); now.disabled = true; return; }
+    const last = j.backups[0]; const sum = h('div', 'flex flex-wrap items-center gap-4 px-5 py-4 border-b border-zuna-100');
+    const st = h('span', 'grid place-items-center w-10 h-10 rounded-xl ' + (last && Date.now() - Date.parse(last.at) < 36 * 3600e3 ? 'bg-mint-50 text-mint-600' : 'bg-amber-50 text-amber-600')); st.appendChild(icon(last && Date.now() - Date.parse(last.at) < 36 * 3600e3 ? 'shield-check' : 'triangle-alert', 'w-5 h-5')); sum.appendChild(st);
+    const sm = h('div'); sm.append(h('p', 'font-bold', last ? 'Last backup ' + istTime(last.at) : 'No backup yet'), h('p', 'text-xs text-zuna-500', last ? last.rows.toLocaleString('en-IN') + ' rows in ' + last.tables + ' tables · ' + kb(last.bytes) + ' compressed' : 'The first nightly backup runs at 8:00 AM IST, or press Back up now.')); sum.appendChild(sm);
+    sum.appendChild(h('span', 'ml-auto text-xs font-semibold text-zuna-500', j.backups.length + ' kept · ' + j.keep_days + ' days')); card.appendChild(sum);
+    if (!j.backups.length) return;
+    const sc = h('div', 'overflow-x-auto'); const t = h('table', 'w-full text-sm'); const hr = h('tr', 'text-left text-xs font-semibold text-zuna-500');
+    ['Made', 'By', 'Rows', 'Size', ''].forEach((x) => { const e = h('th', 'px-5 py-2.5 border-b border-zuna-100 whitespace-nowrap', x); e.scope = 'col'; hr.appendChild(e); }); const th = h('thead'); th.appendChild(hr); t.appendChild(th);
+    const tb = h('tbody', 'divide-y divide-zuna-50');
+    j.backups.forEach((x) => { const tr = h('tr', 'hover:bg-zuna-50/50'); tr.appendChild(h('td', 'px-5 py-2.5 whitespace-nowrap font-semibold', istTime(x.at)));
+      tr.appendChild(h('td', 'px-5 py-2.5 text-zuna-600', x.by === 'nightly' ? 'Nightly' : x.by)); tr.appendChild(h('td', 'px-5 py-2.5 tabular-nums', (x.rows || 0).toLocaleString('en-IN')));
+      tr.appendChild(h('td', 'px-5 py-2.5 tabular-nums text-zuna-600', kb(x.bytes || 0)));
+      const c = h('td', 'px-4 py-2 text-right'); const d = ib('button', 'btn !py-1.5 text-xs', 'Download', 'download'); d.onclick = async () => { d.disabled = true;
+        try { const r = await fetch('/api/admin/backup/download', {method: 'POST', headers: {'content-type': 'application/json'}, credentials: 'same-origin', body: JSON.stringify({key: x.key})}); if (!r.ok) throw new Error((await r.json().catch(() => ({}))).error || 'Download failed.');
+          const a = document.createElement('a'); a.href = URL.createObjectURL(await r.blob()); a.download = 'Zuna-portal-backup-' + x.at.slice(0, 16).replace(/[:T]/g, '-') + '.json.gz'; document.body.appendChild(a); a.click(); a.remove(); }
+        catch (er) { toast(er.message, true); } d.disabled = false; }; c.appendChild(d); tr.appendChild(c); tb.appendChild(tr); });
+    t.appendChild(tb); sc.appendChild(t); card.appendChild(sc); };
+  const loadB = async () => { try { paint(await api('backups', {})); } catch (er) { card.replaceChildren(h('p', 'px-5 py-10 text-center text-sm text-rose-600', er.message)); } };
+  now.onclick = async () => { now.disabled = true; try { const j = await api('backup', {}); toast('Backed up · ' + j.backup.rows.toLocaleString('en-IN') + ' rows'); await loadB(); } catch (er) { toast(er.message, true); } now.disabled = false; };
+  loadB(); };
+
 const render = () => {
   if (CLIENT_MODE) { const c = S.clients[0]; if (c) { $('#hdSub').textContent = c.name + ' · Guest House Management'; const a = $('#hdLogo');
       if (c.logo && !a.dataset.client) { a.dataset.client = '1'; const im = a.querySelector('img'); im.src = c.logo; im.alt = c.name + ' · go to dashboard'; im.className = 'h-6 max-w-[120px] object-contain'; } } }
@@ -198,8 +283,9 @@ const render = () => {
   S.clients.forEach((c) => { const b = h('button', 'w-full card press p-3 flex items-center gap-3 text-left hover:shadow-md ' + (c.id === cur ? '!ring-2 !ring-mint-500' : ''));
     const lg = h('span', 'logo-box w-12 h-9 rounded-lg bg-white ring-1 ring-zuna-100 grid place-items-center overflow-hidden shrink-0'); if (c.logo) { const i = h('img', 'max-h-6 max-w-10 object-contain'); i.src = c.logo; lg.appendChild(i); } else lg.appendChild(h('span', 'text-xs font-bold text-zuna-400', c.name.slice(0, 3).toUpperCase()));
     const m = h('div', 'min-w-0'); m.appendChild(h('p', 'font-semibold text-sm truncate', c.name)); m.appendChild(h('p', 'text-xs text-zuna-500', c.guesthouses.length + ' guest houses · ' + c.users.length + ' users' + (c.active ? '' : ' · inactive')));
-    b.append(lg, m); b.onclick = () => { cur = c.id; render(); }; L.appendChild(b); });
-  const D = $('#detail'); D.replaceChildren(); const c = C();
+    b.append(lg, m); b.onclick = () => { cur = c.id; SYS = null; render(); }; L.appendChild(b); });
+  sysNav();
+  const D = $('#detail'); D.replaceChildren(); if (SYS && !CLIENT_MODE) { renderSys(D); return; } const c = C();
   const vk = cur + ':' + tab; if (render.vk !== vk) { render.vk = vk; D.classList.remove('anim-in'); void D.offsetWidth; D.classList.add('anim-in'); }
   if (!c) { D.appendChild(h('div', 'card p-10 text-center text-sm text-zuna-500', 'Create your first client to get started.')); return; }
   const top = h('div', 'flex flex-wrap items-center gap-3 mb-4');

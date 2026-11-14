@@ -13,6 +13,7 @@
 //   TRUST_PROXY       "1" (default) uses X-Forwarded-Proto / X-Forwarded-Host
 //   INSECURE_COOKIES  "1" only for local testing over plain http on a non-localhost name
 import http from 'node:http';
+import fs from 'node:fs';
 import path from 'node:path';
 import {fileURLToPath, pathToFileURL} from 'node:url';
 import {openDb} from './db.mjs';
@@ -20,12 +21,19 @@ import {openDb} from './db.mjs';
 const root = path.resolve(path.dirname(fileURLToPath(import.meta.url)), '..');
 const worker = (await import(pathToFileURL(path.join(root, 'worker.mjs')).href)).default;
 const E = process.env;
+// a folder that behaves like the Workers KV namespace used for backups (value file + .meta.json beside it)
+function dirKV(dir) { fs.mkdirSync(dir, {recursive: true}); const f = (k) => path.join(dir, k.replace(/[^\w.-]/g, '_'));
+  return {put: async (k, v, o) => { fs.writeFileSync(f(k), Buffer.from(v)); fs.writeFileSync(f(k) + '.meta.json', JSON.stringify({name: k, metadata: (o && o.metadata) || null})); },
+    get: async (k) => { try { const b = fs.readFileSync(f(k)); return b.buffer.slice(b.byteOffset, b.byteOffset + b.length); } catch (e) { return null; } },
+    delete: async (k) => { for (const x of [f(k), f(k) + '.meta.json']) try { fs.unlinkSync(x); } catch (e) {} },
+    list: async (o) => ({keys: fs.readdirSync(dir).filter((n) => n.endsWith('.meta.json')).map((n) => JSON.parse(fs.readFileSync(path.join(dir, n), 'utf8'))).filter((m) => m.name.startsWith((o && o.prefix) || ''))})}; }
 const env = {
   DB: openDb(E.DB_PATH || path.join(root, 'var', 'ltmgh.sqlite')),
   RESEND_API_KEY: E.RESEND_API_KEY || '',
   MAIL_FROM: E.MAIL_FROM || undefined,
   PRIMARY_HOST: E.PRIMARY_HOST || '',
   VOUCHER_TOKEN: E.VOUCHER_TOKEN || '',
+  BACKUPS: dirKV(E.BACKUP_DIR || path.join(root, 'var', 'backups')),
 };
 const trust = E.TRUST_PROXY !== '0', MAX_BODY = 12 * 1024 * 1024;  // vouchers carry base64 PDFs
 

@@ -408,6 +408,8 @@ const SCHEMA = [
   "CREATE INDEX IF NOT EXISTS gh_rates_gh ON gh_rates (gh_id, from_date)",
   "CREATE TABLE IF NOT EXISTS gh_blocks (id INTEGER PRIMARY KEY AUTOINCREMENT, gh_id INTEGER NOT NULL, rooms TEXT, from_date TEXT NOT NULL, to_date TEXT NOT NULL, reason TEXT, by_email TEXT, at TEXT)",
   "CREATE INDEX IF NOT EXISTS gh_blocks_gh ON gh_blocks (gh_id, from_date)",
+  "CREATE TABLE IF NOT EXISTS audit (id INTEGER PRIMARY KEY AUTOINCREMENT, at TEXT NOT NULL, email TEXT, role TEXT, client_id INTEGER, action TEXT NOT NULL, target TEXT, detail TEXT, ip TEXT, ok INTEGER DEFAULT 1)",
+  "CREATE INDEX IF NOT EXISTS audit_at ON audit (at)",
   "CREATE TABLE IF NOT EXISTS guests (id INTEGER PRIMARY KEY AUTOINCREMENT, client_id INTEGER NOT NULL, gkey TEXT NOT NULL, title TEXT, name TEXT, gender TEXT, email TEXT, phone TEXT, grade TEXT, emp_code TEXT, base TEXT, uses INTEGER DEFAULT 0, last_used TEXT, UNIQUE (client_id, gkey))",
   // hotel bookings removed by the Zuna team (kept so they can be restored)
   "CREATE TABLE IF NOT EXISTS tx_removed (id INTEGER PRIMARY KEY AUTOINCREMENT, client_id INTEGER NOT NULL, code TEXT NOT NULL, row TEXT NOT NULL, upload_id INTEGER, by_email TEXT, at TEXT, restored TEXT)",
@@ -758,6 +760,83 @@ async function ratesApi(env, user, path, b) {
     return json({cost: ghCostFrom(rows, rt, b.check_in, b.check_out, cl ? cl.svc_fee : 0, b.plan, b.occupancy), room_type_id: rt, plans: plansFrom(rows, rt)});
   }
   return json({error: "Not found."}, 404);
+}
+
+/* ---------- Backup ----------
+   Every table (except sign-in sessions and reset codes) as one gzip JSON file in the BACKUPS KV namespace.
+   Nightly from the cron, or on demand from Admin → Backups. Files older than 30 days are deleted. */
+const BACKUP_SKIP = new Set(["_cf_KV", "sqlite_sequence", "sessions", "resets"]), BACKUP_DAYS = 30;
+async function backupNow(env, by) {
+  if (!env.BACKUPS) return {error: "Backup storage is not set up."};
+  const {results: tabs} = await env.DB.prepare("SELECT name FROM sqlite_master WHERE type = 'table' AND name NOT LIKE 'sqlite_%' ORDER BY name").all();
+  const at = new Date().toISOString(), data = {format: "ltmgh-backup-1", at, by, tables: {}}, counts = {};
+  for (const {name} of tabs) { if (BACKUP_SKIP.has(name) || !/^\w+$/.test(name)) continue; const rows = [];
+    for (let off = 0; ; off += 1000) { const {results} = await env.DB.prepare('SELECT * FROM "' + name + '" LIMIT 1000 OFFSET ' + off).all(); rows.push(...results); if (results.length < 1000) break; }
+    data.tables[name] = rows; counts[name] = rows.length; }
+  const raw = new TextEncoder().encode(JSON.stringify(data));
+  const gz = await new Response(new Blob([raw]).stream().pipeThrough(new CompressionStream("gzip"))).arrayBuffer();
+  const key = "backup/" + at.replace(/[:.]/g, "-") + ".json.gz", meta = {at, by, bytes: gz.byteLength, raw: raw.byteLength, rows: Object.values(counts).reduce((a, b) => a + b, 0), tables: Object.keys(counts).length};
+  await env.BACKUPS.put(key, gz, {metadata: meta});
+  const {keys} = await env.BACKUPS.list({prefix: "backup/"});
+  for (const k of keys) if (Date.now() - Date.parse((k.metadata || {}).at || 0) > BACKUP_DAYS * 864e5) await env.BACKUPS.delete(k.name);
+  return Object.assign({key}, meta);
+}
+async function backupList(env) {
+  if (!env.BACKUPS) return {ready: false, backups: []};
+  const {keys} = await env.BACKUPS.list({prefix: "backup/"});
+  return {ready: true, keep_days: BACKUP_DAYS, backups: keys.map((k) => Object.assign({key: k.name}, k.metadata || {})).sort((a, b) => String(b.at).localeCompare(String(a.at)))};
+}
+
+/* ---------- Audit log ----------
+   One row for every change made through the portal (and every sign-in): who, when, what, on which client, from which IP.
+   Written after the request has been handled; reads (lists, quotes, previews) are not logged. Secrets and files are never stored. */
+const AUDIT_READS = new Set(["/api/admin/state", "/api/admin/quote", "/api/admin/tx/preview", "/api/admin/tx/stored", "/api/admin/tx/uploads", "/api/admin/tx/file", "/api/admin/backups", "/api/admin/backup/download", "/api/admin/audit",
+  "/api/manage/state", "/api/book/avail", "/api/book/quote", "/api/trips", "/api/bookings", "/api/guests", "/api/tx"]);
+const AUDIT_LABEL = {"/api/login": "Signed in", "/api/forgot": "Asked for a password reset code", "/api/reset": "Reset own password", "/api/vouchers": "Hotel Desk update",
+  "/api/book": "Booked a stay", "/api/book/update": "Changed a booking", "/api/book/cancel": "Cancelled a booking", "/api/book/resend": "Sent the booking email",
+  "/api/admin/rate": "Saved a rate", "/api/admin/block": "Saved blackout dates", "/api/admin/svc": "Changed the service charge", "/api/admin/cancel": "Saved a cancellation policy",
+  "/api/admin/gh": "Saved a guest house", "/api/admin/gh/delete": "Deleted a guest house", "/api/admin/client": "Saved client settings", "/api/admin/client/logo": "Changed the client logo",
+  "/api/admin/doc": "Saved a document", "/api/admin/doc/delete": "Deleted a document", "/api/admin/photo": "Added a photo", "/api/admin/photo/delete": "Deleted a photo",
+  "/api/admin/booking": "Saved a stay", "/api/admin/booking/delete": "Removed a stay", "/api/admin/booking/restore": "Restored a stay",
+  "/api/admin/tx/import": "Uploaded a hotel report", "/api/admin/tx/undo": "Undid a hotel report upload", "/api/admin/tx/keep": "Kept a possible duplicate", "/api/admin/tx/remove": "Removed a hotel booking", "/api/admin/tx/restore": "Restored a hotel booking",
+  "/api/admin/user": "Saved a user", "/api/admin/user/access": "Changed a user's access", "/api/admin/user/reset": "Reset a user's password", "/api/admin/reminders": "Sent document reminders", "/api/admin/backup": "Backed up the data now",
+  "/api/manage/user": "Saved a user", "/api/manage/user/access": "Changed a user's access", "/api/manage/user/reset": "Reset a user's password"};
+const AUDIT_DROP = /^(password|pw|new_password|new_pw|old_password|current|code|token|pdf|data|file|content|logo|image|photo|csv|rows|xlsx|b64)$/i;
+const auditClean = (v, d) => { if (v == null) return v; if (typeof v === "string") return v.length > 160 ? v.slice(0, 160) + "…" : v; if (typeof v !== "object") return v; if (d > 2) return "…";
+  if (Array.isArray(v)) return v.length > 12 ? v.slice(0, 12).map((x) => auditClean(x, d + 1)).concat(["… " + (v.length - 12) + " more"]) : v.map((x) => auditClean(x, d + 1));
+  const o = {}; for (const [k, x] of Object.entries(v)) { if (AUDIT_DROP.test(k)) { if (x) o[k] = "(not stored)"; continue; } o[k] = auditClean(x, d + 1); } return o; };
+async function auditBody(request, path) {
+  if (request.method !== "POST" || !path.startsWith("/api/") || AUDIT_READS.has(path)) return null;
+  try { const t = await request.clone().text(); return t.length > 200000 ? {_size: t.length} : JSON.parse(t || "{}"); } catch (e) { return {}; }
+}
+async function auditWrite(env, request, path, body, res) {
+  try {
+    const login = path === "/api/login", ok = res.status < 400;
+    if (!ok && !login) return;   // refused requests change nothing (failed sign-ins are kept)
+    await ensureSchema(env); let u = null; if (!login) u = await currentUser(request, env).catch(() => null);
+    const email = login || path === "/api/forgot" || path === "/api/reset" ? String(body.email || "").toLowerCase().slice(0, 120) : path === "/api/vouchers" ? "Zuna Hotel Desk" : u ? u.email : "";
+    let action = AUDIT_LABEL[path] || path.replace(/^\/api\//, "");
+    if (login && !ok) action = "Sign-in failed";
+    if (body.delete) action = action.replace(/^Saved an? /, "Deleted a ").replace(/^Saved blackout dates/, "Removed blackout dates");
+    const tgt = [body.property, body.name && !login ? body.name : "", body.email && !login && path !== "/api/forgot" && path !== "/api/reset" ? body.email : "", body.code, body.id ? "#" + body.id : ""].filter(Boolean).join(" · ").slice(0, 200);
+    if (login && ok) { const r = await env.DB.prepare("SELECT role, client_id FROM users WHERE email = ?").bind(email).first(); if (r) u = {email, admin: r.role === "admin", manager: r.role === "client_admin", client_id: r.client_id}; }
+    const cid = +body.client_id || (u && u.client_id) || null;
+    await env.DB.prepare("INSERT INTO audit (at, email, role, client_id, action, target, detail, ip, ok) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)")
+      .bind(new Date().toISOString(), email, u ? (u.admin ? "Zuna admin" : u.manager ? "Client admin" : "Client user") : login ? "" : "System", cid, action, tgt, JSON.stringify(auditClean(body, 0)).slice(0, 4000), request.headers.get("cf-connecting-ip") || request.headers.get("x-forwarded-for") || "", ok ? 1 : 0).run();
+  } catch (e) { /* the log must never break a request */ }
+}
+async function auditList(env, b) {
+  const w = [], p = [];
+  if (b.from && isoD.test(b.from)) { w.push("at >= ?"); p.push(b.from); }
+  if (b.to && isoD.test(b.to)) { w.push("at < ?"); p.push(new Date(Date.parse(b.to) + 864e5).toISOString().slice(0, 10)); }
+  if (b.client_id) { w.push("client_id = ?"); p.push(+b.client_id); }
+  if (b.kind === "signin") w.push("action IN ('Signed in', 'Sign-in failed')"); else if (b.kind === "bookings") w.push("action IN ('Booked a stay', 'Changed a booking', 'Cancelled a booking', 'Sent the booking email')");
+  else if (b.kind === "rates") w.push("(action LIKE '%rate%' OR action LIKE '%blackout%' OR action LIKE '%service charge%' OR action LIKE '%cancellation%')"); else if (b.kind === "changes") w.push("action NOT IN ('Signed in', 'Sign-in failed')");
+  if (b.q) { const q = "%" + String(b.q).slice(0, 80).replace(/[%_]/g, "") + "%"; w.push("(email LIKE ? OR action LIKE ? OR target LIKE ? OR detail LIKE ?)"); p.push(q, q, q, q); }
+  if (b.before) { w.push("id < ?"); p.push(+b.before); }
+  const lim = Math.min(+b.limit || 100, 5000);
+  const {results} = await env.DB.prepare("SELECT * FROM audit" + (w.length ? " WHERE " + w.join(" AND ") : "") + " ORDER BY id DESC LIMIT " + (lim + 1)).bind(...p).all();
+  return {rows: results.slice(0, lim).map((x) => ({id: x.id, at: x.at, email: x.email || "", role: x.role || "", client_id: x.client_id, action: x.action, target: x.target || "", detail: jparse(x.detail, {}), ip: x.ip || "", ok: !!x.ok})), more: results.length > lim};
 }
 
 /* ---------- Book a room + Trips ----------
@@ -1170,6 +1249,12 @@ async function adminApi(req, env, user, path) {
   try {
     switch (path) {
       case "/api/admin/state": return json(await adminState(env, user));
+      case "/api/admin/backups": return json(await backupList(env));
+      case "/api/admin/backup": { const r = await backupNow(env, user.email); return r.error ? json(r, 503) : json({ok: true, backup: r}); }
+      case "/api/admin/backup/download": { if (!env.BACKUPS || !/^backup\/[\w.-]+\.json\.gz$/.test(b.key || "")) return json({error: "Backup not found."}, 404);
+        const v = await env.BACKUPS.get(b.key, "arrayBuffer"); if (!v) return json({error: "Backup not found."}, 404);
+        return new Response(v, {headers: {"content-type": "application/gzip", "content-disposition": 'attachment; filename="' + b.key.slice(7) + '"', "cache-control": "no-store"}}); }
+      case "/api/admin/audit": return json(await auditList(env, b));
       case "/api/admin/rate":
       case "/api/admin/block":
       case "/api/admin/quote": return ratesApi(env, user, path, b);
@@ -1341,10 +1426,17 @@ const signIn = (request) => {
   return html(LOGIN.replace("</body>", note), {"set-cookie": COOKIE + "=; Path=/; HttpOnly; Secure; SameSite=Lax; Max-Age=0"});
 };
 
-export default {
+const WORKER = {
   // daily (Cloudflare cron trigger): e-mail reminders for guest house documents nearing expiry
-  async scheduled(event, env, ctx) { ctx.waitUntil(docReminders(env)); },
-  async fetch(request, env) {
+  async scheduled(event, env, ctx) { ctx.waitUntil(docReminders(env)); ctx.waitUntil(backupNow(env, "nightly").catch(() => null));
+    ctx.waitUntil(env.DB.prepare("DELETE FROM audit WHERE at < ?").bind(new Date(Date.now() - 3 * 365 * 864e5).toISOString()).run().catch(() => null)); },
+  async fetch(request, env, ctx) {
+    const path0 = new URL(request.url).pathname, body0 = await auditBody(request, path0);
+    const res = await WORKER.route(request, env);
+    if (body0) { const w = auditWrite(env, request, path0, body0, res); if (ctx && ctx.waitUntil) ctx.waitUntil(w); else await w; }
+    return res;
+  },
+  async route(request, env) {
     try { return await handle(request, env); }
     catch (e) {
       console.error(e && e.stack || e);
@@ -1432,6 +1524,7 @@ async function handle(request, env) {
   }
 }
 
+export default WORKER;
 const LOGIN = "";
 const ERRPAGE = "";
 const TEMPLATE = "";

@@ -416,7 +416,7 @@ let schemaReady = false;
 async function ensureSchema(env) {
   if (schemaReady) return;
   for (const q of SCHEMA) await env.DB.prepare(q).run();
-  for (const c of ["users ADD COLUMN role TEXT", "users ADD COLUMN client_id INTEGER", "guesthouses ADD COLUMN state TEXT", "guesthouses ADD COLUMN country TEXT", "room_types ADD COLUMN bed_type TEXT", "clients ADD COLUMN legal_name TEXT", "users ADD COLUMN tx_access INTEGER", "tx_uploads ADD COLUMN hash TEXT", "tx_uploads ADD COLUMN file_id INTEGER", "transactions ADD COLUMN held INTEGER", "users ADD COLUMN book_access INTEGER", "clients ADD COLUMN mail_cc TEXT", "clients ADD COLUMN mail_bcc TEXT", "trips ADD COLUMN wbs TEXT", "clients ADD COLUMN elig TEXT", "clients ADD COLUMN svc_fee REAL", "guesthouses ADD COLUMN checkin_time TEXT", "guesthouses ADD COLUMN checkout_time TEXT", "guesthouses ADD COLUMN team_emails TEXT"]) { try { await env.DB.prepare("ALTER TABLE " + c).run(); } catch (e) { /* exists */ } }
+  for (const c of ["users ADD COLUMN role TEXT", "users ADD COLUMN client_id INTEGER", "guesthouses ADD COLUMN state TEXT", "guesthouses ADD COLUMN country TEXT", "room_types ADD COLUMN bed_type TEXT", "clients ADD COLUMN legal_name TEXT", "users ADD COLUMN tx_access INTEGER", "tx_uploads ADD COLUMN hash TEXT", "tx_uploads ADD COLUMN file_id INTEGER", "transactions ADD COLUMN held INTEGER", "users ADD COLUMN book_access INTEGER", "clients ADD COLUMN mail_cc TEXT", "clients ADD COLUMN mail_bcc TEXT", "trips ADD COLUMN wbs TEXT", "clients ADD COLUMN elig TEXT", "clients ADD COLUMN svc_fee REAL", "guesthouses ADD COLUMN checkin_time TEXT", "guesthouses ADD COLUMN checkout_time TEXT", "guesthouses ADD COLUMN team_emails TEXT", "gh_rates ADD COLUMN plan TEXT", "gh_rates ADD COLUMN fare_double REAL", "gh_rates ADD COLUMN extra_bed REAL", "trips ADD COLUMN plan TEXT"]) { try { await env.DB.prepare("ALTER TABLE " + c).run(); } catch (e) { /* exists */ } }
   schemaReady = true;
 }
 const DEFAULT_GRADES = "M1,M2,M3,M4,M5,M6,M7,M8,P1,P2,P3,E1,E2,E3,E4,E5,E6,E7";
@@ -687,13 +687,18 @@ async function ghBlocks(env, ghId, from, to) {   // blocks touching the nights f
 }
 const blocksFor = (blocks, room) => blocks.filter((b) => !b.rooms.length || b.rooms.includes(room));
 // cost of the nights ci..co (co exclusive) in a room type of a guest house
-async function ghCost(env, ghId, roomTypeId, ci, co, svcFee) {
-  const {results} = await env.DB.prepare("SELECT * FROM gh_rates WHERE gh_id = ? AND from_date < ? AND to_date >= ? AND (room_type_id = 0 OR room_type_id = ?)").bind(ghId, co, ci, +roomTypeId || 0).all();
-  const pick = (d) => results.filter((x) => x.from_date <= d && x.to_date >= d).sort((a, b) => ((b.room_type_id ? 1 : 0) - (a.room_type_id ? 1 : 0)) || (b.from_date < a.from_date ? -1 : b.from_date > a.from_date ? 1 : 0) || b.id - a.id)[0];
-  const segs = [], out = {nights: 0, missing: 0, fare: 0, fare_tax: 0, svc: 0, svc_gst: 0, total: 0, segments: segs};
-    for (let d = ci; d < co; d = new Date(Date.parse(d) + 864e5).toISOString().slice(0, 10)) {
+// rate plans (meal plans). Rates saved before plans existed count as EP.
+const PLANS = [["EP", "Room only"], ["CP", "Breakfast included"], ["MAP", "Breakfast + one meal"], ["AP", "All meals"]];
+const PLAN_CODES = PLANS.map((p) => p[0]), planOf = (x) => PLAN_CODES.includes(x) ? x : "EP", planLabel = (c) => { const p = PLANS.find((x) => x[0] === c); return p ? p[0] + " · " + p[1] : ""; };
+async function ghRates(env, ghId, ci, co) { const {results} = await env.DB.prepare("SELECT * FROM gh_rates WHERE gh_id = ? AND from_date < ? AND to_date >= ?").bind(ghId, co, ci).all(); return results; }
+function ghCostFrom(rows, roomTypeId, ci, co, svcFee, plan, occupancy) {
+  const rt = +roomTypeId || 0, pl = planOf(plan), dbl = occupancy === "Double";
+  const mine = rows.filter((x) => (!x.room_type_id || x.room_type_id === rt) && planOf(x.plan) === pl);
+  const pick = (d) => mine.filter((x) => x.from_date <= d && x.to_date >= d).sort((a, b) => ((b.room_type_id ? 1 : 0) - (a.room_type_id ? 1 : 0)) || (b.from_date < a.from_date ? -1 : b.from_date > a.from_date ? 1 : 0) || b.id - a.id)[0];
+  const segs = [], out = {plan: pl, occupancy: dbl ? "Double" : "Single", nights: 0, missing: 0, fare: 0, fare_tax: 0, svc: 0, svc_gst: 0, total: 0, per_night: 0, segments: segs};
+  for (let d = ci; d < co; d = new Date(Date.parse(d) + 864e5).toISOString().slice(0, 10)) {
     out.nights++; const r = pick(d); if (!r) { out.missing++; continue; }
-    const fare = r.nil ? 0 : +r.fare || 0, tax = fare * FARE_TAX(fare);
+    const fare = r.nil ? 0 : (dbl && +r.fare_double > 0 ? +r.fare_double : +r.fare || 0), tax = fare * FARE_TAX(fare);
     out.fare += fare; out.fare_tax += tax;
     const last = segs[segs.length - 1];
     if (last && last.rate_id === r.id) { last.nights++; last.to = d; } else segs.push({rate_id: r.id, from: d, to: d, nights: 1, nil: !!r.nil, fare, tax_rate: fare ? FARE_TAX(fare) : 0, scope: r.room_type_id ? "room type" : "guest house"});
@@ -701,13 +706,17 @@ async function ghCost(env, ghId, roomTypeId, ci, co, svcFee) {
   if (out.nights) out.svc = +svcFee || 0;   // the client's service charge, once per booking
   out.svc_gst = out.svc * SVC_GST;
   ["fare", "fare_tax", "svc", "svc_gst"].forEach((k) => { out[k] = r2(out[k]); }); out.total = r2(out.fare + out.fare_tax + out.svc + out.svc_gst);
+  out.per_night = out.nights - out.missing ? r2((out.fare + out.fare_tax) / (out.nights - out.missing)) : 0;
   return out;
 }
+// plans with a rate on at least one of these nights for this room type, in EP → AP order
+const plansFrom = (rows, roomTypeId) => PLAN_CODES.filter((p) => rows.some((x) => (!x.room_type_id || x.room_type_id === (+roomTypeId || 0)) && planOf(x.plan) === p));
+async function ghCost(env, ghId, roomTypeId, ci, co, svcFee, plan, occupancy) { return ghCostFrom(await ghRates(env, ghId, ci, co), roomTypeId, ci, co, svcFee, plan, occupancy); }
 async function ratesState(env, ghIds) {
   if (!ghIds.length) return {rates: [], blocks: []};
   const q = "(" + ghIds.map(() => "?").join(",") + ")";
   const [{results: rates}, {results: blocks}] = await Promise.all([env.DB.prepare("SELECT * FROM gh_rates WHERE gh_id IN " + q + " ORDER BY gh_id, from_date DESC, id DESC").bind(...ghIds).all(), env.DB.prepare("SELECT * FROM gh_blocks WHERE gh_id IN " + q + " ORDER BY gh_id, from_date DESC, id DESC").bind(...ghIds).all()]);
-  return {rates: rates.map((x) => ({id: x.id, gh_id: x.gh_id, room_type_id: x.room_type_id || 0, from: x.from_date, to: x.to_date, nil: !!x.nil, fare: +x.fare || 0, svc: +x.svc || 0, svc_unit: x.svc_unit || "night", note: x.note || "", by: x.by_email || "", at: x.at || ""})),
+  return {rates: rates.map((x) => ({id: x.id, gh_id: x.gh_id, room_type_id: x.room_type_id || 0, from: x.from_date, to: x.to_date, plan: planOf(x.plan), nil: !!x.nil, fare: +x.fare || 0, fare_double: +x.fare_double || 0, extra_bed: +x.extra_bed || 0, svc: +x.svc || 0, svc_unit: x.svc_unit || "night", note: x.note || "", by: x.by_email || "", at: x.at || ""})),
     blocks: blocks.map((x) => ({id: x.id, gh_id: x.gh_id, rooms: String(x.rooms || "").split(",").map((s) => s.trim()).filter(Boolean), from: x.from_date, to: x.to_date, reason: x.reason || "", by: x.by_email || "", at: x.at || ""}))};
 }
 async function ratesApi(env, user, path, b) {
@@ -721,12 +730,17 @@ async function ratesApi(env, user, path, b) {
     if (tbl === "gh_rates") {
       const rt = +b.room_type_id || 0;
       if (rt && !(await env.DB.prepare("SELECT id FROM room_types WHERE id = ? AND gh_id = ?").bind(rt, gh.id).first())) return json({error: "That room type is not in " + gh.name + "."}, 400);
-      const nil = !!b.nil, fare = nil ? 0 : Math.round((+b.fare || 0) * 100) / 100, svc = 0, unit = "booking";   // service charge is set per client
-      if (!nil && !(fare > 0)) return json({error: "Enter the basic fare per night, or choose Nil."}, 400);
-      if (fare > 1000000) return json({error: "Check the amount."}, 400);
-      const vals = [rt, b.from, b.to, nil ? 1 : 0, fare, svc, unit, clean(b.note, 160), user.email, now];
-      if (b.id) await env.DB.prepare("UPDATE gh_rates SET room_type_id = ?, from_date = ?, to_date = ?, nil = ?, fare = ?, svc = ?, svc_unit = ?, note = ?, by_email = ?, at = ? WHERE id = ? AND gh_id = ?").bind(...vals, +b.id, gh.id).run();
-      else await env.DB.prepare("INSERT INTO gh_rates (gh_id, room_type_id, from_date, to_date, nil, fare, svc, svc_unit, note, by_email, at) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)").bind(gh.id, ...vals).run();
+      const money = (v) => Math.round((+v || 0) * 100) / 100, nil = !!b.nil, fare = nil ? 0 : money(b.fare), dbl = nil ? 0 : money(b.fare_double), xb = nil ? 0 : money(b.extra_bed), svc = 0, unit = "booking";   // service charge is set per client
+      const plans = [...new Set((Array.isArray(b.plans) ? b.plans : [b.plan]).filter((p) => PLAN_CODES.includes(p)))];
+      if (!plans.length) plans.push("EP");   // no plan given: room only
+      if (b.id && plans.length > 1) return json({error: "A saved rate has one plan. Add a new rate for the other plans."}, 400);
+      if (!nil && !(fare > 0)) return json({error: "Enter the single occupancy price per night, or choose Nil."}, 400);
+      if (dbl && dbl < fare) return json({error: "The double occupancy price can't be lower than the single price."}, 400);
+      if (fare > 1000000 || dbl > 1000000 || xb > 1000000) return json({error: "Check the amount."}, 400);
+      for (const pl of plans) {
+        const vals = [rt, b.from, b.to, nil ? 1 : 0, fare, dbl, xb, pl, svc, unit, clean(b.note, 160), user.email, now];
+        if (b.id) await env.DB.prepare("UPDATE gh_rates SET room_type_id = ?, from_date = ?, to_date = ?, nil = ?, fare = ?, fare_double = ?, extra_bed = ?, plan = ?, svc = ?, svc_unit = ?, note = ?, by_email = ?, at = ? WHERE id = ? AND gh_id = ?").bind(...vals, +b.id, gh.id).run();
+        else await env.DB.prepare("INSERT INTO gh_rates (gh_id, room_type_id, from_date, to_date, nil, fare, fare_double, extra_bed, plan, svc, svc_unit, note, by_email, at) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)").bind(gh.id, ...vals).run(); }
     } else {
       const rooms = (Array.isArray(b.rooms) ? b.rooms : []).map((x) => clean(x, 40)).filter(Boolean).slice(0, 200).join(",");
       const vals = [rooms, b.from, b.to, clean(b.reason, 160), user.email, now];
@@ -740,7 +754,8 @@ async function ratesApi(env, user, path, b) {
     let rt = +b.room_type_id || 0;
     if (!rt && b.room) { const {results} = await env.DB.prepare("SELECT id, room_nos FROM room_types WHERE gh_id = ?").bind(gh.id).all(); const hit = results.find((t) => expandRooms(t.room_nos).includes(String(b.room))); if (hit) rt = hit.id; }
     const cl = await env.DB.prepare("SELECT svc_fee FROM clients WHERE id = ?").bind(gh.client_id).first();
-    return json({cost: await ghCost(env, gh.id, rt, b.check_in, b.check_out, cl ? cl.svc_fee : 0), room_type_id: rt});
+    const rows = await ghRates(env, gh.id, b.check_in, b.check_out);
+    return json({cost: ghCostFrom(rows, rt, b.check_in, b.check_out, cl ? cl.svc_fee : 0, b.plan, b.occupancy), room_type_id: rt, plans: plansFrom(rows, rt)});
   }
   return json({error: "Not found."}, 404);
 }
@@ -781,7 +796,7 @@ function tripInput(b, client, isNew) {
   const iso = /^\d{4}-\d{2}-\d{2}$/, t = {property: clean(b.property, 120), check_in: String(b.check_in || ""), check_out: String(b.check_out || ""), room: clean(b.room, 40),
     title: ["Mr.", "Ms.", "Mrs.", "Dr."].includes(b.title) ? b.title : "", name: clean(b.name, 100).replace(/^\s*(mr|mrs|ms|miss|dr)\b\.?\s*/i, ""), grade: clean(b.grade, 20),
     emp_code: clean(b.emp_code, 30), email: emailList(b.email)[0] || "", phone: clean(b.phone, 20).replace(/[^\d+\-\s]/g, ""), base: clean(b.base, 60), concur_tr: clean(b.concur_tr, 40), wbs: clean(b.wbs, 60),
-    occupancy: b.occupancy === "Double" ? "Double" : "Single", note: clean(b.note, 300), cc: emailList(client.mail_cc).join(", "), bcc: emailList(client.mail_bcc).join(", ")};   // email copies are set by Zuna in Client settings, never by the booker
+    occupancy: b.occupancy === "Double" ? "Double" : "Single", plan: PLAN_CODES.includes(b.plan) ? b.plan : "", note: clean(b.note, 300), cc: emailList(client.mail_cc).join(", "), bcc: emailList(client.mail_bcc).join(", ")};   // email copies are set by Zuna in Client settings, never by the booker
   t.gender = ["Male", "Female"].includes(b.gender) ? b.gender : t.title === "Mr." ? "Male" : t.title === "Ms." || t.title === "Mrs." ? "Female" : "";
   if (!t.property) return {err: "Choose the guest house."};
   if (!iso.test(t.check_in) || !iso.test(t.check_out) || t.check_out <= t.check_in) return {err: "Check-out must be after check-in."};
@@ -816,6 +831,9 @@ async function placeTrip(env, user, cid, b, trip) {
     if (!room) return json({error: "No room in " + t.property + " is free for these nights for grade " + t.grade + "."}, 409); }
   if (room.state === "shared") t.occupancy = "Double";
   t.room = room.room;
+  // rate plan: one of the plans priced for this room type on these nights (the first one if none was chosen)
+  if (av.gh && av.gh.id) { const offered = plansFrom(await ghRates(env, av.gh.id, t.check_in, t.check_out), room.type_id);
+    if (offered.length && !offered.includes(t.plan)) { if (t.plan) return json({error: "The " + t.plan + " plan is not offered for room " + room.room + " on these dates. Choose " + offered.join(", ") + "."}, 400); t.plan = offered[0]; } }
   // the same guest must not have another stay on these nights
   const bk = await readSet(env, "bookings"), names = new Set((await clientGuestHouses(env, client, true)).map((g) => g.property)), me = nameKey(t.name);
   const clash = bk.rows.find((x) => names.has(x.property) && x.status === "Confirmed" && nameKey(x.guest) === me && x.check_in < t.check_out && x.check_out > t.check_in && guestKey(x) !== oldKey);
@@ -828,7 +846,7 @@ async function placeTrip(env, user, cid, b, trip) {
   const stay = {property: t.property, guest: guestOf(t), check_in: t.check_in}; await ghCodes(env, [stay]); const code = stay.booking_code || (trip && trip.code) || "";
   const now = new Date().toISOString(), hist = trip ? jparse(trip.history, []) : [];
   hist.push({at: now, by: user.email, what: trip ? "Changed" : "Booked", detail: t.property + " · room " + t.room + " · " + fmtD(t.check_in) + " → " + fmtD(t.check_out)});
-  const cols = ["code", "property", "room", "title", "name", "gender", "grade", "emp_code", "email", "phone", "base", "concur_tr", "wbs", "occupancy", "check_in", "check_out", "note", "cc", "bcc"], vals = cols.map((k) => k === "code" ? code : t[k]);
+  const cols = ["code", "property", "room", "title", "name", "gender", "grade", "emp_code", "email", "phone", "base", "concur_tr", "wbs", "occupancy", "plan", "check_in", "check_out", "note", "cc", "bcc"], vals = cols.map((k) => k === "code" ? code : t[k]);
   let id;
   if (trip) { await env.DB.prepare("UPDATE trips SET " + cols.map((k) => k + " = ?").join(", ") + ", changed_by = ?, changed_at = ?, history = ? WHERE id = ?").bind(...vals, user.email, now, JSON.stringify(hist), trip.id).run(); id = trip.id; }
   else { const r = await env.DB.prepare("INSERT INTO trips (client_id, " + cols.join(", ") + ", status, booked_by, booked_at, history) VALUES (?, " + cols.map(() => "?").join(", ") + ", 'Confirmed', ?, ?, ?)").bind(client.id, ...vals, user.email, now, JSON.stringify(hist)).run(); id = r.meta ? r.meta.last_row_id : r.lastInsertRowid; }
@@ -841,7 +859,7 @@ async function placeTrip(env, user, cid, b, trip) {
 // guest house helpdesk for the voucher: the guest house's contacts from the directory
 const helpdeskOf = (gh) => ((gh && gh.contacts) || []).filter((c) => c.phone || c.email).slice(0, 4).map((c) => ({name: c.name || '', designation: c.designation || '', phone: c.phone || '', email: c.email || ''}));
 const tripOut = (x, admin) => ({id: x.id, code: x.code || "", property: x.property, room: x.room, title: x.title || "", name: x.name, guest: guestOf(x), gender: x.gender, grade: x.grade, emp_code: x.emp_code || "", email: x.email || "", phone: x.phone || "",
-  base: x.base || "", concur_tr: x.concur_tr || "", wbs: x.wbs || "", occupancy: x.occupancy, check_in: x.check_in, check_out: x.check_out, note: x.note || "", status: x.status, cc: admin ? x.cc || "" : "", bcc: admin ? x.bcc || "" : "",
+  base: x.base || "", concur_tr: x.concur_tr || "", wbs: x.wbs || "", occupancy: x.occupancy, plan: x.plan || "", plan_label: planLabel(x.plan), check_in: x.check_in, check_out: x.check_out, note: x.note || "", status: x.status, cc: admin ? x.cc || "" : "", bcc: admin ? x.bcc || "" : "",
   booked_by: x.booked_by, booked_at: x.booked_at, changed_by: x.changed_by || "", changed_at: x.changed_at || "", cancelled_by: x.cancelled_by || "", cancelled_at: x.cancelled_at || "", cancel_reason: x.cancel_reason || "", mail_status: x.mail_status || "", history: jparse(x.history, [])});
 async function tripFor(env, user, cid, id) { return env.DB.prepare("SELECT * FROM trips WHERE id = ? AND client_id = ?").bind(+id || 0, cid).first(); }
 async function cancelTrip(env, user, cid, b) {
@@ -869,7 +887,7 @@ async function tripMail(env, client, trip, gh, kind, pdf) {
   const subject = K.subj + " · " + trip.property + " · " + fmtD(trip.check_in) + " – " + fmtD(trip.check_out) + " · " + (trip.code || "");
   const att = pdf && pdf.content && kind !== "cancelled" ? [{filename: pdf.filename || "Voucher.pdf", content: pdf.content, content_type: "application/pdf"}] : [];
   const live = kind !== "cancelled", L = "font-size:10.5px;letter-spacing:1.2px;font-weight:700;color:#6b6496";
-  const rows = [["Guest", guestOf(trip) + (trip.grade ? " · " + trip.grade : "")], ["Room", trip.room + " · " + (trip.occupancy === "Double" ? "Double occupancy (shared)" : "Single occupancy")],
+  const rows = [["Guest", guestOf(trip) + (trip.grade ? " · " + trip.grade : "")], ["Room", trip.room + " · " + (trip.occupancy === "Double" ? "Double occupancy (shared)" : "Single occupancy")], ["Meal plan", planLabel(trip.plan)],
     ["Employee code", trip.emp_code || ""], ["Remarks", trip.note || ""], kind === "cancelled" ? ["Reason", trip.cancel_reason || ""] : null].filter((r) => r && r[1]);
   const c0 = helpdeskOf(gh)[0];
   const ln = (t, st) => t ? '<div style="' + (st || "color:#4a4475") + '">' + esc(t) + '</div>' : "";
@@ -954,10 +972,10 @@ async function bookApi(req, env, user, path) {
     const rt = b.room ? ((gh.room_types || []).find((t) => expandRooms(t.room_nos).includes(String(b.room))) || {}).id || 0 : 0;
     const fee = await env.DB.prepare("SELECT svc_fee FROM clients WHERE id = ?").bind(client.id).first(), svc = fee ? fee.svc_fee : 0;
     if (b.all) {   // every room type at once, so the page can show charges the moment a room is picked
-      const ids = [0].concat((gh.room_types || []).map((t) => t.id)), costs = {};
-      (await Promise.all(ids.map((id) => ghCost(env, gh.id, id, b.check_in, b.check_out, svc)))).forEach((c, i) => { costs[ids[i]] = c; });
-      return json({costs}); }
-    return json({cost: await ghCost(env, gh.id, rt, b.check_in, b.check_out, svc)}); }
+      const ids = [0].concat((gh.room_types || []).map((t) => t.id)), costs = {}, rows = await ghRates(env, gh.id, b.check_in, b.check_out);
+      ids.forEach((id) => { const by = {}; const ps = plansFrom(rows, id); (ps.length ? ps : ["EP"]).forEach((p) => { by[p] = {Single: ghCostFrom(rows, id, b.check_in, b.check_out, svc, p, "Single"), Double: ghCostFrom(rows, id, b.check_in, b.check_out, svc, p, "Double")}; }); costs[id] = by; });
+      return json({costs, plans: PLANS}); }
+    return json({cost: await ghCost(env, gh.id, rt, b.check_in, b.check_out, svc, b.plan, b.occupancy)}); }
   if (path === "/api/book") return placeTrip(env, user, cid, b, null);
   if (path === "/api/book/update") { const tr = await tripFor(env, user, cid, b.id); if (!tr) return json({error: "Booking not found."}, 404);
     if (tr.status === "Cancelled") return json({error: "A cancelled booking can't be changed. Make a new booking instead."}, 409);

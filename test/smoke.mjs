@@ -378,7 +378,25 @@ check('old host redirects to PRIMARY_HOST', r.status === 301 && r.headers.get('l
       x = await B(asha, 'book/quote', {property: 'Acme House', room: 'A1', check_in: D(321), check_out: D(323)});
       check('booker sees the charges while booking', x.status === 200 && x.j.cost.fare === 0 && x.j.cost.svc === 200 && x.j.cost.total === 236);
       x = await B(asha, 'book/quote', {property: 'Acme House', all: true, check_in: D(305), check_out: D(307)});
-      check('charges for every room type in one request', x.j.costs[0].total === 12836 && x.j.costs[suite].total === 19116 && x.j.costs[deluxe].total === 12836);
+      check('charges for every room type in one request', x.j.costs[0].EP.Single.total === 12836 && x.j.costs[suite].EP.Single.total === 19116 && x.j.costs[deluxe].EP.Single.total === 12836);
+      // rate plans: CP with single / double prices, saved for several plans at once
+      check('an unknown plan is saved as EP', (await A('rate', {gh_id: g0.id, plans: ['XX'], from: D(300), to: D(330), fare: 3000})).status === 200);   // unknown plans fall back to EP
+      check('double price cannot be below single', (await A('rate', {gh_id: g0.id, plans: ['CP'], from: D(300), to: D(330), fare: 3000, fare_double: 2000})).status === 400);
+      x = await A('rate', {gh_id: g0.id, room_type_id: deluxe, plans: ['CP', 'MAP'], from: D(300), to: D(330), fare: 3000, fare_double: 4000, extra_bed: 800});
+      check('one rate saved per chosen plan', x.status === 200 && (await A('state', {})).j.clients.find((c) => c.id === acme).rates.filter((r) => r.plan === 'CP' || r.plan === 'MAP').length === 2);
+      q = (await A('quote', {gh_id: g0.id, room_type_id: deluxe, plan: 'CP', occupancy: 'Double', check_in: D(305), check_out: D(307)})).j.cost;
+      check('double occupancy uses the double price of the plan', q.plan === 'CP' && q.occupancy === 'Double' && q.fare === 8000 && q.fare_tax === 400 && q.per_night === 4200);
+      q = (await A('quote', {gh_id: g0.id, room_type_id: deluxe, plan: 'CP', check_in: D(305), check_out: D(307)})).j.cost;
+      check('single occupancy uses the single price of the plan', q.fare === 6000 && q.occupancy === 'Single');
+      x = await B(asha, 'book/quote', {property: 'Acme House', all: true, check_in: D(305), check_out: D(307)});
+      check('booker sees each priced plan per room type', Object.keys(x.j.costs[deluxe]).join() === 'EP,CP,MAP' && Object.keys(x.j.costs[suite]).join() === 'EP' && x.j.costs[deluxe].MAP.Double.fare === 8000);
+      const dRoom = String(g0.room_types.find((t2) => t2.id === deluxe).room_nos || '').split(/[,\s]+/)[0];
+      x = await B(asha, 'book', {property: 'Acme House', check_in: D(306), check_out: D(308), room: dRoom, plan: 'AP', title: 'Ms.', name: 'Plan Test', grade: 'E1', send_mail: false});
+      check('a plan not priced for the room is refused', x.status === 400 && /AP plan/.test(x.j.error));
+      x = await B(asha, 'book', {property: 'Acme House', check_in: D(306), check_out: D(308), room: dRoom, plan: 'MAP', title: 'Ms.', name: 'Plan Test', grade: 'E1', send_mail: false});
+      check('the chosen plan is saved on the booking', x.status === 200 && x.j.trip.plan === 'MAP' && /MAP/.test(x.j.trip.plan_label));
+      x = await B(asha, 'book', {property: 'Acme House', check_in: D(310), check_out: D(311), room: dRoom, title: 'Ms.', name: 'Plan Test Two', grade: 'E1', send_mail: false});
+      check('no plan chosen: the first priced plan is used', x.status === 200 && x.j.trip.plan === 'EP');
       q = (await A('quote', {gh_id: g0.id, room_type_id: deluxe, check_in: D(329), check_out: D(333)})).j.cost;
       check('nights without a rate are counted as missing', q.nights === 4 && q.missing === 2);
       await A('block', {gh_id: g0.id, rooms: ['A1'], from: D(340), to: D(342), reason: 'Painting'});
@@ -388,7 +406,7 @@ check('old host redirects to PRIMARY_HOST', r.status === 301 && r.headers.get('l
       await A('block', {gh_id: g0.id, rooms: [], from: D(350), to: D(352), reason: 'Closed'});
       check('a whole-house block leaves no room to book', (await B(asha, 'book', {property: 'Acme House', check_in: D(350), check_out: D(351), title: 'Mr.', name: 'Block Test', grade: 'E1'})).status === 409);
       const st2 = (await A('state', {})).j.clients.find((c) => c.id === acme);
-      check('admin state lists rates and blocks', st2.rates.length === 3 && st2.blocks.length === 2);
+      check('admin state lists rates and blocks', st2.rates.length === 6 && st2.blocks.length === 2);
       await A('block', {gh_id: g0.id, id: st2.blocks[0].id, delete: true}); check('a block can be removed', (await A('state', {})).j.clients.find((c) => c.id === acme).blocks.length === 1);
     }
     await M('user/access', {email: 'asha@acme.example', book: false});

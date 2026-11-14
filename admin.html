@@ -221,11 +221,13 @@ const quickRanges = () => { const t = new Date(), y = t.getFullYear(), m = t.get
 const datePair = (from, to, fromLabel, toLabel) => { const g = h('div', 'grid grid-cols-2 gap-3'); const a = inp(from, '', 'date'), b = inp(to, '', 'date'); g.append(field(fromLabel || 'From', a), field(toLabel || 'To', b));
   const q = h('div', 'flex flex-wrap gap-1.5 mt-2'); quickRanges().forEach(([l, f, t]) => { const c = h('button', 'rounded-lg px-2.5 py-1 text-xs font-semibold bg-zuna-50 text-zuna-700 ring-1 ring-zuna-100 hover:ring-mint-500', l); c.type = 'button'; c.onclick = () => { a.value = f; b.value = t; a.dispatchEvent(new Event('change')); }; q.appendChild(c); });
   const w = h('div'); w.append(g, q); return {el: w, from: a, to: b}; };
+const PLANS = [['EP', 'Room only'], ['CP', 'Breakfast included'], ['MAP', 'Breakfast + one meal'], ['AP', 'All meals']];
+const planChip = (p) => h('span', 'inline-flex items-center rounded-md px-1.5 py-0.5 text-[10.5px] font-bold tracking-wide ' + ({EP: 'bg-zuna-100 text-zuna-700', CP: 'bg-mint-50 text-mint-700 ring-1 ring-mint-200', MAP: 'bg-amber-50 text-amber-800 ring-1 ring-amber-200', AP: 'bg-zuna-900 text-white'}[p] || 'bg-zuna-100'), p);
 const renderRates = (D, c) => {
   const ghs = c.guesthouses; if (!ghs.length) { D.appendChild(h('div', 'card p-10 text-center text-sm text-zuna-500', 'Add a guest house first.')); return; }
   if (!ghs.some((g) => g.id === RT.gh[c.id])) RT.gh[c.id] = ghs[0].id; const g = ghs.find((x) => x.id === RT.gh[c.id]);
   const types = g.room_types || [], tName = (id) => id ? ((types.find((t) => t.id === id) || {}).name || 'Room type') : 'Whole guest house';
-  const rates = (c.rates || []).filter((r) => r.gh_id === g.id), blocks = (c.blocks || []).filter((b) => b.gh_id === g.id);
+  const allRates = (c.rates || []).filter((r) => r.gh_id === g.id), blocks = (c.blocks || []).filter((b) => b.gh_id === g.id), pf0 = RT.plan || '', rates = allRates.filter((r) => !pf0 || r.plan === pf0);
   const view = RT.view || 'rates', today = new Date().toISOString().slice(0, 10);
   const iconBtn = (ic, lab, cls) => { const x = h('button', 'iconbtn ' + (cls || '')); x.type = 'button'; x.title = lab; x.setAttribute('aria-label', lab); x.appendChild(icon(ic, 'w-4 h-4')); return x; };
   const shell = h('div', 'card overflow-hidden'); D.appendChild(shell);
@@ -249,10 +251,10 @@ const renderRates = (D, c) => {
   // sub-views + the action for the open one
   const sb = h('div', 'flex flex-wrap items-center gap-3 px-5 py-2.5 bg-zuna-50/50 border-b border-zuna-100');
   const seg = h('div', 'flex gap-1 rounded-xl bg-white ring-1 ring-zuna-100 p-1'); seg.setAttribute('role', 'tablist');
-  [['rates', 'Rates', rates.length], ['blocks', 'Blackout dates', blocks.length], ['price', 'Price check', null]].forEach(([k, l, n]) => { const b = h('button', 'flex items-center gap-1.5 rounded-lg px-3 py-1.5 text-xs font-semibold transition-colors ' + (view === k ? 'bg-zuna-900 text-white' : 'text-zuna-600 hover:text-zuna-900'));
+  [['rates', 'Rates', allRates.length], ['blocks', 'Blackout dates', blocks.length], ['price', 'Price check', null]].forEach(([k, l, n]) => { const b = h('button', 'flex items-center gap-1.5 rounded-lg px-3 py-1.5 text-xs font-semibold transition-colors ' + (view === k ? 'bg-zuna-900 text-white' : 'text-zuna-600 hover:text-zuna-900'));
     b.type = 'button'; b.setAttribute('role', 'tab'); b.setAttribute('aria-selected', view === k ? 'true' : 'false'); b.appendChild(document.createTextNode(l)); if (n != null) b.appendChild(h('span', 'rounded-full px-1.5 text-[10px] tabular-nums ' + (view === k ? 'bg-white/20' : 'bg-zuna-100'), String(n))); b.onclick = () => { RT.view = k; render(); }; seg.appendChild(b); });
   sb.appendChild(seg);
-  sb.appendChild(h('p', 'text-xs text-zuna-500', view === 'rates' ? 'Basic fare per night · tax 5% below ₹7,500 a night, 18% from ₹7,500' : view === 'blocks' ? 'Blocked rooms cannot be booked by clients or by the Zuna team' : 'Fare, tax, service charge and GST for a stay'));
+  sb.appendChild(h('p', 'text-xs text-zuna-500', view === 'rates' ? 'Price per night by meal plan · tax 5% below ₹7,500 a night, 18% from ₹7,500' : view === 'blocks' ? 'Blocked rooms cannot be booked by clients or by the Zuna team' : 'Fare, tax, service charge and GST for a stay'));
   if (view === 'rates') { const a = ib('button', 'ml-auto btn-primary !py-1.5', 'Add rate', 'plus'); a.onclick = () => rateForm(c, g, null); sb.appendChild(a); }
   if (view === 'blocks') { const a = ib('button', 'ml-auto btn-primary !py-1.5', 'Block dates', 'ban'); a.onclick = () => blockForm(c, g, null); sb.appendChild(a); }
   shell.appendChild(sb);
@@ -260,17 +262,24 @@ const renderRates = (D, c) => {
   const empty = (msg) => shell.appendChild(h('p', 'px-5 py-10 text-center text-sm text-zuna-500', msg));
 
   if (view === 'rates') {
-    if (!rates.length) return empty('No rates yet for ' + g.property + '. Add one for the whole guest house or a room type.');
-    const sc = h('div', 'overflow-x-auto'); const t = h('table', 'w-full text-sm'); t.appendChild(th(['Applies to', 'Nights', 'Basic fare / night', 'With tax / night', 'Note', ''])); const bd = h('tbody', 'divide-y divide-zuna-50');
+    // filter by plan
+    const fb = h('div', 'flex flex-wrap items-center gap-1.5 px-5 py-2.5 border-b border-zuna-100'); fb.appendChild(h('span', 'text-xs font-semibold text-zuna-500 mr-1', 'Plan'));
+    [['', 'All plans']].concat(PLANS).forEach(([k, l]) => { const n = k ? allRates.filter((r) => r.plan === k).length : allRates.length; const b = h('button', 'rounded-full px-3 py-1 text-xs font-semibold ring-1 transition-colors ' + (pf0 === k ? 'bg-zuna-900 text-white ring-zuna-900' : 'ring-zuna-100 text-zuna-600 hover:ring-zuna-900'));
+      b.type = 'button'; b.title = k ? l : 'Every plan'; b.appendChild(document.createTextNode((k || 'All') + ' ')); b.appendChild(h('span', 'tabular-nums opacity-70', String(n))); b.onclick = () => { RT.plan = k; render(); }; fb.appendChild(b); });
+    fb.appendChild(h('span', 'ml-auto text-[11px] text-zuna-500', 'EP room only · CP breakfast · MAP breakfast + one meal · AP all meals')); shell.appendChild(fb);
+    if (!rates.length) return empty(pf0 ? 'No ' + pf0 + ' rates yet for ' + g.property + '.' : 'No rates yet for ' + g.property + '. Add one for the whole guest house or a room type.');
+    const sc = h('div', 'overflow-x-auto'); const t = h('table', 'w-full text-sm'); t.appendChild(th(['Plan', 'Applies to', 'Nights', 'Single / night', 'Double / night', 'Extra bed', 'Note', ''])); const bd = h('tbody', 'divide-y divide-zuna-50');
+    const amt = (v) => { const x = h('td', 'px-5 py-3 whitespace-nowrap tabular-nums'); if (!v) { x.appendChild(h('span', 'text-zuna-300', '—')); return x; } x.appendChild(h('b', 'font-semibold', money(v))); x.appendChild(h('span', 'ml-1.5 text-xs text-zuna-500', '+ ' + Math.round(fareTax(v) * 100) + '%')); return x; };
     rates.forEach((r) => { const tr = h('tr', 'hover:bg-zuna-50/50'); const live = r.from <= today && r.to >= today, fare = r.nil ? 0 : r.fare;
+      const c0 = h('td', 'px-5 py-3'); c0.appendChild(planChip(r.plan)); c0.title = (PLANS.find((p) => p[0] === r.plan) || [])[1] || '';
       const c1 = h('td', 'px-5 py-3 font-semibold whitespace-nowrap', tName(r.room_type_id));
       const c2 = h('td', 'px-5 py-3 whitespace-nowrap'); c2.appendChild(document.createTextNode(fD(r.from) + ' – ' + fD(r.to))); if (live) c2.appendChild(h('span', 'ml-2 rounded-full bg-mint-50 ring-1 ring-mint-200 px-2 py-0.5 text-[10.5px] font-bold text-mint-700', 'In use'));
-      const c3 = h('td', 'px-5 py-3 whitespace-nowrap tabular-nums'); if (r.nil) c3.appendChild(h('span', 'rounded-md bg-zuna-900 text-white px-2 py-0.5 text-xs font-bold', 'Nil')); else { c3.appendChild(h('b', 'font-semibold', money(fare))); c3.appendChild(h('span', 'ml-1.5 text-xs text-zuna-500', '+ ' + Math.round(fareTax(fare) * 100) + '%')); }
-      const c4 = h('td', 'px-5 py-3 whitespace-nowrap font-bold tabular-nums', r.nil ? '—' : money(Math.round((fare + fare * fareTax(fare)) * 100) / 100));
+      let c3, c4, c4b; if (r.nil) { c3 = h('td', 'px-5 py-3', ''); c3.colSpan = 3; c3.appendChild(h('span', 'rounded-md bg-zuna-900 text-white px-2 py-0.5 text-xs font-bold', 'Nil')); c3.appendChild(h('span', 'ml-2 text-xs text-zuna-500', 'only the service charge applies')); }
+      else { c3 = amt(fare); c4 = amt(r.fare_double); c4b = amt(r.extra_bed); }
       const c5 = h('td', 'px-5 py-3 text-xs text-zuna-500 max-w-[220px] truncate', r.note || ''); c5.title = r.note || '';
       const c6 = h('td', 'px-4 py-2 text-right whitespace-nowrap'); const e = iconBtn('pencil', 'Edit rate'); e.onclick = () => rateForm(c, g, r);
-      const x = iconBtn('trash-2', 'Delete rate', 'text-rose-600'); x.onclick = async () => { if (!(await ZUI.confirm({title: 'Delete this rate?', message: tName(r.room_type_id) + ' · ' + fD(r.from) + ' – ' + fD(r.to), ok: 'Delete rate', tone: 'danger'}))) return; try { await api('rate', {gh_id: g.id, id: r.id, delete: true}); toast('Rate deleted'); load(true); } catch (er) { toast(er.message, true); } };
-      const ac = h('div', 'inline-flex gap-1'); ac.append(e, x); c6.appendChild(ac); tr.append(c1, c2, c3, c4, c5, c6); bd.appendChild(tr); });
+      const x = iconBtn('trash-2', 'Delete rate', 'text-rose-600'); x.onclick = async () => { if (!(await ZUI.confirm({title: 'Delete this rate?', message: r.plan + ' · ' + tName(r.room_type_id) + ' · ' + fD(r.from) + ' – ' + fD(r.to), ok: 'Delete rate', tone: 'danger'}))) return; try { await api('rate', {gh_id: g.id, id: r.id, delete: true}); toast('Rate deleted'); load(true); } catch (er) { toast(er.message, true); } };
+      const ac = h('div', 'inline-flex gap-1'); ac.append(e, x); c6.appendChild(ac); tr.append(...[c0, c1, c2, c3, c4, c4b, c5, c6].filter(Boolean)); bd.appendChild(tr); });
     t.appendChild(bd); sc.appendChild(t); shell.appendChild(sc); return; }
 
   if (view === 'blocks') {
@@ -288,31 +297,42 @@ const renderRates = (D, c) => {
   // price check: form on the left, the breakdown beside it
   const pg = h('div', 'grid gap-6 p-5 lg:grid-cols-[minmax(0,1fr)_minmax(0,380px)] items-start'); const pf = h('div', 'space-y-3 min-w-0'), out = h('div', 'min-w-0'); pg.append(pf, out); shell.appendChild(pg);
   const pt = sel(String(RT.qt || (types[0] || {}).id || 0), [['0', 'Any room (guest house rate)']].concat(types.map((t) => [String(t.id), t.name || 'Room type']))); pf.appendChild(field('Room type', pt));
+  const pp = sel(RT.qp || 'EP', PLANS.map(([k, l]) => [k, k + ' · ' + l])), po = sel(RT.qocc || 'Single', [['Single', 'Single'], ['Double', 'Double']]); const pr2 = h('div', 'grid grid-cols-2 gap-3'); pr2.append(field('Rate plan', pp), field('Occupancy', po)); pf.appendChild(pr2);
   const t0 = new Date(); const pd = datePair(RT.qi || isoDay(new Date(t0.getTime() + 864e5)), RT.qo || isoDay(new Date(t0.getTime() + 3 * 864e5)), 'Check-in', 'Check-out'); pd.el.querySelector('.flex').remove(); pf.appendChild(pd.el);
   const go = ib('button', 'btn-primary', 'Calculate', 'indian-rupee'); pf.appendChild(go);
   out.appendChild(h('div', 'rounded-xl bg-zuna-50 ring-1 ring-zuna-100 px-4 py-8 text-center text-sm text-zuna-500', 'Pick the room type and dates, then Calculate.'));
-  go.onclick = async () => { RT.qt = pt.value; RT.qi = pd.from.value; RT.qo = pd.to.value; try { const j = await api('quote', {gh_id: g.id, room_type_id: +pt.value, check_in: pd.from.value, check_out: pd.to.value}); const q = j.cost; out.replaceChildren();
+  go.onclick = async () => { RT.qt = pt.value; RT.qp = pp.value; RT.qocc = po.value; RT.qi = pd.from.value; RT.qo = pd.to.value; try { const j = await api('quote', {gh_id: g.id, room_type_id: +pt.value, plan: pp.value, occupancy: po.value, check_in: pd.from.value, check_out: pd.to.value}); const q = j.cost; out.replaceChildren();
     const dl = h('dl', 'rounded-xl ring-1 ring-zuna-100 divide-y divide-zuna-50 text-sm'); const row = (k, v, b) => { const d = h('div', 'flex justify-between gap-3 px-4 py-2' + (b ? ' bg-zuna-50 font-bold' : '')); d.append(h('dt', b ? '' : 'text-zuna-500', k), h('dd', 'tabular-nums font-semibold', v)); dl.appendChild(d); };
-    row('Nights', String(q.nights)); row('Basic fare', money(q.fare)); row('Tax on fare', money(q.fare_tax)); row('Service charge', money(q.svc)); row('GST on service charge (18%)', money(q.svc_gst)); row('Total', money(q.total), true); out.appendChild(dl);
-    if (q.missing) out.appendChild(h('p', 'mt-2 rounded-lg bg-amber-50 ring-1 ring-amber-200 px-3 py-2 text-xs font-semibold text-amber-800', q.missing + (q.missing === 1 ? ' night has' : ' nights have') + ' no rate. Add a rate that covers these dates.'));
+    row('Plan · occupancy', q.plan + ' · ' + q.occupancy); row('Nights', String(q.nights)); row('Basic fare', money(q.fare)); row('Tax on fare', money(q.fare_tax)); row('Service charge', money(q.svc)); row('GST on service charge (18%)', money(q.svc_gst)); row('Total', money(q.total), true); out.appendChild(dl);
+    if (q.missing) out.appendChild(h('p', 'mt-2 rounded-lg bg-amber-50 ring-1 ring-amber-200 px-3 py-2 text-xs font-semibold text-amber-800', q.missing + (q.missing === 1 ? ' night has' : ' nights have') + ' no ' + q.plan + ' rate. ' + (j.plans && j.plans.length ? 'Priced plans for this stay: ' + j.plans.join(', ') + '.' : 'Add a rate that covers these dates.')));
     if (q.segments.length > 1) out.appendChild(h('p', 'mt-2 text-xs text-zuna-500', q.segments.map((s) => s.nights + (s.nights === 1 ? ' night' : ' nights') + ' at ' + (s.nil ? 'Nil' : money(s.fare)) + ' (' + s.scope + ')').join(' · '))); }
     catch (er) { toast(er.message, true); } };
 };
 const rateForm = (c, g, r) => { const types = g.room_types || [], f = h('div', 'space-y-4');
   const ap = sel(String(r ? r.room_type_id : 0), [['0', 'Whole guest house (all rooms)']].concat(types.map((t) => [String(t.id), 'Room type · ' + (t.name || 'Rooms') + (t.room_nos ? ' (' + t.room_nos + ')' : '')]))); f.appendChild(field('Applies to', ap));
   const today = new Date(); const dp = datePair(r ? r.from : isoDay(new Date(Date.UTC(today.getFullYear(), today.getMonth(), 1))), r ? r.to : today.getFullYear() + '-12-31', 'First night', 'Last night'); f.appendChild(dp.el);
+  // rate plans: pick several when adding (one rate each); a saved rate keeps its one plan
+  const chosen = new Set(r ? [r.plan] : ['EP']); const pc = h('div', 'grid grid-cols-2 sm:grid-cols-4 gap-2');
+  const pcPaint = () => [...pc.children].forEach((b) => { const on = chosen.has(b.dataset.p); b.className = 'text-left rounded-xl px-3 py-2 ring-1 transition-colors ' + (on ? 'ring-2 ring-mint-500 bg-mint-50' : 'ring-zuna-100 hover:ring-zuna-900'); b.setAttribute('aria-pressed', on ? 'true' : 'false'); });
+  PLANS.forEach(([k, l]) => { const b = h('button'); b.type = 'button'; b.dataset.p = k; b.appendChild(h('span', 'block text-sm font-bold', k)); b.appendChild(h('span', 'block text-[11px] text-zuna-500 leading-tight', l));
+    b.onclick = () => { if (r) { chosen.clear(); chosen.add(k); } else if (chosen.has(k)) { if (chosen.size > 1) chosen.delete(k); } else chosen.add(k); pcPaint(); paint(); }; pc.appendChild(b); });
+  pcPaint(); f.appendChild(field(r ? 'Rate plan' : 'Rate plans (pick one or more; the same prices are saved for each)', pc));
   const nilSw = switchEl('Nil fare (only the client\'s service charge applies)', r ? r.nil : false); f.appendChild(nilSw);
-  const fa = inp(r && !r.nil ? r.fare : '', 'e.g. 3500', 'number'); fa.min = '0'; fa.step = '0.01'; const fw = field('Basic fare per night (₹, before tax)', fa); f.appendChild(fw);
+  const fa = inp(r && !r.nil ? r.fare : '', 'e.g. 3500', 'number'); fa.min = '0'; fa.step = '0.01';
+  const fd = inp(r && !r.nil && r.fare_double ? r.fare_double : '', 'Same as single', 'number'); fd.min = '0'; fd.step = '0.01';
+  const fx = inp(r && !r.nil && r.extra_bed ? r.extra_bed : '', 'Optional', 'number'); fx.min = '0'; fx.step = '0.01';
+  const fw = h('div', 'grid gap-3 sm:grid-cols-3'); fw.append(field('Single / night (₹)', fa), field('Double / night (₹)', fd), field('Extra bed / night (₹)', fx)); f.appendChild(fw);
   const nt = inp(r ? r.note : '', 'Optional, e.g. 2027 contract rate'); f.appendChild(field('Note', nt));
   const pv = h('div', 'rounded-xl bg-zuna-50 ring-1 ring-zuna-100 px-4 py-3 text-sm'); f.appendChild(pv);
-  const paint = () => { const nil = nilSw.input.checked; fw.classList.toggle('hidden', nil); const fare = nil ? 0 : +fa.value || 0, tx = fare * fareTax(fare); pv.replaceChildren();
-    const ln = (k, v, b) => { const d = h('div', 'flex justify-between gap-3 py-0.5' + (b ? ' font-bold border-t border-zuna-100 mt-1 pt-1.5' : '')); d.append(h('span', b ? '' : 'text-zuna-500', k), h('span', 'tabular-nums font-semibold', v)); pv.appendChild(d); };
-    pv.appendChild(h('p', 'text-[11px] font-bold uppercase tracking-wider text-zuna-500 mb-1', 'One night costs'));
-    ln('Basic fare', nil ? 'Nil' : money(fare)); if (!nil) ln('Tax on fare (' + Math.round(fareTax(fare) * 100) + '%)', money(Math.round(tx * 100) / 100)); ln('Per night, with tax', nil ? 'Nil' : money(Math.round((fare + tx) * 100) / 100), true);
+  const paint = () => { const nil = nilSw.input.checked; fw.classList.toggle('hidden', nil); pv.replaceChildren();
+    const ln = (k, v, b) => { const d = h('div', 'flex justify-between gap-3 py-0.5' + (b ? ' font-bold' : '')); d.append(h('span', b ? '' : 'text-zuna-500', k), h('span', 'tabular-nums font-semibold', v)); pv.appendChild(d); };
+    const wt = (v) => money(Math.round((v + v * fareTax(v)) * 100) / 100) + '  (' + money(v) + ' + ' + Math.round(fareTax(v) * 100) + '%)';
+    pv.appendChild(h('p', 'text-[11px] font-bold uppercase tracking-wider text-zuna-500 mb-1', 'One night with tax · ' + [...chosen].join(', ')));
+    if (nil) ln('Basic fare', 'Nil', true); else { const s1 = +fa.value || 0, d1 = +fd.value || 0, x1 = +fx.value || 0; ln('Single', s1 ? wt(s1) : '—', true); ln('Double', d1 ? wt(d1) : s1 ? 'same as single' : '—'); if (x1) ln('Extra bed', wt(x1)); }
     pv.appendChild(h('p', 'text-xs text-zuna-500 mt-1.5', 'Plus ' + c.name + "'s service charge " + money(c.svc_fee || 0) + ' + 18% GST, once per booking.')); };
-  fa.addEventListener('input', paint); nilSw.input.addEventListener('change', paint); paint();
+  [fa, fd, fx].forEach((x) => x.addEventListener('input', paint)); nilSw.input.addEventListener('change', paint); paint();
   const save = ib('button', 'btn-primary w-full justify-center', r ? 'Save rate' : 'Add rate', 'check'); f.appendChild(save);
-  save.onclick = async () => { save.disabled = true; try { await api('rate', {gh_id: g.id, id: r ? r.id : undefined, room_type_id: +ap.value, from: dp.from.value, to: dp.to.value, nil: nilSw.input.checked, fare: +fa.value || 0, note: nt.value}); closeModal(); toast(r ? 'Rate saved' : 'Rate added'); load(true); } catch (er) { toast(er.message, true); save.disabled = false; } };
+  save.onclick = async () => { save.disabled = true; try { await api('rate', {gh_id: g.id, id: r ? r.id : undefined, room_type_id: +ap.value, plans: [...chosen], from: dp.from.value, to: dp.to.value, nil: nilSw.input.checked, fare: +fa.value || 0, fare_double: +fd.value || 0, extra_bed: +fx.value || 0, note: nt.value}); closeModal(); toast(r ? 'Rate saved' : chosen.size > 1 ? chosen.size + ' rates added (' + [...chosen].join(', ') + ')' : 'Rate added'); load(true); } catch (er) { toast(er.message, true); save.disabled = false; } };
   modal((r ? 'Edit rate · ' : 'Add rate · ') + g.property, f); };
 const blockForm = (c, g, b) => { const f = h('div', 'space-y-4'), rooms = g.rooms_list || [];
   const whole = switchEl('Whole guest house (all rooms)', b ? !b.rooms.length : true); f.appendChild(whole);

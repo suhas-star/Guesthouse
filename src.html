@@ -1173,7 +1173,7 @@ const buildBook = () => {
   BK.ci = e ? e.check_in : (BK.ci && BK.ci >= today ? BK.ci : addDays(today, 1)); BK.co = e ? e.check_out : (BK.co > BK.ci ? BK.co : addDays(BK.ci, 1));
   BK.room = e ? e.room : ''; BK.tl = {from: today, start: null, data: null, seq: 0};
   const cl = DATA.client || {};
-  BK.v = e ? {title: e.title || 'Mr.', gender: e.gender || 'Male', name: e.name || '', grade: e.grade || '', emp_code: e.emp_code || '', base: e.base || '', concur_tr: e.concur_tr || '', wbs: e.wbs || '', email: e.email || '', phone: e.phone || '', occupancy: e.occupancy || 'Single', note: e.note || '', cc: e.cc || '', bcc: e.bcc || '', send: true}
+  BK.v = e ? {title: e.title || 'Mr.', gender: e.gender || 'Male', name: e.name || '', grade: e.grade || '', emp_code: e.emp_code || '', base: e.base || '', concur_tr: e.concur_tr || '', wbs: e.wbs || '', email: e.email || '', phone: e.phone || '', occupancy: e.occupancy || 'Single', plan: e.plan || '', note: e.note || '', cc: e.cc || '', bcc: e.bcc || '', send: true}
     : {title: 'Mr.', gender: 'Male', name: '', grade: '', emp_code: '', base: '', concur_tr: '', wbs: '', email: '', phone: '', occupancy: 'Single', note: '', cc: cl.mail_cc || '', bcc: cl.mail_bcc || '', send: true};
   if (!live.length) { $('#bookView').replaceChildren(h('div', 'card p-8 text-center text-sm text-zuna-500', 'No live guest house to book yet.')); return; }
   bkDraw();
@@ -1252,11 +1252,28 @@ const bkQuoteKey = () => [BK.prop, BK.ci, BK.co].join('|');
 const bkQuotes = () => { const k = bkQuoteKey(); if (!(BK.co > BK.ci) || !BK.prop) return Promise.resolve(null); if (BK.qc[k]) return BK.qc[k];
   BK.qc[k] = bApi('book/quote', {property: BK.prop, all: true, check_in: BK.ci, check_out: BK.co}).then((j) => j.costs).catch(() => { delete BK.qc[k]; return null; }); return BK.qc[k]; };
 const bkRoomType = (room) => room ? ((BK.rooms || []).find((r) => r.room === room) || {}).type_id || 0 : 0;
-const bkQuoteFor = (costs, room) => costs ? (costs[bkRoomType(room)] || costs[0]) : null;
+const BK_PLANS = {EP: 'Room only', CP: 'Breakfast included', MAP: 'Breakfast + one meal', AP: 'All meals'};
+const bkPlansFor = (costs, room) => { const by = costs ? (costs[bkRoomType(room)] || costs[0]) : null; return by ? Object.keys(BK_PLANS).filter((p) => by[p]) : []; };
+const bkQuoteFor = (costs, room) => { const by = costs ? (costs[bkRoomType(room)] || costs[0]) : null; if (!by) return null; const ps = bkPlansFor(costs, room); if (!ps.length) return null;
+  if (!ps.includes(BK.v.plan)) BK.v.plan = ps[0]; return by[BK.v.plan][BK.v.occupancy === 'Double' ? 'Double' : 'Single']; };
+// rate plan chips on the Room step: each priced plan with its price per night
+const bkPlanPick = (box, room, onPick) => { const draw = (costs) => { if (!box.isConnected) return; box.replaceChildren(); const ps = bkPlansFor(costs, room); if (!ps.length) return;
+    const by = costs[bkRoomType(room)] || costs[0], occ = BK.v.occupancy === 'Double' ? 'Double' : 'Single'; if (!ps.includes(BK.v.plan)) BK.v.plan = ps[0];
+    const hd = h('div', 'flex items-baseline gap-2 mb-2'); hd.appendChild(h('p', 'text-sm font-bold', 'Rate plan')); hd.appendChild(h('p', 'text-xs text-zuna-500', occ + ' occupancy · prices per night with tax')); box.appendChild(hd);
+    const g = h('div', 'grid grid-cols-2 lg:grid-cols-4 gap-2'); g.setAttribute('role', 'radiogroup'); g.setAttribute('aria-label', 'Rate plan');
+    ps.forEach((p) => { const q = by[p][occ], on = BK.v.plan === p, full = q.missing === 0; const b = h('button', 'text-left rounded-xl px-3 py-2.5 ring-1 transition-all min-w-0 ' + (on ? 'ring-2 ring-mint-500 bg-mint-50' : 'ring-zuna-100 bg-white hover:ring-mint-500'));
+      b.type = 'button'; b.setAttribute('role', 'radio'); b.setAttribute('aria-checked', on ? 'true' : 'false');
+      const t = h('div', 'flex items-center gap-2'); t.appendChild(h('span', 'font-bold text-sm', p)); if (on) t.appendChild(icon('circle-check', 'w-4 h-4 text-mint-600 ml-auto')); b.appendChild(t);
+      b.appendChild(h('p', 'text-[11px] text-zuna-500 truncate', BK_PLANS[p]));
+      b.appendChild(h('p', 'text-sm font-semibold tabular-nums mt-1', q.fare === 0 && full ? 'Nil' : q.per_night ? inr2(q.per_night) + ' / night' : 'Rate not set'));
+      if (!full && q.per_night) b.appendChild(h('p', 'text-[10.5px] font-semibold text-amber-700', q.missing + ' night(s) not priced'));
+      b.onclick = () => { BK.v.plan = p; draw(costs); if (onPick) onPick(); }; g.appendChild(b); });
+    box.appendChild(g); };
+  const k = bkQuoteKey(), ready = BK.qc[k] && BK.qc[k].done; if (ready) draw(ready); else bkQuotes().then(draw); };
 const bkCharges = (box, room) => { box.replaceChildren(); if (!(BK.co > BK.ci) || !BK.prop) return;
   const c = h('div', 'rounded-2xl bg-white ring-1 ring-zuna-100 overflow-hidden'); const hd = h('div', 'flex items-center gap-2 px-4 py-2.5 border-b border-zuna-50'); hd.appendChild(icon('receipt', 'w-4 h-4 text-mint-600')); hd.appendChild(h('p', 'text-sm font-bold', 'Charges'));
   const sub = h('span', 'ml-auto text-[11px] text-zuna-500'); hd.appendChild(sub); c.appendChild(hd); const bd = h('div', 'px-4 py-3'); bd.appendChild(h('div', 'chart-skel h-24 rounded-lg')); c.appendChild(bd); box.appendChild(c);
-  const paint = (q) => { bd.replaceChildren(); const n = q.nights; sub.textContent = n + (n === 1 ? ' night' : ' nights') + (room ? ' · room ' + room : '');
+  const paint = (q) => { bd.replaceChildren(); const n = q.nights; sub.textContent = [n + (n === 1 ? ' night' : ' nights'), room ? 'room ' + room : '', q.plan, q.occupancy].filter(Boolean).join(' · ');
     const dl = h('dl', 'text-sm divide-y divide-zuna-50'); const row = (k, v, cls) => { const d = h('div', 'flex justify-between gap-3 py-1.5 ' + (cls || '')); d.append(h('dt', cls ? '' : 'text-zuna-500', k), h('dd', 'font-semibold tabular-nums text-right', v)); dl.appendChild(d); };
     const allSet = q.missing === 0;
     if (q.fare === 0 && allSet) row('Basic fare', 'Nil'); else if (q.fare) { row('Basic fare', inr2(q.fare)); row('Tax on fare', inr2(q.fare_tax)); }
@@ -1266,7 +1283,7 @@ const bkCharges = (box, room) => { box.replaceChildren(); if (!(BK.co > BK.ci) |
   bkQuotes().then((costs) => { const q = bkQuoteFor(costs, room); if (!box.isConnected) return; if (q) paint(q); else box.replaceChildren(); }); };
 const bkChargesBar = (box, room) => { if (!(BK.co > BK.ci) || !BK.prop) { box.replaceChildren(); return; }
   const paint = (q) => { box.replaceChildren(); const bar = h('div', 'flex flex-wrap items-center gap-x-5 gap-y-1.5 rounded-xl bg-zuna-50 ring-1 ring-zuna-100 px-4 py-3 text-sm');
-    const lab = h('span', 'inline-flex items-center gap-2 font-bold'); lab.appendChild(icon('receipt', 'w-4 h-4 text-mint-600')); lab.appendChild(document.createTextNode(room ? 'Charges · room ' + room : 'Charges')); bar.appendChild(lab);
+    const lab = h('span', 'inline-flex items-center gap-2 font-bold'); lab.appendChild(icon('receipt', 'w-4 h-4 text-mint-600')); lab.appendChild(document.createTextNode(['Charges', room ? 'room ' + room : '', q.plan].filter(Boolean).join(' · '))); bar.appendChild(lab);
     const part = (k, v) => { const x = h('span', 'text-zuna-500'); x.appendChild(document.createTextNode(k + ' ')); x.appendChild(h('b', 'text-zuna-900 font-semibold tabular-nums', v)); bar.appendChild(x); };
     part('Basic fare', q.fare === 0 && !q.missing ? 'Nil' : inr2(q.fare + q.fare_tax) + (q.fare_tax ? ' incl. tax' : '')); part('Service charge', inr2(q.svc)); part('GST', inr2(q.svc_gst));
     const tt = h('span', 'ml-auto font-bold text-base tabular-nums', 'Total ' + inr2(q.total)); bar.appendChild(tt); box.appendChild(bar);
@@ -1423,7 +1440,7 @@ const bkGuestStep = (pane) => { const v = BK.v; bkQuotes();   // charges are rea
 const bkRoom = (pane) => { const p = bkHouse(), v = BK.v;
   bkHead(pane, 'Pick a room', 'Rooms ' + bkGuest() + ' (' + v.grade + ') can have in ' + BK.prop + ', ' + fShort(BK.ci) + ' → ' + fShort(BK.co) + '.');
   const grid = h('div', 'grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-4 xl:grid-cols-5 gap-2'); grid.setAttribute('role', 'radiogroup'); grid.setAttribute('aria-label', 'Rooms'); pane.appendChild(grid);
-  const note = h('p', 'text-xs text-zuna-500 mt-3'); pane.appendChild(note); const chb = h('div', 'mt-4'); pane.appendChild(chb);   // charges for the chosen room
+  const note = h('p', 'text-xs text-zuna-500 mt-3'); pane.appendChild(note); const plb = h('div', 'mt-4'); pane.appendChild(plb); const chb = h('div', 'mt-4'); pane.appendChild(chb);   // rate plan, then charges for the chosen room
   const tile = (val, top, sub, dis, tone) => { const on = BK.room === val; const b = h('button', 'text-left rounded-xl px-3 py-2 ring-1 transition-all min-w-0 ' + (dis ? 'ring-zuna-100 bg-zuna-50/60 text-zuna-400 cursor-not-allowed' : on ? 'ring-2 ring-mint-500 bg-mint-50' : 'ring-zuna-100 bg-white hover:ring-mint-500'));
     b.type = 'button'; b.setAttribute('role', 'radio'); b.setAttribute('aria-checked', on ? 'true' : 'false'); b.title = top + ' · ' + sub;
     const hd = h('div', 'flex items-center gap-2 min-w-0'); hd.appendChild(h('span', 'w-2 h-2 rounded-full shrink-0 ' + tone)); hd.appendChild(h('span', 'font-bold text-sm truncate', top)); if (on) hd.appendChild(icon('circle-check', 'w-4 h-4 text-mint-600 ml-auto shrink-0')); b.appendChild(hd);
@@ -1431,7 +1448,7 @@ const bkRoom = (pane) => { const p = bkHouse(), v = BK.v;
   const paint = () => { grid.replaceChildren(); note.replaceChildren();
     if (!BK.rooms) { for (let i = 0; i < 8; i++) grid.appendChild(h('div', 'chart-skel h-[52px] rounded-xl')); return; }
     const ok = BK.rooms.filter((r) => !bkWhy(r)); if (BK.room && !ok.some((r) => r.room === BK.room)) BK.room = '';
-    bkChargesBar(chb, BK.room);
+    bkPlanPick(plb, BK.room, () => bkChargesBar(chb, BK.room)); bkChargesBar(chb, BK.room);
     grid.appendChild(tile('', 'Any room', 'We pick one · ' + ok.filter((r) => r.state === 'free').length + ' free', !ok.length, ok.length ? 'bg-mint-500' : 'bg-zuna-200'));
     let hidden = 0; BK.rooms.forEach((r) => { const w = bkWhy(r); if (w && !BK.showAll) { hidden++; return; }
       grid.appendChild(tile(r.room, r.room, w || (r.state === 'shared' ? 'One bed left · ' + (r.type || '') : [r.type, gradeSpan(r.grades)].filter(Boolean).join(' · ')), !!w, w ? 'bg-zuna-200' : r.state === 'shared' ? 'bg-amber-400' : 'bg-mint-500')); });
@@ -1454,6 +1471,7 @@ const bkConfirm = (pane) => { const v = BK.v, p = bkHouse();
   row('Guest', [bkGuest(), v.grade, v.emp_code].filter(Boolean).join(' · ') + ([v.base, v.concur_tr && 'Concur ' + v.concur_tr, v.wbs && 'WBS ' + v.wbs].filter(Boolean).length ? '\n' + [v.base, v.concur_tr && 'Concur ' + v.concur_tr, v.wbs && 'WBS ' + v.wbs].filter(Boolean).join(' · ') : ''), 1);
   dl.lastChild.children[1].classList.add('whitespace-pre-line');
   row('Room', BK.room ? 'Room ' + BK.room + (v.occupancy === 'Double' ? ' · shared' : '') : 'Any free room · picked when you confirm', 2);
+  if (v.plan) row('Plan', v.plan + ' · ' + BK_PLANS[v.plan], 2);
   left.appendChild(dl);
   const g = h('div', 'grid gap-4 sm:grid-cols-2'); g.append(bkLabel('Guest email', bkVal('email', bInput('name@company.com', 'email'))), bkLabel('Mobile', bkPhone()));
   const nt = bkLabel('Remarks', bkVal('note', bInput('e.g. late arrival'))); nt.classList.add('sm:col-span-2'); g.appendChild(nt); left.appendChild(g);
@@ -1505,7 +1523,7 @@ const paintTrips = () => {
   rows.forEach((t) => { const tr = h('tr', 'hover:bg-zuna-50/60 cursor-pointer transition-colors'); tr.tabIndex = 0; tr.setAttribute('aria-label', 'Trip ' + t.code + ', ' + cleanName(t.guest));
     const c1 = h('td', 'px-5 py-3'); const f1 = h('div', 'flex items-center gap-3 min-w-0'); f1.appendChild(avatar(t.guest)); const n1 = h('div', 'min-w-0'); n1.appendChild(h('p', 'font-semibold truncate', cleanName(t.guest))); n1.appendChild(h('p', 'text-xs text-zuna-500 truncate', [t.grade, t.emp_code].filter(Boolean).join(' · '))); f1.appendChild(n1); c1.appendChild(f1);
     const c2 = h('td', 'px-3 py-3 whitespace-nowrap'); c2.appendChild(h('p', 'font-bold tabular-nums', t.code || '—')); c2.appendChild(h('p', 'text-xs text-zuna-500', 'Booked ' + fShort(String(t.booked_at || '').slice(0, 10) || today)));
-    const c3 = h('td', 'px-3 py-3'); c3.appendChild(h('p', 'font-medium truncate max-w-[220px]', t.property)); c3.appendChild(h('p', 'text-xs text-zuna-500', 'Room ' + t.room + (t.occupancy === 'Double' ? ' · shared' : '')));
+    const c3 = h('td', 'px-3 py-3'); c3.appendChild(h('p', 'font-medium truncate max-w-[220px]', t.property)); c3.appendChild(h('p', 'text-xs text-zuna-500', 'Room ' + t.room + (t.occupancy === 'Double' ? ' · shared' : '') + (t.plan ? ' · ' + t.plan : '')));
     const c4 = h('td', 'px-3 py-3 whitespace-nowrap'); c4.appendChild(h('p', 'font-medium tabular-nums', fShort(t.check_in) + ' → ' + fShort(t.check_out))); const nn = nightsOf(t.check_in, t.check_out); c4.appendChild(h('p', 'text-xs text-zuna-500', nn + (nn === 1 ? ' night' : ' nights')));
     const c5 = h('td', 'px-3 py-3'); const st = tripState(t); c5.appendChild(h('span', 'zchip ' + TRIP_CHIP[st], st));
     const c6 = h('td', 'px-3 py-3 pr-5 whitespace-nowrap text-xs font-semibold ' + (t.mail_status === 'sent' ? 'text-mint-700' : t.mail_status === 'failed' ? 'text-rose-600' : 'text-zuna-500')); const mi = h('span', 'inline-flex items-center gap-1.5'); mi.appendChild(icon(t.mail_status === 'sent' ? 'circle-check' : 'mail', 'w-3.5 h-3.5 shrink-0')); mi.appendChild(document.createTextNode(mailTxt(t.mail_status))); c6.appendChild(mi);
@@ -1526,13 +1544,13 @@ const tripDrawer = (t) => {
     mk('Download voucher', 'download').onclick = () => dlVoucher(t);
     if (USER.book) mk('Resend email', 'send').onclick = async (ev) => { const b = ev.currentTarget; b.disabled = true; try { const ms = await mailWithVoucher(t); toast(ms === 'sent' ? 'Email sent again' : mailTxt(ms)); paintTrips(); } catch (x) { toast(x.message, true); } b.disabled = false; };
     box.appendChild(acts); }
-  box.appendChild(kv([['Guest', t.guest], ['Gender', t.gender], ['Grade', t.grade], ['Employee code', t.emp_code], ['Email', t.email], ['Mobile', t.phone], ['Base location', t.base], ['Concur ID', t.concur_tr], ['WBS ID', t.wbs], ['Occupancy', t.occupancy === 'Double' ? 'Double · shares the room' : 'Single'], ['Remarks', t.note],
+  box.appendChild(kv([['Guest', t.guest], ['Gender', t.gender], ['Grade', t.grade], ['Employee code', t.emp_code], ['Email', t.email], ['Mobile', t.phone], ['Base location', t.base], ['Concur ID', t.concur_tr], ['WBS ID', t.wbs], ['Occupancy', t.occupancy === 'Double' ? 'Double · shares the room' : 'Single'], ['Meal plan', t.plan_label || ''], ['Remarks', t.note],
     ...(USER.admin ? [['Email copies', [t.cc && 'CC ' + t.cc, t.bcc && 'BCC ' + t.bcc].filter(Boolean).join(' · ')]] : []), ['Email status', mailTxt(t.mail_status)], ['Booked by', t.booked_by + ' · ' + fLong(String(t.booked_at).slice(0, 10))]]));
   if (USER.admin) {   // cost from the guest house rates: Zuna team only
     const p = props.find((x) => x.property === t.property) || {}, cs = h('div', 'rounded-xl ring-1 ring-zuna-100 overflow-hidden'); const ch = h('div', 'flex items-center gap-2 px-3.5 py-2 bg-zuna-50 text-xs font-bold uppercase tracking-wider text-zuna-500'); ch.appendChild(icon('lock', 'w-3.5 h-3.5')); ch.appendChild(document.createTextNode('Cost · Zuna team only')); cs.appendChild(ch);
     const cb = h('div', 'px-3.5 py-2 text-sm text-zuna-500', 'Working out…'); cs.appendChild(cb); box.appendChild(cs);
     const inr = (v) => '₹' + Number(v || 0).toLocaleString('en-IN', {maximumFractionDigits: 2});
-    fetch('/api/admin/quote', {method: 'POST', headers: {'content-type': 'application/json'}, credentials: 'same-origin', body: JSON.stringify({gh_id: p.id, room: t.room, check_in: t.check_in, check_out: t.check_out})}).then((r) => r.json()).then((j) => { cb.replaceChildren();
+    fetch('/api/admin/quote', {method: 'POST', headers: {'content-type': 'application/json'}, credentials: 'same-origin', body: JSON.stringify({gh_id: p.id, room: t.room, plan: t.plan, occupancy: t.occupancy, check_in: t.check_in, check_out: t.check_out})}).then((r) => r.json()).then((j) => { cb.replaceChildren();
       if (j.error || !j.cost) { cb.textContent = j.error || 'Could not work out the cost.'; return; } const q = j.cost;
       if (q.missing === q.nights) { cb.textContent = 'No rate set for these dates. Add one in Admin → Rates & blocks.'; return; }
       const dl = h('dl', 'divide-y divide-zuna-50'); [['Basic fare', q.fare], ['Tax on fare', q.fare_tax], ['Service charge', q.svc], ['GST on service charge', q.svc_gst]].forEach(([k, v]) => { const d = h('div', 'flex justify-between py-1.5'); d.append(h('dt', null, k), h('dd', 'font-semibold text-zuna-900 tabular-nums', inr(v))); dl.appendChild(d); });

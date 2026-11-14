@@ -405,7 +405,7 @@
     const cols = [X, X + (XR - X) / 3, X + 2 * (XR - X) / 3], cw = (XR - X) / 3 - 8;
     const cell = (i, yy, k, v) => { LBL(cols[i], yy, k); T(cols[i], yy - 13, fitLines(v || '-', cw, 9.8, true)[0], 9.8, true); };
     cell(0, ty, 'Guest', t.guest); cell(1, ty, 'Grade', t.grade); cell(2, ty, 'Employee code', t.emp_code);
-    ty -= 32; cell(0, ty, 'Occupancy', t.occupancy === 'Double' ? 'Double (shared)' : 'Single'); cell(1, ty, 'Concur ID', t.concur_tr); cell(2, ty, 'WBS ID', t.wbs);
+    ty -= 32; cell(0, ty, t.plan ? 'Occupancy · plan' : 'Occupancy', (t.occupancy === 'Double' ? 'Double (shared)' : 'Single') + (t.plan ? ' · ' + t.plan : '')); cell(1, ty, 'Concur ID', t.concur_tr); cell(2, ty, 'WBS ID', t.wbs);
     // ticket · stub
     const SXI = SX + 20; let sy = CT - 30;
     LBL(SXI, sy, 'Booking code', LAV); sy -= 20; T(SXI, sy, t.code || '-', 15, true, WHITE, 0.4);

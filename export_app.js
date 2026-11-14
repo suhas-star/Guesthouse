@@ -339,62 +339,89 @@
     return {filename: fileTitle + '.xlsx', data: sheetZip('Sheet', cells, merges, widths)};
   };
   const dl = (f) => { const url = URL.createObjectURL(f.data), a = document.createElement('a'); a.href = url; a.download = f.filename; document.body.appendChild(a); a.click(); a.remove(); setTimeout(() => URL.revokeObjectURL(url), 4000); L.toast('Downloading ' + f.filename); };
-  // --- booking voucher: one A4 page per portal booking ---
-  // t: trip, p: guest house, client: {name, legal_name}
+  // --- booking voucher (ticket design): one A4 page per portal booking ---
+  // Helvetica / Helvetica-Bold widths (1/1000 em) so right-aligned text lines up exactly
+  const HW = {r: ' 278!278"355#556$556%889&667\'191(333)333*389+584,278-333.278/278:278;278<584=584>584?556@1015[278\\278]278^469_556`333{334|260}334~584A667B667C722D722E667F611G778H722I278J500K667L556M833N722O778P667Q778R722S667T611U722V667W944X667Y667Z611a556b556c500d556e556f278g556h556i222j222k500l222m833n556o556p556q556r333s500t278u556v500w722x500y500z500',
+    b: ' 278!333"474#556$556%889&722\'238(333)333*389+584,278-333.278/278:333;333<584=584>584?611@975[333\\278]333^584_556`333{389|280}389~584A722B722C722D722E667F611G778H722I278J556K722L611M833N722O778P667Q778R722S667T611U722V667W944X667Y667Z611a556b611c556d611e556f333g611h611i278j278k556l278m889n611o611p611q611r389s556t333u611v556w778x556y556z500'};
+  const HWT = {}; ['r', 'b'].forEach((k) => { const m = {}; HW[k].replace(/(.)(\d+)/g, (_, c, n) => { m[c] = +n; return ''; }); HWT[k] = m; });
+  const tw = (t, size, bold, cs) => { const s = ascii(t), m = HWT[bold ? 'b' : 'r']; let w = 0; for (const ch of s) w += /\d/.test(ch) ? 556 : (m[ch] || 556); return w * size / 1000 + (cs || 0) * Math.max(0, s.length - 1); };
+  const fitLines = (t, width, size, bold) => { const words = ascii(t).split(/\s+/).filter(Boolean), out = []; let cur = '';
+    words.forEach((w) => { const n = cur ? cur + ' ' + w : w; if (tw(n, size, bold) > width && cur) { out.push(cur); cur = w; } else cur = n; }); if (cur) out.push(cur); return out.length ? out : ['']; };
   const voucherPdf = (t, p, client) => {
-    const W = 595, H = 842, M = 40, ops = [], MUTED = [0.42, 0.39, 0.56], LINE = [0.9, 0.886, 0.965], SOFT = [0.969, 0.965, 0.988], WHITE = [1, 1, 1];
-    const cancelled = t.status === 'Cancelled', ROSE = [0.784, 0.196, 0.227];
-    const T = (x, y, s, size, bold, color) => ops.push('BT /' + (bold ? 'F2' : 'F1') + ' ' + size + ' Tf ' + rgb(color || INK) + ' rg ' + x.toFixed(1) + ' ' + y.toFixed(1) + ' Td ' + pdfStr(s) + ' Tj ET');
-    const R = (x, y, w, h, color) => ops.push(rgb(color) + ' rg ' + x.toFixed(1) + ' ' + y.toFixed(1) + ' ' + w.toFixed(1) + ' ' + h.toFixed(1) + ' re f');
-    const B = (x, y, w, h, color) => ops.push(rgb(color) + ' RG 0.8 w ' + x.toFixed(1) + ' ' + y.toFixed(1) + ' ' + w.toFixed(1) + ' ' + h.toFixed(1) + ' re S');
-    const Ln = (x1, y1, x2, y2, color) => ops.push(rgb(color) + ' RG 0.6 w ' + x1.toFixed(1) + ' ' + y1.toFixed(1) + ' m ' + x2.toFixed(1) + ' ' + y2.toFixed(1) + ' l S');
-    const fmt = (d) => { if (!d) return '-'; const x = new Date(d + 'T00:00:00Z'); return ['Sun', 'Mon', 'Tue', 'Wed', 'Thu', 'Fri', 'Sat'][x.getUTCDay()] + ', ' + x.getUTCDate() + ' ' + ['Jan', 'Feb', 'Mar', 'Apr', 'May', 'Jun', 'Jul', 'Aug', 'Sep', 'Oct', 'Nov', 'Dec'][x.getUTCMonth()] + ' ' + x.getUTCFullYear(); };
+    const W = 595, H = 842, M = 36, ops = [];
+    const BG = [0.957, 0.949, 0.984], WHITE = [1, 1, 1], MUTED = [0.416, 0.388, 0.565], LINE = [0.902, 0.886, 0.965], LAV = [0.663, 0.608, 0.863], MINT_D = [0.004, 0.533, 0.361], ROSE = [0.784, 0.196, 0.227];
+    const cancelled = t.status === 'Cancelled';
+    const T = (x, y, s, size, bold, color, cs) => ops.push('BT /' + (bold ? 'F2' : 'F1') + ' ' + size + ' Tf ' + (cs ? cs + ' Tc ' : '0 Tc ') + rgb(color || INK) + ' rg ' + x.toFixed(2) + ' ' + y.toFixed(2) + ' Td ' + pdfStr(s) + ' Tj ET');
+    const TR = (xr, y, s, size, bold, color, cs) => T(xr - tw(s, size, bold, cs), y, s, size, bold, color, cs);
+    const TC = (xc, y, s, size, bold, color, cs) => T(xc - tw(s, size, bold, cs) / 2, y, s, size, bold, color, cs);
+    const LBL = (x, y, s, color) => T(x, y, s.toUpperCase(), 6.8, true, color || MUTED, 0.7);
+    const LBLR = (xr, y, s, color) => TR(xr, y, s.toUpperCase(), 6.8, true, color || MUTED, 0.7);
+    const rr = (x, y, w, h, r) => { const k = 0.5523 * r; return [x + r, y, 'm', x + w - r, y, 'l', x + w - r + k, y, x + w, y + r - k, x + w, y + r, 'c', x + w, y + h - r, 'l', x + w, y + h - r + k, x + w - r + k, y + h, x + w - r, y + h, 'c', x + r, y + h, 'l', x + r - k, y + h, x, y + h - r + k, x, y + h - r, 'c', x, y + r, 'l', x, y + r - k, x + r - k, y, x + r, y, 'c'].map((v) => typeof v === 'number' ? v.toFixed(2) : v).join(' '); };
+    const RR = (x, y, w, h, r, color) => ops.push(rgb(color) + ' rg ' + rr(x, y, w, h, r) + ' f');
+    const R = (x, y, w, h, color) => ops.push(rgb(color) + ' rg ' + x.toFixed(2) + ' ' + y.toFixed(2) + ' ' + w.toFixed(2) + ' ' + h.toFixed(2) + ' re f');
+    const Ln = (x1, y1, x2, y2, color, w, dash) => ops.push((dash ? '[' + dash + '] 0 d ' : '[] 0 d ') + rgb(color) + ' RG ' + (w || 0.6) + ' w ' + x1.toFixed(2) + ' ' + y1.toFixed(2) + ' m ' + x2.toFixed(2) + ' ' + y2.toFixed(2) + ' l S');
+    const circle = (cx, cy, r, color) => { const k = 0.5523 * r; ops.push(rgb(color) + ' rg ' + [cx + r, cy, 'm', cx + r, cy + k, cx + k, cy + r, cx, cy + r, 'c', cx - k, cy + r, cx - r, cy + k, cx - r, cy, 'c', cx - r, cy - k, cx - k, cy - r, cx, cy - r, 'c', cx + k, cy - r, cx + r, cy - k, cx + r, cy, 'c'].map((v) => typeof v === 'number' ? v.toFixed(2) : v).join(' ') + ' f'); };
+    const MON = ['Jan', 'Feb', 'Mar', 'Apr', 'May', 'Jun', 'Jul', 'Aug', 'Sep', 'Oct', 'Nov', 'Dec'], DAYL = ['Sunday', 'Monday', 'Tuesday', 'Wednesday', 'Thursday', 'Friday', 'Saturday'];
+    const dd = (d) => { const x = new Date(d + 'T00:00:00Z'); return {day: x.getUTCDate() + ' ' + MON[x.getUTCMonth()] + ' ' + x.getUTCFullYear(), wd: DAYL[x.getUTCDay()]}; };
+    const short = (d) => { if (!d) return '-'; const x = new Date(String(d).slice(0, 10) + 'T00:00:00Z'); return x.getUTCDate() + ' ' + MON[x.getUTCMonth()] + ' ' + x.getUTCFullYear(); };
     const nights = Math.round((Date.parse(t.check_out) - Date.parse(t.check_in)) / 864e5);
-    // logos (client logo shown in the page) on the right of the band
-    const imgs = []; document.querySelectorAll('[data-logo]').forEach((im) => { const j = logoJpeg(im, '#ffffff'); if (j && imgs.length < 2) imgs.push(j); });
-    // header band
-    R(0, H - 104, W, 104, INK); R(0, H - 108, W, 4, RED);
-    T(M, H - 46, 'Guest house booking voucher', 19, true, WHITE);
-    T(M, H - 66, (client.legal_name || client.name || '') + '  -  issued by Zuna Hotel Desk', 9.5, false, [0.79, 0.76, 0.93]);
-    let lx = W - M; imgs.slice().reverse().forEach((im, k) => { const h = 26, w = Math.min(110, im.w * h / im.h); lx -= w; R(lx - 8, H - 72, w + 16, h + 12, WHITE); ops.push('q ' + w.toFixed(1) + ' 0 0 ' + h + ' ' + lx.toFixed(1) + ' ' + (H - 66) + ' cm /Im' + (imgs.length - 1 - k) + ' Do Q'); lx -= 24; });
-    // status + booking code
-    let y = H - 150;
-    const st = cancelled ? 'CANCELLED' : 'CONFIRMED', stw = textW(st, 9) * 1.4 + 22;
-    R(M, y - 4, stw, 20, cancelled ? [0.992, 0.925, 0.925] : [0.89, 0.98, 0.949]); B(M, y - 4, stw, 20, cancelled ? ROSE : RED); T(M + 11, y + 2, st, 9, true, cancelled ? ROSE : [0.004, 0.533, 0.361]);
-    T(M + stw + 12, y + 2, cancelled ? 'This booking was cancelled' + (t.cancelled_at ? ' on ' + fmt(String(t.cancelled_at).slice(0, 10)) : '') + '.' : 'Confirmed instantly. Please show this voucher at check-in.', 9, false, MUTED);
-    T(W - M - textW('BOOKING CODE', 8), y + 22, 'BOOKING CODE', 8, true, MUTED);
-    T(W - M - textW(t.code || '-', 20) * 1.08, y - 2, t.code || '-', 20, true, INK);
-    // stay tiles
-    y -= 34; const tw = (W - 2 * M - 16) / 3, th = 62;
-    [['CHECK-IN', fmt(t.check_in), ''], ['CHECK-OUT', fmt(t.check_out), ''], ['NIGHTS', String(nights), t.occupancy === 'Double' ? 'Shared room' : 'Single occupancy']].forEach(([k, v, s], i) => {
-      const x = M + i * (tw + 8); R(x, y - th, tw, th, SOFT); B(x, y - th, tw, th, LINE);
-      T(x + 12, y - 17, k, 7.5, true, MUTED); T(x + 12, y - 38, v, i === 2 ? 17 : 12.5, true, INK); if (s) T(x + 12, y - 52, s, 8, false, MUTED); });
-    y -= th + 26;
-    // two-column sections
-    const section = (title, rows, x, w) => { let yy = y; T(x, yy, title, 8, true, [0.004, 0.533, 0.361]); yy -= 8; Ln(x, yy, x + w, yy, LINE); yy -= 16;
-      rows.filter((r) => r[1]).forEach(([k, v]) => { T(x, yy, k, 8.5, false, MUTED); const lines = wrap(v, w - 92, 9.5); lines.forEach((ln, i) => T(x + 92, yy - i * 13, ln, 9.5, true, INK)); yy -= Math.max(1, lines.length) * 13 + 6; });
-      return yy; };
-    const cw = (W - 2 * M - 30) / 2;
-    const y1 = section('GUEST', [['Name', t.guest], ['Gender', t.gender], ['Grade', t.grade], ['Employee code', t.emp_code], ['Email', t.email], ['Mobile', t.phone], ['Base location', t.base]], M, cw);
-    const y2 = section('STAY', [['Guest house', t.property + (p.city ? ', ' + p.city : '')], ['Address', p.address], ['Room', t.room + (t.occupancy === 'Double' ? ' (shared)' : '')], ['Concur ID', t.concur_tr], ['WBS ID', t.wbs], ['Remarks', t.note]], M + cw + 30, cw);
-    y = Math.min(y1, y2) - 10;
-    // guest house contacts + map
-    const ct = (p.contacts || []).filter((c) => c.phone || c.email).slice(0, 3);
-    if (ct.length || p.map_url) { R(M, y - 14 - ct.length * 14 - (p.map_url ? 14 : 0), W - 2 * M, 22 + ct.length * 14 + (p.map_url ? 14 : 0), SOFT);
-      let yy = y - 4; T(M + 12, yy - 8, 'GUEST HOUSE CONTACT', 7.5, true, MUTED); yy -= 22;
-      ct.forEach((c) => { T(M + 12, yy, [c.name + (c.designation ? ' (' + c.designation + ')' : ''), c.phone, c.email].filter(Boolean).join('   -   '), 9, false, INK); yy -= 14; });
-      if (p.map_url) { T(M + 12, yy, 'Map: ' + String(p.map_url).slice(0, 95), 8, false, [0.004, 0.533, 0.361]); }
-      y -= 34 + ct.length * 14 + (p.map_url ? 14 : 0); }
+    // logos: Zuna on the left, the client on the right
+    const imgs = [], zi = document.getElementById('zunaLogo'), ci = document.querySelector('[data-logo]');
+    const zj = zi && zi.complete && zi.naturalWidth ? logoJpeg(zi, '#f4f2fb') : null, cj = ci && ci.complete && ci.naturalWidth ? logoJpeg(ci, '#f4f2fb') : null;
+    if (zj) imgs.push(zj); if (cj) imgs.push(cj);
+    const img = (k, x, y, h, right) => { const im = imgs[k]; const w = Math.min(130, im.w * h / im.h); ops.push('q ' + w.toFixed(2) + ' 0 0 ' + h + ' ' + (right ? x - w : x).toFixed(2) + ' ' + y.toFixed(2) + ' cm /Im' + k + ' Do Q'); };
+    R(0, 0, W, H, BG);
+    if (cancelled) ops.push('q 0.93 0.89 0.95 rg BT /F2 92 Tf 0.819 0.574 -0.574 0.819 120 230 Tm ' + pdfStr('CANCELLED') + ' Tj ET Q');
+    // header
+    let y = H - 40;
+    if (zj) img(0, M, y - 26, 26); else T(M, y - 18, 'Zuna', 18, true);
+    if (cj) img(imgs.length - 1, W - M, y - 22, 22, true); else TR(W - M, y - 16, client.name || '', 13, true);
+    y -= 52; T(M, y, 'Guest house booking voucher', 15, true); TR(W - M, y, client.legal_name || client.name || '', 9, false, MUTED);
+    y -= 14; T(M, y, 'Issued by Zuna Hotel Desk on behalf of ' + (client.name || 'the client') + '. Please show this voucher at check-in.', 8.8, false, MUTED);
+    // ticket
+    const CT = y - 18, CH = 218, CB = CT - CH, SW = 150, SX = W - M - SW;
+    RR(M + 1.5, CB - 3, W - 2 * M, CH, 12, [0.902, 0.886, 0.957]);   // soft shadow
+    ops.push('q ' + rr(M, CB, W - 2 * M, CH, 12) + ' W n'); R(M, CB, W - 2 * M, CH, WHITE); R(SX, CB, SW, CH, INK); ops.push('Q');
+    Ln(SX, CB + 10, SX, CT - 10, BG, 1.6, '4 3.5'); circle(SX, CT, 8, BG); circle(SX, CB, 8, BG);
+    // ticket · main part
+    const X = M + 24, XR = SX - 22; let ty = CT - 30;
+    LBL(X, ty, 'Guest house stay'); ty -= 21; T(X, ty, t.property + (p.city ? ', ' + p.city : ''), 15, true);
+    ty -= 14; fitLines(p.address || '', XR - X, 8.6, false).slice(0, 2).forEach((ln, i) => T(X, ty - i * 11, ln, 8.6, false, MUTED)); ty -= (Math.min(2, fitLines(p.address || '', XR - X, 8.6, false).length) - 1) * 11;
+    ty -= 30; const a = dd(t.check_in), b = dd(t.check_out);
+    LBL(X, ty, 'Check-in'); LBLR(XR, ty, 'Check-out'); ty -= 22; T(X, ty, a.day, 17, true); TR(XR, ty, b.day, 17, true); ty -= 13; T(X, ty, a.wd, 8.6, false, MUTED); TR(XR, ty, b.wd, 8.6, false, MUTED);
+    const mx = (X + tw(a.day, 17, true) + XR - tw(b.day, 17, true)) / 2;
+    TC(mx, ty + 22, nights + (nights === 1 ? ' night' : ' nights'), 8.6, true, MINT_D); Ln(mx - 34, ty + 15, mx + 34, ty + 15, RED, 1.1, '3 2.5'); TC(mx, ty + 3, 'Room ' + t.room, 8.6, true, MINT_D);
+    ty -= 18; Ln(X, ty, XR, ty, LINE, 0.7); ty -= 17;
+    const cols = [X, X + (XR - X) / 3, X + 2 * (XR - X) / 3], cw = (XR - X) / 3 - 8;
+    const cell = (i, yy, k, v) => { LBL(cols[i], yy, k); T(cols[i], yy - 13, fitLines(v || '-', cw, 9.8, true)[0], 9.8, true); };
+    cell(0, ty, 'Guest', t.guest); cell(1, ty, 'Grade', t.grade); cell(2, ty, 'Employee code', t.emp_code);
+    ty -= 32; cell(0, ty, 'Occupancy', t.occupancy === 'Double' ? 'Double (shared)' : 'Single'); cell(1, ty, 'Concur ID', t.concur_tr); cell(2, ty, 'WBS ID', t.wbs);
+    // ticket · stub
+    const SXI = SX + 20; let sy = CT - 30;
+    LBL(SXI, sy, 'Booking code', LAV); sy -= 20; T(SXI, sy, t.code || '-', 15, true, WHITE, 0.4);
+    sy -= 26; const st = cancelled ? 'CANCELLED' : 'CONFIRMED', sw = tw(st, 7.6, true, 0.7) + 16;
+    RR(SXI, sy - 6, sw, 17, 3, cancelled ? [0.992, 0.925, 0.925] : RED); T(SXI + 8, sy, st, 7.6, true, cancelled ? ROSE : INK, 0.7);
+    let by = CB + 66; LBL(SXI, by, 'Issued on', LAV); T(SXI, by - 13, short(t.booked_at), 9.8, true, WHITE);
+    by -= 32; LBL(SXI, by, 'Issued by', LAV); T(SXI, by - 13, 'Zuna Hotel Desk', 9.8, true, WHITE);
+    // contact card
+    const gc = (p.contacts || []).filter((c) => c.phone || c.email)[0];
+    y = CB - 20; const contact = [['Guest email', t.email], ['Guest mobile', t.phone], ['Guest house contact', gc ? gc.name + (gc.phone ? ' - ' + gc.phone : '') : ''], ['Booked by', t.booked_by || ''], ['Remarks', t.note]].filter((r) => r[1]);
+    const rowsN = Math.ceil(contact.length / 2), CH2 = 36 + rowsN * 24;
+    RR(M, y - CH2, W - 2 * M, CH2, 10, WHITE); LBL(M + 24, y - 22, 'Contact & booking', MINT_D);
+    const half = (W - 2 * M - 48 - 24) / 2;
+    contact.forEach(([k, v], i) => { const cx = M + 24 + (i % 2) * (half + 24), ry = y - 44 - Math.floor(i / 2) * 24; T(cx, ry, k, 8.6, false, MUTED); const vv = fitLines(v, half - 90, 8.8, true)[0]; TR(cx + half, ry, vv, 8.8, true); Ln(cx, ry - 8, cx + half, ry - 8, [0.945, 0.937, 0.976], 0.6); });
+    y -= CH2 + 14;
+    // Zuna customer support
+    const SH = 66; RR(M, y - SH, W - 2 * M, SH, 10, INK); ops.push('q ' + rr(M, y - SH, W - 2 * M, SH, 10) + ' W n'); R(M, y - SH, 5, SH, RED); ops.push('Q');
+    LBL(M + 24, y - 20, 'Zuna customer support', LAV); T(M + 24, y - 38, 'Need help with this booking?', 10.5, true, WHITE);
+    T(M + 24, y - 53, 'Please quote booking code ' + (t.code || '') + '.', 8.6, false, [0.79, 0.76, 0.93]);
+    const sx2 = W - M - 24; LBLR(sx2, y - 20, 'Email', LAV); TR(sx2, y - 33, 'hotel@zuna.ai', 10, true, WHITE); LBLR(sx2 - 130, y - 20, 'Phone', LAV); TR(sx2 - 130, y - 33, '+91 91009 90530', 10, true, WHITE);
+    y -= SH + 22;
     // notes
-    y -= 6; T(M, y, 'PLEASE NOTE', 8, true, [0.004, 0.533, 0.361]); y -= 8; Ln(M, y, W - M, y, LINE); y -= 15;
-    ['Please carry a photo ID for check-in.', 'Changes and cancellations are made in the portal (Trips) or through the Zuna Hotel Desk.', 'Rooms are shared only between guests of the same gender.']
-      .forEach((n) => { R(M, y + 2.5, 3, 3, RED); T(M + 10, y, n, 9, false, INK); y -= 14; });
-    // cancelled watermark
-    if (cancelled) ops.unshift('q 0.992 0.925 0.925 rg BT /F2 86 Tf 0.819 0.574 -0.574 0.819 110 250 Tm ' + pdfStr('CANCELLED') + ' Tj ET Q');
+    LBL(M + 2, y, 'Please note'); y -= 15;
+    ['Please carry a photo ID for check-in.', 'Changes and cancellations are made in the portal (Trips) or through Zuna customer support.', 'Rooms are shared only between guests of the same gender.'].forEach((n) => { circle(M + 5, y + 3, 1.8, RED); T(M + 13, y, n, 8.8, false, INK); y -= 13; });
     // footer
-    Ln(M, 62, W - M, 62, LINE);
-    T(M, 46, 'Booked by ' + (t.booked_by || '-') + ' on ' + fmt(String(t.booked_at || '').slice(0, 10)) + (t.changed_at ? '   -   last changed ' + fmt(String(t.changed_at).slice(0, 10)) : ''), 7.5, false, MUTED);
-    T(M, 33, 'System-generated voucher. No signature needed.  Zuna Hotel Desk  -  Zuna Travel Solutions', 7.5, false, MUTED);
+    Ln(M, 46, W - M, 46, LINE, 0.7); T(M, 32, 'System-generated voucher. No signature required.', 7.5, false, MUTED); TR(W - M, 32, 'Zuna Hotel Desk  -  Zuna Travel Solutions  -  hotel@zuna.ai', 7.5, false, MUTED);
     return pdfBlob([ops], imgs, W, H);
   };
   L.voucher = (t, p, client) => { try { dl({filename: 'Voucher-' + (t.code || 'booking') + '-' + slug(String(t.name || t.guest || '')).slice(0, 30) + '.pdf', data: voucherPdf(t, p || {}, client || {})}); } catch (e) { L.toast('Could not make the voucher. Try again.'); } };

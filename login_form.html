@@ -224,7 +224,7 @@
       const w = $('#wipe');
       // welcome screen fades in, its logo animation plays, then the dashboard takes over the same screen
       setTimeout(() => { w.classList.remove('hidden'); w.classList.add('sp-fadein'); }, 160);
-      setTimeout(() => location.replace('/'), 900);
+      setTimeout(() => location.replace('/'), 450);
     } catch (e3) { busy(false); showErr('Network problem. Check your connection and try again.'); }
   });
 

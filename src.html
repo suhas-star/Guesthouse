@@ -42,7 +42,7 @@ if(document.readyState!=='loading')setTimeout(hide,150);else document.addEventLi
       <button data-view="overview" class="navbtn" title="Overview"><i data-i="layout-dashboard"></i><span class="sb-label">Overview</span></button>
       <button data-view="rack" class="navbtn" title="Room rack"><i data-i="bed-double"></i><span class="sb-label">Room rack</span></button>
       <button data-view="calendar" class="navbtn" title="Availability"><i data-i="calendar-days"></i><span class="sb-label">Availability</span></button>
-      <button data-view="bookings" class="navbtn" title="Stay register"><i data-i="list-checks"></i><span class="sb-label">Stay register</span><span id="navCount" class="sb-label ml-auto text-xs font-bold rounded-full px-2 py-0.5 bg-white/15">0</span></button>
+      <button data-view="bookings" class="navbtn" title="Stay register"><i data-i="list-checks"></i><span class="sb-label">Stay register</span></button>
       <button data-view="houses" class="navbtn" title="Directory"><i data-i="building-2"></i><span class="sb-label">Directory</span></button>
       <p id="navBookH" class="nav-h hidden" aria-hidden="true"><span>Bookings</span></p>
       <button data-view="book" id="navBook" class="navbtn hidden" title="Book a room"><i data-i="calendar-plus"></i><span class="sb-label">Book a room</span></button>
@@ -1560,7 +1560,6 @@ const render = () => {
   $('#propWrap').classList.toggle('invisible', ['houses', 'users', 'hotels', 'book', 'trips'].includes(state.view));
   const coRule = state.view === 'bookings' && coOn();   // check-out dates replace the range here
   $$('#rangeWrap button').forEach((b) => b.toggleAttribute('data-active', !coRule && b.dataset.range === state.range));
-  $('#navCount').textContent = myB().length;
   ({overview: renderOverview, rack: renderRack, calendar: renderCal, bookings: renderBookings, hotels: renderHotels, book: renderBook, trips: renderTrips, houses: renderHouses, users: () => renderUsersView()})[state.view]();
   if (state.view !== render.v) { render.v = state.view; ZUI.stagger(document.querySelector('.view[data-view="' + state.view + '"]')); }   // a soft lift only when the page changes; content is never hidden
 };

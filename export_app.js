@@ -168,7 +168,7 @@
     return pdfBlob(pages, imgs, W, H);
   };
   // write pages (lists of drawing operators) and JPEG images into a PDF file
-  const pdfBlob = (pages, imgs, W, H, font) => { const N = pages.length;
+  const pdfBlob = (pages, imgs, W, H, font, links) => { const N = pages.length;
     const chunks = [], offsets = []; let len = 0;
     const put = (x) => { const b = typeof x === 'string' ? u8(x) : x; chunks.push(b); len += b.length; };
     const obj = (n, body) => { offsets[n] = len; put(n + ' 0 obj\n'); body.forEach(put); put('\nendobj\n'); };
@@ -185,7 +185,7 @@
     const xo = imgs.map((_, i) => '/Im' + i + ' ' + (imgBase + i) + ' 0 R').join(' ');
     pages.forEach((p, i) => {
       const pn = pageBase + i * 2, cn = pn + 1, stream = p.join('\n');
-      obj(pn, ['<< /Type /Page /Parent 2 0 R /MediaBox [0 0 ' + W + ' ' + H + '] /Resources << /Font << /F1 ' + fontObj + ' 0 R /F2 4 0 R >> /XObject << ' + xo + ' >> >> /Contents ' + cn + ' 0 R >>']);
+      obj(pn, ['<< /Type /Page /Parent 2 0 R /MediaBox [0 0 ' + W + ' ' + H + '] /Resources << /Font << /F1 ' + fontObj + ' 0 R /F2 4 0 R >> /XObject << ' + xo + ' >> >>' + ((links && links[i] && links[i].length) ? ' /Annots [' + links[i].map((l) => '<< /Type /Annot /Subtype /Link /Rect [' + [l.x, l.y, l.x + l.w, l.y + l.h].map((v) => v.toFixed(1)).join(' ') + '] /Border [0 0 0] /A << /Type /Action /S /URI /URI (' + String(l.url).replace(/[^\x21-\x7e]/g, encodeURIComponent).replace(/([()\\])/g, '\\$1') + ') >> >>').join(' ') + ']' : '') + ' /Contents ' + cn + ' 0 R >>']);
       obj(cn, ['<< /Length ' + u8(stream).length + ' >>\nstream\n', stream, '\nendstream']);
     });
     if (font) [font.regular, font.bold].forEach((f, i) => { const bin = Uint8Array.from(atob(f.data), (c) => c.charCodeAt(0)), n = fx + i * 2;
@@ -394,7 +394,10 @@
     Ln(SX, CB + 10, SX, CT - 10, [0.255, 0.18, 0.553], 1.1, '3 3');   // perforation: a soft indigo dash on the stub circle(SX, CT, 8, BG); circle(SX, CB, 8, BG);
     // ticket · main part
     const X = M + 24, XR = SX - 22; let ty = CT - 30;
-    LBL(X, ty, 'Guest house stay'); ty -= 21; T(X, ty, t.property + (p.city ? ', ' + p.city : ''), 15, true);
+    LBL(X, ty, 'Guest house stay');
+    const links = [], mapUrl = p.map_url && /^https?:\/\//.test(p.map_url) ? p.map_url : 'https://www.google.com/maps/search/?api=1&query=' + encodeURIComponent([t.property, p.address, p.city && !String(p.address || '').toLowerCase().includes(String(p.city).toLowerCase()) ? p.city : ''].filter(Boolean).join(', '));
+    if (!cancelled) { const mt = 'Open in Google Maps', pw = tw(mt, 8, true) + 26, py = ty - 5; RR(XR - pw, py, pw, 17, 8.5, [0.902, 0.976, 0.945]); circle(XR - pw + 10, py + 8.5, 2.6, MINT_D); TR(XR - 9, py + 5.4, mt, 8, true, MINT_D); links.push({x: XR - pw, y: py, w: pw, h: 17, url: mapUrl}); }
+    ty -= 21; T(X, ty, t.property + (p.city ? ', ' + p.city : ''), 15, true);
     ty -= 14; fitLines(p.address || '', XR - X, 8.6, false).slice(0, 2).forEach((ln, i) => T(X, ty - i * 11, ln, 8.6, false, MUTED)); ty -= (Math.min(2, fitLines(p.address || '', XR - X, 8.6, false).length) - 1) * 11;
     ty -= 30; const a = dd(t.check_in), b = dd(t.check_out);
     const t12 = (x) => { const m = String(x || '').match(/^(\d{1,2}):(\d{2})/); if (!m) return ''; const H = +m[1]; return ((H % 12) || 12) + ':' + m[2] + (H < 12 ? ' AM' : ' PM'); };
@@ -441,7 +444,7 @@
     ['Please carry a photo ID for check-in.', 'Changes and cancellations are made in the portal (Trips) or through Zuna customer support.', 'Rooms are shared only between guests of the same gender.'].forEach((n) => { circle(M + 5, y + 3, 1.8, RED); T(M + 13, y, n, 8.8, false, INK); y -= 13; });
     // footer
     Ln(M, 46, W - M, 46, LINE, 0.7); T(M, 32, 'System-generated voucher. No signature required.', 7.5, false, MUTED); TR(W - M, 32, 'Zuna Hotel Desk  -  Zuna Travel Solutions  -  hotel@zuna.ai', 7.5, false, MUTED);
-    return pdfBlob([ops], imgs, W, H, typeof PDF_FONT !== 'undefined' ? PDF_FONT : null);
+    return pdfBlob([ops], imgs, W, H, typeof PDF_FONT !== 'undefined' ? PDF_FONT : null, [links]);
   };
   L.voucherFile = (t, p, client) => ({filename: 'Voucher-' + (t.code || 'booking') + '-' + slug(String(t.name || t.guest || '')).slice(0, 30) + '.pdf', data: voucherPdf(t, p || {}, client || {})});
   L.voucher = (t, p, client) => { try { dl({filename: 'Voucher-' + (t.code || 'booking') + '-' + slug(String(t.name || t.guest || '')).slice(0, 30) + '.pdf', data: voucherPdf(t, p || {}, client || {})}); } catch (e) { L.toast('Could not make the voucher. Try again.'); } };

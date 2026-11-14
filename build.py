@@ -6,7 +6,7 @@ import base64
 FAV='<link rel="icon" type="image/svg+xml" href="data:image/svg+xml;base64,'+base64.b64encode(open('assets/favicon.svg','rb').read()).decode()+'"><meta name="theme-color" content="#12005A">'
 src=open('src.html').read().replace('<!--__FAVICON__-->',FAV).replace('/*__UIKIT__*/',open('ui_kit.js').read())
 css=open('out.css').read()
-exp=open('export_app.js').read()
+exp=open('export_app.js').read().replace('/*__PDFFONT__*/', 'const PDF_FONT = ' + open('assets/inter_pdf.json').read().strip() + ';   // Inter, SIL Open Font License 1.1')
 icons=open('icons.json').read()
 logos=[open('assets/zuna_logo.b64').read().strip()]
 ltm=open('assets/ltm_logo.b64').read().strip()

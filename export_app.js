@@ -1,4 +1,5 @@
 (function(){
+  /*__PDFFONT__*/
   const RED = [0.008, 0.788, 0.533], INK = [0.071, 0, 0.353];
   const ascii = (t) => String(t == null ? '' : t).replace(/[–—]/g, '-').replace(/[·•]/g, '-').replace(/▲/g, '!').replace(/[^\x20-\x7e]/g, '');
   const u8 = (s) => new TextEncoder().encode(s);
@@ -167,7 +168,7 @@
     return pdfBlob(pages, imgs, W, H);
   };
   // write pages (lists of drawing operators) and JPEG images into a PDF file
-  const pdfBlob = (pages, imgs, W, H) => { const N = pages.length;
+  const pdfBlob = (pages, imgs, W, H, font) => { const N = pages.length;
     const chunks = [], offsets = []; let len = 0;
     const put = (x) => { const b = typeof x === 'string' ? u8(x) : x; chunks.push(b); len += b.length; };
     const obj = (n, body) => { offsets[n] = len; put(n + ' 0 obj\n'); body.forEach(put); put('\nendobj\n'); };
@@ -176,8 +177,10 @@
     const kids = pages.map((_, i) => (pageBase + i * 2) + ' 0 R').join(' ');
     obj(1, ['<< /Type /Catalog /Pages 2 0 R >>']);
     obj(2, ['<< /Type /Pages /Kids [' + kids + '] /Count ' + N + ' >>']);
-    obj(3, ['<< /Type /Font /Subtype /Type1 /BaseFont /Helvetica /Encoding /WinAnsiEncoding >>']);
-    obj(4, ['<< /Type /Font /Subtype /Type1 /BaseFont /Helvetica-Bold /Encoding /WinAnsiEncoding >>']);
+    const fx = pageBase + N * 2;   // embedded font objects (descriptor + file for each of the two fonts) go after the pages
+    const ttf = (n, f, fd) => { obj(n, ['<< /Type /Font /Subtype /TrueType /BaseFont /' + f.name + ' /FirstChar 32 /LastChar 126 /Widths [' + f.widths.join(' ') + '] /Encoding /WinAnsiEncoding /FontDescriptor ' + fd + ' 0 R >>']); };
+    if (font) { ttf(3, font.regular, fx); ttf(4, font.bold, fx + 2); }
+    else { obj(3, ['<< /Type /Font /Subtype /Type1 /BaseFont /Helvetica /Encoding /WinAnsiEncoding >>']); obj(4, ['<< /Type /Font /Subtype /Type1 /BaseFont /Helvetica-Bold /Encoding /WinAnsiEncoding >>']); }
     imgs.forEach((im, i) => obj(imgBase + i, ['<< /Type /XObject /Subtype /Image /Width ' + im.w + ' /Height ' + im.h + ' /ColorSpace /DeviceRGB /BitsPerComponent 8 /Filter /DCTDecode /Length ' + im.data.length + ' >>\nstream\n', im.data, '\nendstream']));
     const xo = imgs.map((_, i) => '/Im' + i + ' ' + (imgBase + i) + ' 0 R').join(' ');
     pages.forEach((p, i) => {
@@ -185,7 +188,10 @@
       obj(pn, ['<< /Type /Page /Parent 2 0 R /MediaBox [0 0 ' + W + ' ' + H + '] /Resources << /Font << /F1 ' + fontObj + ' 0 R /F2 4 0 R >> /XObject << ' + xo + ' >> >> /Contents ' + cn + ' 0 R >>']);
       obj(cn, ['<< /Length ' + u8(stream).length + ' >>\nstream\n', stream, '\nendstream']);
     });
-    const total = pageBase + N * 2, xref = len;
+    if (font) [font.regular, font.bold].forEach((f, i) => { const bin = Uint8Array.from(atob(f.data), (c) => c.charCodeAt(0)), n = fx + i * 2;
+      obj(n, ['<< /Type /FontDescriptor /FontName /' + f.name + ' /Flags 32 /FontBBox [' + f.bbox.join(' ') + '] /ItalicAngle 0 /Ascent ' + f.ascent + ' /Descent ' + f.descent + ' /CapHeight ' + f.cap + ' /StemV ' + (i ? 120 : 80) + ' /FontFile2 ' + (n + 1) + ' 0 R >>']);
+      obj(n + 1, ['<< /Length ' + bin.length + ' /Length1 ' + bin.length + ' >>\nstream\n', bin, '\nendstream']); });
+    const total = pageBase + N * 2 + (font ? 4 : 0), xref = len;
     let x = 'xref\n0 ' + total + '\n0000000000 65535 f \n';
     for (let i = 1; i < total; i++) x += String(offsets[i]).padStart(10, '0') + ' 00000 n \n';
     put(x + 'trailer\n<< /Size ' + total + ' /Root 1 0 R >>\nstartxref\n' + xref + '\n%%EOF');
@@ -344,7 +350,10 @@
   const HW = {r: ' 278!278"355#556$556%889&667\'191(333)333*389+584,278-333.278/278:278;278<584=584>584?556@1015[278\\278]278^469_556`333{334|260}334~584A667B667C722D722E667F611G778H722I278J500K667L556M833N722O778P667Q778R722S667T611U722V667W944X667Y667Z611a556b556c500d556e556f278g556h556i222j222k500l222m833n556o556p556q556r333s500t278u556v500w722x500y500z500',
     b: ' 278!333"474#556$556%889&722\'238(333)333*389+584,278-333.278/278:333;333<584=584>584?611@975[333\\278]333^584_556`333{389|280}389~584A722B722C722D722E667F611G778H722I278J556K722L611M833N722O778P667Q778R722S667T611U722V667W944X667Y667Z611a556b611c556d611e556f333g611h611i278j278k556l278m889n611o611p611q611r389s556t333u611v556w778x556y556z500'};
   const HWT = {}; ['r', 'b'].forEach((k) => { const m = {}; HW[k].replace(/(.)(\d+)/g, (_, c, n) => { m[c] = +n; return ''; }); HWT[k] = m; });
-  const tw = (t, size, bold, cs) => { const s = ascii(t), m = HWT[bold ? 'b' : 'r']; let w = 0; for (const ch of s) w += /\d/.test(ch) ? 556 : (m[ch] || 556); return w * size / 1000 + (cs || 0) * Math.max(0, s.length - 1); };
+  const tw = (t, size, bold, cs) => { const s = ascii(t); let w = 0;
+    if (typeof PDF_FONT !== 'undefined') { const ws = PDF_FONT[bold ? 'bold' : 'regular'].widths; for (const ch of s) w += ws[ch.charCodeAt(0) - 32] || 600; }
+    else { const m = HWT[bold ? 'b' : 'r']; for (const ch of s) w += /\d/.test(ch) ? 556 : (m[ch] || 556); }
+    return w * size / 1000 + (cs || 0) * Math.max(0, s.length - 1); };
   const fitLines = (t, width, size, bold) => { const words = ascii(t).split(/\s+/).filter(Boolean), out = []; let cur = '';
     words.forEach((w) => { const n = cur ? cur + ' ' + w : w; if (tw(n, size, bold) > width && cur) { out.push(cur); cur = w; } else cur = n; }); if (cur) out.push(cur); return out.length ? out : ['']; };
   const voucherPdf = (t, p, client) => {
@@ -382,7 +391,7 @@
     const CT = y - 18, CH = 218, CB = CT - CH, SW = 150, SX = W - M - SW;
     RR(M + 1.5, CB - 3, W - 2 * M, CH, 12, [0.902, 0.886, 0.957]);   // soft shadow
     ops.push('q ' + rr(M, CB, W - 2 * M, CH, 12) + ' W n'); R(M, CB, W - 2 * M, CH, WHITE); R(SX, CB, SW, CH, INK); ops.push('Q');
-    Ln(SX, CB + 10, SX, CT - 10, BG, 1.6, '4 3.5'); circle(SX, CT, 8, BG); circle(SX, CB, 8, BG);
+    Ln(SX, CB + 10, SX, CT - 10, [0.255, 0.18, 0.553], 1.1, '3 3');   // perforation: a soft indigo dash on the stub circle(SX, CT, 8, BG); circle(SX, CB, 8, BG);
     // ticket · main part
     const X = M + 24, XR = SX - 22; let ty = CT - 30;
     LBL(X, ty, 'Guest house stay'); ty -= 21; T(X, ty, t.property + (p.city ? ', ' + p.city : ''), 15, true);
@@ -430,7 +439,7 @@
     ['Please carry a photo ID for check-in.', 'Changes and cancellations are made in the portal (Trips) or through Zuna customer support.', 'Rooms are shared only between guests of the same gender.'].forEach((n) => { circle(M + 5, y + 3, 1.8, RED); T(M + 13, y, n, 8.8, false, INK); y -= 13; });
     // footer
     Ln(M, 46, W - M, 46, LINE, 0.7); T(M, 32, 'System-generated voucher. No signature required.', 7.5, false, MUTED); TR(W - M, 32, 'Zuna Hotel Desk  -  Zuna Travel Solutions  -  hotel@zuna.ai', 7.5, false, MUTED);
-    return pdfBlob([ops], imgs, W, H);
+    return pdfBlob([ops], imgs, W, H, typeof PDF_FONT !== 'undefined' ? PDF_FONT : null);
   };
   L.voucher = (t, p, client) => { try { dl({filename: 'Voucher-' + (t.code || 'booking') + '-' + slug(String(t.name || t.guest || '')).slice(0, 30) + '.pdf', data: voucherPdf(t, p || {}, client || {})}); } catch (e) { L.toast('Could not make the voucher. Try again.'); } };
   L.weeklyReport = weeklyReport;

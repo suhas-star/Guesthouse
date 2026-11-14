@@ -1246,10 +1246,33 @@ const bkStepper = () => { const ol = h('ol', 'grid grid-cols-4 gap-2 mb-6');
 const bkHead = (pane, title, sub) => { pane.appendChild(h('h3', 'text-lg font-bold', title)); pane.appendChild(h('p', 'text-sm text-zuna-500 mt-0.5 mb-4', sub)); };
 
 // step 1 · where and when
-const bkStay = (pane) => { const live = props.filter((p) => p.status === 'Live');
-  bkHead(pane, 'Where and when?', 'Pick the guest house and the stay dates.');
+// right of the Stay step: the chosen guest house with live availability for the chosen nights
+const bkPreview = (box) => { const p = bkHouse(); box.replaceChildren(); if (!p.property) return;
+  const c = h('div', 'rounded-2xl overflow-hidden bg-white ring-1 ring-zuna-100 shadow-sm');
+  const im = h('img', 'w-full h-36 object-cover bg-zuna-50'); im.src = (p.photos && p.photos[0] && p.photos[0].url) || ZUI.art.gh; im.alt = (p.photos && p.photos[0] && p.photos[0].caption) || ''; c.appendChild(im);
+  const bd = h('div', 'p-4 space-y-3'); const t = h('div'); t.appendChild(h('p', 'font-bold text-base leading-snug', p.property)); t.appendChild(h('p', 'text-xs text-zuna-500 mt-0.5', p.address ? (p.city && !p.address.toLowerCase().includes(p.city.toLowerCase()) ? p.address + ', ' + p.city : p.address) : (p.city || ''))); bd.appendChild(t);
+  const av = h('div', 'rounded-xl bg-zuna-50 ring-1 ring-zuna-100 px-3 py-2.5'); av.appendChild(h('div', 'chart-skel h-9 rounded-lg')); bd.appendChild(av);
+  const tags = [].concat(p.inclusions || [], p.amenities || []).filter(Boolean).slice(0, 6);
+  if (tags.length) { const tg = h('div', 'flex flex-wrap gap-1.5'); tags.forEach((x) => tg.appendChild(h('span', 'rounded-md bg-white ring-1 ring-zuna-100 px-2 py-0.5 text-[11px] font-semibold text-zuna-600', x))); bd.appendChild(tg); }
+  const hd = (p.contacts || []).filter((x) => x.phone)[0]; if (hd) { const r = h('p', 'flex items-center gap-2 text-xs text-zuna-500 pt-2 border-t border-zuna-50'); r.appendChild(icon('phone', 'w-3.5 h-3.5 text-mint-600 shrink-0')); r.appendChild(document.createTextNode('Helpdesk · ' + hd.name + ' · ')); r.appendChild(h('b', 'text-zuna-900 font-semibold', hd.phone)); bd.appendChild(r); }
+  c.appendChild(bd); box.appendChild(c);
+  const paintAv = () => { av.replaceChildren(); const rs = BK.rooms || [], tot = rs.length, free = rs.filter((r) => r.state === 'free').length, one = rs.filter((r) => r.state === 'shared').length;
+    if (!(BK.co > BK.ci)) { av.appendChild(h('p', 'text-xs font-semibold text-rose-600', 'Pick a check-out after check-in.')); return; }
+    const top = h('div', 'flex items-baseline justify-between gap-2'); top.appendChild(h('p', 'text-sm font-bold ' + (free || one ? '' : 'text-rose-600'), free || one ? free + ' of ' + tot + ' rooms free' + (one ? ' · ' + one + ' with a bed left' : '') : 'No rooms free for these nights'));
+    top.appendChild(h('span', 'text-[11px] text-zuna-500 shrink-0', fShort(BK.ci) + ' – ' + fShort(BK.co))); av.appendChild(top);
+    const bar = h('div', 'mt-2 h-1.5 rounded-full bg-zuna-100 overflow-hidden flex'); bar.appendChild(h('div', 'h-full bg-mint-500')).style.width = (tot ? free / tot * 100 : 0) + '%'; bar.appendChild(h('div', 'h-full bg-amber-400')).style.width = (tot ? one / tot * 100 : 0) + '%'; av.appendChild(bar);
+    if (!free && !one) av.appendChild(h('p', 'text-[11px] text-zuna-500 mt-1.5', 'Try other dates or another guest house.')); };
+  if (BK.rooms && BK.roomsKey === BK.prop + '|' + BK.ci + '|' + BK.co) { paintAv(); return; }
+  if (!(BK.co > BK.ci)) { paintAv(); return; }
+  const key = BK.prop + '|' + BK.ci + '|' + BK.co, seq = ++BK.seq;
+  bApi('book/avail', {property: BK.prop, check_in: BK.ci, check_out: BK.co, exclude_id: BK.edit ? BK.edit.id : undefined}).then((j) => { if (seq !== BK.seq) return; BK.rooms = j.rooms; BK.roomsKey = key; if (av.isConnected) paintAv(); })
+    .catch((x) => { if (av.isConnected) { av.replaceChildren(h('p', 'text-xs font-semibold text-rose-600', x.message)); } }); };
+const bkStay = (outer) => { const live = props.filter((p) => p.status === 'Live');
+  bkHead(outer, 'Where and when?', 'Pick the guest house and the stay dates.');
+  const cols = h('div', 'grid gap-6 lg:grid-cols-[minmax(0,1fr)_minmax(0,360px)] items-start'), pane = h('div', 'min-w-0'), side = h('div', 'min-w-0'); cols.append(pane, side); outer.appendChild(cols);
+  const prev = () => bkPreview(side);
   if (live.length <= 3) {   // a few guest houses: big choices; more than three: a dropdown
-    const g = h('div', 'grid gap-2 sm:grid-cols-3 mb-4'); g.setAttribute('role', 'radiogroup'); g.setAttribute('aria-label', 'Guest house');
+    const g = h('div', 'grid gap-2 sm:grid-cols-2 xl:grid-cols-3 mb-4'); g.setAttribute('role', 'radiogroup'); g.setAttribute('aria-label', 'Guest house');
     live.forEach((p) => { const on = BK.prop === p.property; const b = h('button', 'text-left rounded-xl p-3.5 ring-1 transition-all min-w-0 ' + (on ? 'ring-2 ring-mint-500 bg-mint-50' : 'ring-zuna-100 bg-white hover:ring-mint-500'));
       b.type = 'button'; b.setAttribute('role', 'radio'); b.setAttribute('aria-checked', on ? 'true' : 'false');
       const top = h('div', 'flex items-start gap-2'); top.appendChild(h('span', 'font-bold leading-snug flex-1 min-w-0', p.property)); if (on) top.appendChild(icon('circle-check', 'w-4 h-4 text-mint-600 shrink-0 mt-0.5')); b.appendChild(top);
@@ -1257,13 +1280,13 @@ const bkStay = (pane) => { const live = props.filter((p) => p.status === 'Live')
       b.onclick = () => { if (BK.prop !== p.property) { BK.prop = p.property; BK.room = ''; BK.rooms = null; } bkDraw(); }; g.appendChild(b); });
     pane.appendChild(bField('Guest house', g)); }
   else { const s = bSelect(live.map((p) => [p.property, p.property + (p.city ? ' · ' + p.city : '') + ' · ' + (+p.rooms || 0) + ' rooms']), BK.prop); s.setAttribute('aria-label', 'Guest house');
-    s.onchange = () => { BK.prop = s.value; BK.room = ''; BK.rooms = null; }; const w = bField('Guest house', s); w.classList.add('block', 'mb-4', 'sm:max-w-md'); pane.appendChild(w); }
-  const dg = h('div', 'grid grid-cols-2 gap-3 sm:max-w-md'); const ci = h('input', fldCls); ci.type = 'date'; ci.min = BK.edit && BK.edit.check_in < today ? BK.edit.check_in : today; ci.value = BK.ci; ci.setAttribute('aria-label', 'Check-in');
+    s.onchange = () => { BK.prop = s.value; BK.room = ''; BK.rooms = null; prev(); }; const w = bField('Guest house', s); w.classList.add('block', 'mb-4'); pane.appendChild(w); }
+  const dg = h('div', 'grid grid-cols-2 gap-3'); const ci = h('input', fldCls); ci.type = 'date'; ci.min = BK.edit && BK.edit.check_in < today ? BK.edit.check_in : today; ci.value = BK.ci; ci.setAttribute('aria-label', 'Check-in');
   const co = h('input', fldCls); co.type = 'date'; co.min = addDays(today, 1); co.value = BK.co; co.setAttribute('aria-label', 'Check-out');
   const nn = h('p', 'text-xs text-zuna-500 mt-2'); const paintN = () => { const n = bkNights(); nn.textContent = n > 0 ? n + (n === 1 ? ' night · ' : ' nights · ') + fFull(BK.ci) + ' → ' + fFull(BK.co) : 'Check-out must be after check-in.'; };
-  ci.onchange = () => { BK.ci = ci.value; if (!(BK.co > BK.ci)) { BK.co = addDays(BK.ci, 1); co.value = BK.co; } BK.rooms = null; paintN(); };
-  co.onchange = () => { BK.co = co.value; BK.rooms = null; paintN(); };
-  dg.append(bField('Check-in', ci), bField('Check-out', co)); pane.append(dg, nn); paintN(); };
+  ci.onchange = () => { BK.ci = ci.value; if (!(BK.co > BK.ci)) { BK.co = addDays(BK.ci, 1); co.value = BK.co; } BK.rooms = null; paintN(); prev(); };
+  co.onchange = () => { BK.co = co.value; BK.rooms = null; paintN(); prev(); };
+  dg.append(bField('Check-in', ci), bField('Check-out', co)); pane.append(dg, nn); paintN(); prev(); };
 
 // mobile number: country code dropdown + number, stored as "+91 98450 12345"
 const DIAL = [['+91', 'India'], ['+971', 'UAE'], ['+966', 'Saudi Arabia'], ['+974', 'Qatar'], ['+968', 'Oman'], ['+973', 'Bahrain'], ['+965', 'Kuwait'], ['+1', 'USA / Canada'], ['+44', 'United Kingdom'], ['+65', 'Singapore'],

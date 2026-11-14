@@ -225,63 +225,78 @@ const renderRates = (D, c) => {
   const ghs = c.guesthouses; if (!ghs.length) { D.appendChild(h('div', 'card p-10 text-center text-sm text-zuna-500', 'Add a guest house first.')); return; }
   if (!ghs.some((g) => g.id === RT.gh[c.id])) RT.gh[c.id] = ghs[0].id; const g = ghs.find((x) => x.id === RT.gh[c.id]);
   const types = g.room_types || [], tName = (id) => id ? ((types.find((t) => t.id === id) || {}).name || 'Room type') : 'Whole guest house';
-  const bar = h('div', 'flex flex-wrap items-center gap-3 mb-4'); const gs = sel(String(g.id), ghs.map((x) => [String(x.id), x.property + (x.city ? ' · ' + x.city : '')])); gs.classList.add('!w-72');
-  gs.onchange = () => { RT.gh[c.id] = +gs.value; render(); }; bar.appendChild(gs);
-  const lock = ib('span', 'text-xs font-semibold text-zuna-500', 'Visible to the Zuna team only. Clients never see rates or charges.', 'lock'); bar.appendChild(lock); D.appendChild(bar);
   const rates = (c.rates || []).filter((r) => r.gh_id === g.id), blocks = (c.blocks || []).filter((b) => b.gh_id === g.id);
-  const grid = h('div', 'grid gap-4 2xl:grid-cols-[minmax(0,1.7fr)_minmax(0,1fr)] items-start'); const L = h('div', 'space-y-4 min-w-0'), R = h('div', 'space-y-4 min-w-0'); grid.append(L, R); D.appendChild(grid);
+  const view = RT.view || 'rates', today = new Date().toISOString().slice(0, 10);
+  const iconBtn = (ic, lab, cls) => { const x = h('button', 'iconbtn ' + (cls || '')); x.type = 'button'; x.title = lab; x.setAttribute('aria-label', lab); x.appendChild(icon(ic, 'w-4 h-4')); return x; };
+  const shell = h('div', 'card overflow-hidden'); D.appendChild(shell);
 
-  // service charge: one amount per client, once per booking
-  const sc0 = h('div', 'card px-5 py-4 flex flex-wrap items-end gap-4'); const sct = h('div', 'min-w-[220px] flex-1'); sct.appendChild(h('h3', 'font-bold', 'Service charge · ' + c.name));
-  sct.appendChild(h('p', 'text-xs text-zuna-500', 'Charged once per booking, for every guest house of this client, plus 18% GST. Applies even when the fare is Nil.')); sc0.appendChild(sct);
-  const sv = inp(c.svc_fee || '', 'e.g. 250', 'number'); sv.min = '0'; sv.step = '0.01'; const svw = field('Per booking (₹, before GST)', sv); svw.classList.add('w-48'); sc0.appendChild(svw);
-  const svp = h('p', 'text-sm pb-2.5 tabular-nums'); const paintSv = () => { const v = +sv.value || 0; svp.replaceChildren(); svp.appendChild(h('span', 'text-zuna-500', '+ GST ' + money(Math.round(v * 18) / 100) + ' = ')); svp.appendChild(h('b', null, money(Math.round(v * 118) / 100) + ' per booking')); }; sv.addEventListener('input', paintSv); paintSv(); sc0.appendChild(svp);
-  const svs = ib('button', 'btn-primary', 'Save', 'check'); svs.onclick = async () => { svs.disabled = true; try { await api('svc', {client_id: c.id, svc_fee: +sv.value || 0}); toast('Service charge saved'); load(true); } catch (er) { toast(er.message, true); svs.disabled = false; } }; sc0.appendChild(svs);
-  L.appendChild(sc0);
+  // toolbar: guest house · client service charge · Zuna only
+  const tb = h('div', 'flex flex-wrap items-center gap-3 px-5 py-3.5 border-b border-zuna-100');
+  const gs = sel(String(g.id), ghs.map((x) => [String(x.id), x.property + (x.city ? ' · ' + x.city : '')])); gs.setAttribute('aria-label', 'Guest house'); gs.onchange = () => { RT.gh[c.id] = +gs.value; render(); };
+  const gw = h('div', 'w-full sm:w-72'); gw.appendChild(gs); tb.appendChild(gw);
+  const sv = h('div', 'flex items-center gap-2 rounded-xl bg-zuna-50 ring-1 ring-zuna-100 pl-3.5 pr-1.5 py-1.5 text-sm');
+  const svView = () => { sv.replaceChildren(); const v = +c.svc_fee || 0; sv.appendChild(h('span', 'text-xs font-semibold text-zuna-500', 'Service charge'));
+    sv.appendChild(h('b', 'tabular-nums', money(v))); sv.appendChild(h('span', 'text-xs text-zuna-500 tabular-nums', '+ 18% GST = ' + money(Math.round(v * 118) / 100) + ' per booking'));
+    const e = iconBtn('pencil', 'Edit service charge'); e.classList.add('!w-7', '!h-7'); e.onclick = svEdit; sv.appendChild(e); sv.title = 'Charged once per booking for every guest house of ' + c.name + ', even when the fare is Nil.'; };
+  const svEdit = () => { sv.replaceChildren(); sv.appendChild(h('span', 'text-xs font-semibold text-zuna-500', 'Service charge ₹'));
+    const i = h('input', 'w-24 rounded-lg bg-white ring-1 ring-zuna-100 px-2 py-1 text-sm tabular-nums focus:outline-none focus:ring-2 focus:ring-mint-500'); i.type = 'number'; i.min = '0'; i.step = '0.01'; i.value = c.svc_fee || ''; i.setAttribute('aria-label', 'Service charge per booking, before GST');
+    const s = ib('button', 'btn-primary !py-1 !px-2.5 text-xs', 'Save', 'check'); const x = h('button', 'text-xs font-semibold text-zuna-500 hover:text-zuna-900 px-1', 'Cancel'); x.type = 'button'; x.onclick = svView;
+    const go = async () => { s.disabled = true; try { await api('svc', {client_id: c.id, svc_fee: +i.value || 0}); toast('Service charge saved'); load(true); } catch (er) { toast(er.message, true); s.disabled = false; } };
+    s.onclick = go; i.onkeydown = (ev) => { if (ev.key === 'Enter') go(); if (ev.key === 'Escape') svView(); }; sv.append(i, s, x); setTimeout(() => i.focus()); };
+  svView(); tb.appendChild(sv);
+  tb.appendChild(ib('span', 'ml-auto text-xs font-semibold text-zuna-500', 'Zuna team only', 'lock')); shell.appendChild(tb);
 
-  // rates list
-  const rc = h('div', 'card overflow-hidden'); const rh = h('div', 'flex flex-wrap items-center gap-3 px-5 py-4 border-b border-zuna-100'); const rt = h('div'); rt.appendChild(h('h3', 'font-bold', 'Rates')); rt.appendChild(h('p', 'text-xs text-zuna-500', 'Basic fare per night. Tax: 5% below ₹7,500 a night, 18% from ₹7,500.')); rh.appendChild(rt);
-  const add = ib('button', 'ml-auto btn-primary', 'Add rate', 'plus'); add.onclick = () => rateForm(c, g, null); rh.appendChild(add); rc.appendChild(rh);
-  if (!rates.length) rc.appendChild(h('p', 'px-5 py-8 text-center text-sm text-zuna-500', 'No rates yet for ' + g.property + '. Add one for the whole guest house or a room type.'));
-  else { const sc = h('div', 'overflow-x-auto'); const tb = h('table', 'w-full text-sm'); const hr = h('tr', 'text-left text-xs font-semibold text-zuna-500 bg-zuna-50');
-    ['Applies to', 'Nights', 'Basic fare / night', 'Fare with tax / night', ''].forEach((x) => { const th = h('th', 'px-4 py-2.5 whitespace-nowrap', x); if (!x) th.appendChild(h('span', 'sr-only', 'Actions')); th.scope = 'col'; hr.appendChild(th); }); const th0 = h('thead'); th0.appendChild(hr); tb.appendChild(th0);
-    const bd = h('tbody', 'divide-y divide-zuna-50'); const today = new Date().toISOString().slice(0, 10);
-    rates.forEach((r) => { const tr = h('tr', 'align-top hover:bg-zuna-50/50'); const live = r.from <= today && r.to >= today;
-      const c1 = h('td', 'px-4 py-3'); c1.appendChild(h('p', 'font-semibold whitespace-nowrap', tName(r.room_type_id))); if (r.note) c1.appendChild(h('p', 'text-xs text-zuna-500', r.note)); tr.appendChild(c1);
-      const c2 = h('td', 'px-4 py-3 whitespace-nowrap'); c2.appendChild(h('p', 'font-medium', fD(r.from) + ' – ' + fD(r.to))); if (live) c2.appendChild(h('span', 'text-[11px] font-bold text-mint-700', 'In use today')); tr.appendChild(c2);
-      const c3 = h('td', 'px-4 py-3 whitespace-nowrap'); if (r.nil) { c3.appendChild(h('span', 'rounded-md bg-zuna-900 text-white px-2 py-0.5 text-xs font-bold', 'Nil')); } else { c3.appendChild(h('p', 'font-semibold tabular-nums', money(r.fare))); c3.appendChild(h('p', 'text-xs text-zuna-500', '+ ' + Math.round(fareTax(r.fare) * 100) + '% tax')); } tr.appendChild(c3);
-      const fare = r.nil ? 0 : r.fare, pn = fare + fare * fareTax(fare);
-      const c5 = h('td', 'px-4 py-3 whitespace-nowrap'); c5.appendChild(h('p', 'font-bold tabular-nums', r.nil ? 'Nil' : money(Math.round(pn * 100) / 100))); tr.appendChild(c5);
-      const c6 = h('td', 'px-3 py-3 text-right whitespace-nowrap'); const iconBtn = (ic, lab, cls) => { const x2 = h('button', 'iconbtn ' + (cls || '')); x2.type = 'button'; x2.title = lab; x2.setAttribute('aria-label', lab); x2.appendChild(icon(ic, 'w-4 h-4')); return x2; };
-      const e = iconBtn('pencil', 'Edit rate'); e.onclick = () => rateForm(c, g, r);
+  // sub-views + the action for the open one
+  const sb = h('div', 'flex flex-wrap items-center gap-3 px-5 py-2.5 bg-zuna-50/50 border-b border-zuna-100');
+  const seg = h('div', 'flex gap-1 rounded-xl bg-white ring-1 ring-zuna-100 p-1'); seg.setAttribute('role', 'tablist');
+  [['rates', 'Rates', rates.length], ['blocks', 'Blackout dates', blocks.length], ['price', 'Price check', null]].forEach(([k, l, n]) => { const b = h('button', 'flex items-center gap-1.5 rounded-lg px-3 py-1.5 text-xs font-semibold transition-colors ' + (view === k ? 'bg-zuna-900 text-white' : 'text-zuna-600 hover:text-zuna-900'));
+    b.type = 'button'; b.setAttribute('role', 'tab'); b.setAttribute('aria-selected', view === k ? 'true' : 'false'); b.appendChild(document.createTextNode(l)); if (n != null) b.appendChild(h('span', 'rounded-full px-1.5 text-[10px] tabular-nums ' + (view === k ? 'bg-white/20' : 'bg-zuna-100'), String(n))); b.onclick = () => { RT.view = k; render(); }; seg.appendChild(b); });
+  sb.appendChild(seg);
+  sb.appendChild(h('p', 'text-xs text-zuna-500', view === 'rates' ? 'Basic fare per night · tax 5% below ₹7,500 a night, 18% from ₹7,500' : view === 'blocks' ? 'Blocked rooms cannot be booked by clients or by the Zuna team' : 'Fare, tax, service charge and GST for a stay'));
+  if (view === 'rates') { const a = ib('button', 'ml-auto btn-primary !py-1.5', 'Add rate', 'plus'); a.onclick = () => rateForm(c, g, null); sb.appendChild(a); }
+  if (view === 'blocks') { const a = ib('button', 'ml-auto btn-primary !py-1.5', 'Block dates', 'ban'); a.onclick = () => blockForm(c, g, null); sb.appendChild(a); }
+  shell.appendChild(sb);
+  const th = (cols) => { const t = h('thead'); const r = h('tr', 'text-left text-xs font-semibold text-zuna-500'); cols.forEach((x) => { const e = h('th', 'px-5 py-2.5 whitespace-nowrap border-b border-zuna-100', x); e.scope = 'col'; if (!x) e.appendChild(h('span', 'sr-only', 'Actions')); r.appendChild(e); }); t.appendChild(r); return t; };
+  const empty = (msg) => shell.appendChild(h('p', 'px-5 py-10 text-center text-sm text-zuna-500', msg));
+
+  if (view === 'rates') {
+    if (!rates.length) return empty('No rates yet for ' + g.property + '. Add one for the whole guest house or a room type.');
+    const sc = h('div', 'overflow-x-auto'); const t = h('table', 'w-full text-sm'); t.appendChild(th(['Applies to', 'Nights', 'Basic fare / night', 'With tax / night', 'Note', ''])); const bd = h('tbody', 'divide-y divide-zuna-50');
+    rates.forEach((r) => { const tr = h('tr', 'hover:bg-zuna-50/50'); const live = r.from <= today && r.to >= today, fare = r.nil ? 0 : r.fare;
+      const c1 = h('td', 'px-5 py-3 font-semibold whitespace-nowrap', tName(r.room_type_id));
+      const c2 = h('td', 'px-5 py-3 whitespace-nowrap'); c2.appendChild(document.createTextNode(fD(r.from) + ' – ' + fD(r.to))); if (live) c2.appendChild(h('span', 'ml-2 rounded-full bg-mint-50 ring-1 ring-mint-200 px-2 py-0.5 text-[10.5px] font-bold text-mint-700', 'In use'));
+      const c3 = h('td', 'px-5 py-3 whitespace-nowrap tabular-nums'); if (r.nil) c3.appendChild(h('span', 'rounded-md bg-zuna-900 text-white px-2 py-0.5 text-xs font-bold', 'Nil')); else { c3.appendChild(h('b', 'font-semibold', money(fare))); c3.appendChild(h('span', 'ml-1.5 text-xs text-zuna-500', '+ ' + Math.round(fareTax(fare) * 100) + '%')); }
+      const c4 = h('td', 'px-5 py-3 whitespace-nowrap font-bold tabular-nums', r.nil ? '—' : money(Math.round((fare + fare * fareTax(fare)) * 100) / 100));
+      const c5 = h('td', 'px-5 py-3 text-xs text-zuna-500 max-w-[220px] truncate', r.note || ''); c5.title = r.note || '';
+      const c6 = h('td', 'px-4 py-2 text-right whitespace-nowrap'); const e = iconBtn('pencil', 'Edit rate'); e.onclick = () => rateForm(c, g, r);
       const x = iconBtn('trash-2', 'Delete rate', 'text-rose-600'); x.onclick = async () => { if (!(await ZUI.confirm({title: 'Delete this rate?', message: tName(r.room_type_id) + ' · ' + fD(r.from) + ' – ' + fD(r.to), ok: 'Delete rate', tone: 'danger'}))) return; try { await api('rate', {gh_id: g.id, id: r.id, delete: true}); toast('Rate deleted'); load(true); } catch (er) { toast(er.message, true); } };
-      const acts = h('div', 'inline-flex items-center gap-1'); acts.append(e, x); c6.appendChild(acts); tr.appendChild(c6); bd.appendChild(tr); });
-    tb.appendChild(bd); sc.appendChild(tb); rc.appendChild(sc); }
-  L.appendChild(rc);
+      const ac = h('div', 'inline-flex gap-1'); ac.append(e, x); c6.appendChild(ac); tr.append(c1, c2, c3, c4, c5, c6); bd.appendChild(tr); });
+    t.appendChild(bd); sc.appendChild(t); shell.appendChild(sc); return; }
 
-  // blackout dates
-  const bc = h('div', 'card overflow-hidden'); const bh = h('div', 'flex flex-wrap items-center gap-3 px-5 py-4 border-b border-zuna-100'); const bt = h('div'); bt.appendChild(h('h3', 'font-bold', 'Blackout dates')); bt.appendChild(h('p', 'text-xs text-zuna-500', 'Blocked rooms cannot be booked by clients or by the Zuna team.')); bh.appendChild(bt);
-  const addB = ib('button', 'ml-auto btn', 'Block dates', 'ban'); addB.onclick = () => blockForm(c, g, null); bh.appendChild(addB); bc.appendChild(bh);
-  if (!blocks.length) bc.appendChild(h('p', 'px-5 py-6 text-center text-sm text-zuna-500', 'Nothing blocked.'));
-  blocks.forEach((b) => { const r = h('div', 'flex flex-wrap items-center gap-3 px-5 py-3 border-b border-zuna-50 last:border-0'); const tx = h('div', 'min-w-0 flex-1');
-    tx.appendChild(h('p', 'font-semibold text-sm', (b.rooms.length ? (b.rooms.length === 1 ? 'Room ' : 'Rooms ') + b.rooms.join(', ') : 'Whole guest house') + ' · ' + fD(b.from) + ' – ' + fD(b.to))); if (b.reason) tx.appendChild(h('p', 'text-xs text-zuna-500', b.reason)); r.appendChild(tx);
-    const e = ib('button', 'btn !py-1 !px-2 text-xs', 'Edit', 'pencil'); e.onclick = () => blockForm(c, g, b);
-    const x = ib('button', 'btn !py-1 !px-2 text-xs text-rose-600', 'Remove', 'trash-2'); x.onclick = async () => { try { await api('block', {gh_id: g.id, id: b.id, delete: true}); toast('Block removed'); load(true); } catch (er) { toast(er.message, true); } };
-    r.append(e, x); bc.appendChild(r); });
-  L.appendChild(bc);
+  if (view === 'blocks') {
+    if (!blocks.length) return empty('Nothing blocked at ' + g.property + '.');
+    const sc = h('div', 'overflow-x-auto'); const t = h('table', 'w-full text-sm'); t.appendChild(th(['Applies to', 'Nights', 'Reason', ''])); const bd = h('tbody', 'divide-y divide-zuna-50');
+    blocks.forEach((b) => { const tr = h('tr', 'hover:bg-zuna-50/50'); const live = b.from <= today && b.to >= today;
+      const c1 = h('td', 'px-5 py-3 font-semibold', b.rooms.length ? (b.rooms.length === 1 ? 'Room ' : 'Rooms ') + b.rooms.join(', ') : 'Whole guest house');
+      const c2 = h('td', 'px-5 py-3 whitespace-nowrap'); c2.appendChild(document.createTextNode(fD(b.from) + ' – ' + fD(b.to))); if (live) c2.appendChild(h('span', 'ml-2 rounded-full bg-rose-50 ring-1 ring-rose-200 px-2 py-0.5 text-[10.5px] font-bold text-rose-700', 'Blocked now'));
+      const c3 = h('td', 'px-5 py-3 text-zuna-500', b.reason || '—');
+      const c4 = h('td', 'px-4 py-2 text-right whitespace-nowrap'); const e = iconBtn('pencil', 'Edit blocked dates'); e.onclick = () => blockForm(c, g, b);
+      const x = iconBtn('trash-2', 'Remove block', 'text-rose-600'); x.onclick = async () => { try { await api('block', {gh_id: g.id, id: b.id, delete: true}); toast('Block removed'); load(true); } catch (er) { toast(er.message, true); } };
+      const ac = h('div', 'inline-flex gap-1'); ac.append(e, x); c4.appendChild(ac); tr.append(c1, c2, c3, c4); bd.appendChild(tr); });
+    t.appendChild(bd); sc.appendChild(t); shell.appendChild(sc); return; }
 
-  // price check
-  const pc = h('div', 'card p-5 space-y-3'); pc.appendChild(h('h3', 'font-bold', 'Price check')); pc.appendChild(h('p', 'text-xs text-zuna-500 -mt-2', 'What a stay costs with the rates above.'));
-  const pt = sel(String((types[0] || {}).id || 0), [['0', 'Any room (guest house rate)']].concat(types.map((t) => [String(t.id), t.name || 'Room type']))); const prow = h('div', 'grid gap-3 lg:grid-cols-[minmax(0,1fr)_minmax(0,1.6fr)_auto] 2xl:grid-cols-1 items-end'); prow.appendChild(field('Room type', pt));
-  const t0 = new Date(); const pd = datePair(isoDay(new Date(t0.getTime() + 864e5)), isoDay(new Date(t0.getTime() + 3 * 864e5)), 'Check-in', 'Check-out'); pd.el.querySelector('.flex').remove(); prow.appendChild(pd.el);
-  const out = h('div', 'lg:max-w-md 2xl:max-w-none'); const go = ib('button', 'btn-primary justify-center !py-2.5 2xl:w-full', 'Calculate', 'indian-rupee'); prow.appendChild(go); pc.append(prow, out);
-  go.onclick = async () => { try { const j = await api('quote', {gh_id: g.id, room_type_id: +pt.value, check_in: pd.from.value, check_out: pd.to.value}); const q = j.cost; out.replaceChildren();
-    const dl = h('dl', 'rounded-xl ring-1 ring-zuna-100 divide-y divide-zuna-50 text-sm mt-1'); const row = (k, v, b) => { const d = h('div', 'flex justify-between gap-3 px-3.5 py-2' + (b ? ' bg-zuna-50 font-bold' : '')); d.append(h('dt', b ? '' : 'text-zuna-500', k), h('dd', 'tabular-nums font-semibold', v)); dl.appendChild(d); };
+  // price check: form on the left, the breakdown beside it
+  const pg = h('div', 'grid gap-6 p-5 lg:grid-cols-[minmax(0,1fr)_minmax(0,380px)] items-start'); const pf = h('div', 'space-y-3 min-w-0'), out = h('div', 'min-w-0'); pg.append(pf, out); shell.appendChild(pg);
+  const pt = sel(String(RT.qt || (types[0] || {}).id || 0), [['0', 'Any room (guest house rate)']].concat(types.map((t) => [String(t.id), t.name || 'Room type']))); pf.appendChild(field('Room type', pt));
+  const t0 = new Date(); const pd = datePair(RT.qi || isoDay(new Date(t0.getTime() + 864e5)), RT.qo || isoDay(new Date(t0.getTime() + 3 * 864e5)), 'Check-in', 'Check-out'); pd.el.querySelector('.flex').remove(); pf.appendChild(pd.el);
+  const go = ib('button', 'btn-primary', 'Calculate', 'indian-rupee'); pf.appendChild(go);
+  out.appendChild(h('div', 'rounded-xl bg-zuna-50 ring-1 ring-zuna-100 px-4 py-8 text-center text-sm text-zuna-500', 'Pick the room type and dates, then Calculate.'));
+  go.onclick = async () => { RT.qt = pt.value; RT.qi = pd.from.value; RT.qo = pd.to.value; try { const j = await api('quote', {gh_id: g.id, room_type_id: +pt.value, check_in: pd.from.value, check_out: pd.to.value}); const q = j.cost; out.replaceChildren();
+    const dl = h('dl', 'rounded-xl ring-1 ring-zuna-100 divide-y divide-zuna-50 text-sm'); const row = (k, v, b) => { const d = h('div', 'flex justify-between gap-3 px-4 py-2' + (b ? ' bg-zuna-50 font-bold' : '')); d.append(h('dt', b ? '' : 'text-zuna-500', k), h('dd', 'tabular-nums font-semibold', v)); dl.appendChild(d); };
     row('Nights', String(q.nights)); row('Basic fare', money(q.fare)); row('Tax on fare', money(q.fare_tax)); row('Service charge', money(q.svc)); row('GST on service charge (18%)', money(q.svc_gst)); row('Total', money(q.total), true); out.appendChild(dl);
     if (q.missing) out.appendChild(h('p', 'mt-2 rounded-lg bg-amber-50 ring-1 ring-amber-200 px-3 py-2 text-xs font-semibold text-amber-800', q.missing + (q.missing === 1 ? ' night has' : ' nights have') + ' no rate. Add a rate that covers these dates.'));
-    if (q.segments.length > 1) { const sg = h('p', 'mt-2 text-xs text-zuna-500'); sg.textContent = q.segments.map((s) => s.nights + (s.nights === 1 ? ' night' : ' nights') + ' at ' + (s.nil ? 'Nil' : money(s.fare)) + ' (' + s.scope + ')').join(' · '); out.appendChild(sg); } }
+    if (q.segments.length > 1) out.appendChild(h('p', 'mt-2 text-xs text-zuna-500', q.segments.map((s) => s.nights + (s.nights === 1 ? ' night' : ' nights') + ' at ' + (s.nil ? 'Nil' : money(s.fare)) + ' (' + s.scope + ')').join(' · '))); }
     catch (er) { toast(er.message, true); } };
-  R.appendChild(pc);
 };
 const rateForm = (c, g, r) => { const types = g.room_types || [], f = h('div', 'space-y-4');
   const ap = sel(String(r ? r.room_type_id : 0), [['0', 'Whole guest house (all rooms)']].concat(types.map((t) => [String(t.id), 'Room type · ' + (t.name || 'Rooms') + (t.room_nos ? ' (' + t.room_nos + ')' : '')]))); f.appendChild(field('Applies to', ap));

@@ -752,8 +752,10 @@ async function placeTrip(env, user, cid, b, trip) {
   const saved = await env.DB.prepare("SELECT * FROM trips WHERE id = ?").bind(id).first();
   const mail = b.send_mail === false ? "not sent" : await tripMail(env, client, saved, av.gh, trip ? "changed" : "confirmed");
   await env.DB.prepare("UPDATE trips SET mail_status = ? WHERE id = ?").bind(mail, id).run();
-  return json({ok: true, trip: tripOut(Object.assign(saved, {mail_status: mail}), user.admin)});
+  return json({ok: true, trip: Object.assign(tripOut(Object.assign(saved, {mail_status: mail}), user.admin), {helpdesk: helpdeskOf(av.gh)})});
 }
+// guest house helpdesk for the voucher: the guest house's contacts from the directory
+const helpdeskOf = (gh) => ((gh && gh.contacts) || []).filter((c) => c.phone || c.email).slice(0, 4).map((c) => ({name: c.name || '', designation: c.designation || '', phone: c.phone || '', email: c.email || ''}));
 const tripOut = (x, admin) => ({id: x.id, code: x.code || "", property: x.property, room: x.room, title: x.title || "", name: x.name, guest: guestOf(x), gender: x.gender, grade: x.grade, emp_code: x.emp_code || "", email: x.email || "", phone: x.phone || "",
   base: x.base || "", concur_tr: x.concur_tr || "", wbs: x.wbs || "", occupancy: x.occupancy, check_in: x.check_in, check_out: x.check_out, note: x.note || "", status: x.status, cc: admin ? x.cc || "" : "", bcc: admin ? x.bcc || "" : "",
   booked_by: x.booked_by, booked_at: x.booked_at, changed_by: x.changed_by || "", changed_at: x.changed_at || "", cancelled_by: x.cancelled_by || "", cancelled_at: x.cancelled_at || "", cancel_reason: x.cancel_reason || "", mail_status: x.mail_status || "", history: jparse(x.history, [])});
@@ -769,7 +771,7 @@ async function cancelTrip(env, user, cid, b) {
   const saved = await env.DB.prepare("SELECT * FROM trips WHERE id = ?").bind(trip.id).first(), gh = (await clientGuestHouses(env, client, true)).find((g) => g.property === trip.property) || {property: trip.property};
   const mail = b.send_mail === false ? "not sent" : await tripMail(env, client, saved, gh, "cancelled");
   await env.DB.prepare("UPDATE trips SET mail_status = ? WHERE id = ?").bind(mail, trip.id).run();
-  return json({ok: true, trip: tripOut(Object.assign(saved, {mail_status: mail}), user.admin)});
+  return json({ok: true, trip: Object.assign(tripOut(Object.assign(saved, {mail_status: mail}), user.admin), {helpdesk: helpdeskOf(gh)})});
 }
 // confirmation / change / cancellation e-mail to the guest, copies to the CC and BCC addresses
 async function tripMail(env, client, trip, gh, kind) {
@@ -823,7 +825,8 @@ async function bookApi(req, env, user, path) {
   let b; try { b = await req.json(); } catch (e) { return json({error: "Bad request."}, 400); }
   const cid = user.admin ? +b.client_id : user.client_id; if (!cid) return json({error: "No client."}, 400);
   if (path === "/api/trips") { if (!user.book && !user.manager) return json({error: "You don't have access to bookings. Ask your admin."}, 403);
-    const {results} = await env.DB.prepare("SELECT * FROM trips WHERE client_id = ? ORDER BY check_in DESC, id DESC LIMIT 3000").bind(cid).all(); return json({trips: results.map((t) => tripOut(t, user.admin))}); }
+    const {results} = await env.DB.prepare("SELECT * FROM trips WHERE client_id = ? ORDER BY check_in DESC, id DESC LIMIT 3000").bind(cid).all(); const ghs = new Map((await clientGuestHouses(env, await bookClient(env, cid) || {id: cid}, true)).map((g) => [g.property, helpdeskOf(g)]));
+    return json({trips: results.map((t) => Object.assign(tripOut(t, user.admin), {helpdesk: ghs.get(t.property) || []}))}); }
   if (path === "/api/bookings") {   // fresh stay list for the dashboard after a booking changes
     const client = await bookClient(env, cid); if (!client) return json({error: "No client."}, 404);
     const names = new Set((await clientGuestHouses(env, client, false)).map((g) => g.property)), bk = await readSet(env, "bookings");

@@ -404,13 +404,21 @@
     let by = CB + 66; LBL(SXI, by, 'Issued on', LAV); T(SXI, by - 13, short(t.booked_at), 9.8, true, WHITE);
     by -= 32; LBL(SXI, by, 'Issued by', LAV); T(SXI, by - 13, 'Zuna Hotel Desk', 9.8, true, WHITE);
     // contact card
-    const gc = (p.contacts || []).filter((c) => c.phone || c.email)[0];
-    y = CB - 20; const contact = [['Guest email', t.email], ['Guest mobile', t.phone], ['Guest house contact', gc ? gc.name + (gc.phone ? ' - ' + gc.phone : '') : ''], ['Booked by', t.booked_by || ''], ['Remarks', t.note]].filter((r) => r[1]);
+    const hd = (t.helpdesk && t.helpdesk.length ? t.helpdesk : (p.contacts || []).filter((c) => c.phone || c.email)).slice(0, 4);
+    y = CB - 20; const contact = [['Guest email', t.email], ['Guest mobile', t.phone], ['Booked by', t.booked_by || ''], ['Remarks', t.note]].filter((r) => r[1]);
     const rowsN = Math.ceil(contact.length / 2), CH2 = 36 + rowsN * 24;
     RR(M, y - CH2, W - 2 * M, CH2, 10, WHITE); LBL(M + 24, y - 22, 'Contact & booking', MINT_D);
     const half = (W - 2 * M - 48 - 24) / 2;
     contact.forEach(([k, v], i) => { const cx = M + 24 + (i % 2) * (half + 24), ry = y - 44 - Math.floor(i / 2) * 24; T(cx, ry, k, 8.6, false, MUTED); const vv = fitLines(v, half - 90, 8.8, true)[0]; TR(cx + half, ry, vv, 8.8, true); Ln(cx, ry - 8, cx + half, ry - 8, [0.945, 0.937, 0.976], 0.6); });
     y -= CH2 + 14;
+    // guest house helpdesk
+    const HH = 36 + Math.max(1, hd.length) * 22; RR(M, y - HH, W - 2 * M, HH, 10, WHITE); LBL(M + 24, y - 22, 'Guest house helpdesk', MINT_D); TR(W - M - 24, y - 22, t.property, 8, false, MUTED);
+    if (!hd.length) T(M + 24, y - 44, 'Helpdesk details are not listed yet. Please call Zuna customer support below.', 8.8, false, MUTED);
+    hd.forEach((c, i) => { const ry = y - 44 - i * 22, x1 = M + 24, x2 = M + 24 + 215, x3 = W - M - 24;
+      T(x1, ry, fitLines(c.name || '-', 140, 9.4, true)[0], 9.4, true); if (c.designation) T(x1 + Math.min(140, tw(c.name || '-', 9.4, true)) + 8, ry, fitLines(c.designation, 200 - Math.min(140, tw(c.name || '-', 9.4, true)), 8.6, false)[0], 8.6, false, MUTED);
+      if (c.phone) T(x2, ry, c.phone, 9.4, true); if (c.email) TR(x3, ry, fitLines(c.email, 150, 8.8, false)[0], 8.8, false, INK);
+      if (i < hd.length - 1) Ln(x1, ry - 8, x3, ry - 8, [0.945, 0.937, 0.976], 0.6); });
+    y -= HH + 14;
     // Zuna customer support
     const SH = 66; RR(M, y - SH, W - 2 * M, SH, 10, INK); ops.push('q ' + rr(M, y - SH, W - 2 * M, SH, 10) + ' W n'); R(M, y - SH, 5, SH, RED); ops.push('Q');
     LBL(M + 24, y - 20, 'Zuna customer support', LAV); T(M + 24, y - 38, 'Need help with this booking?', 10.5, true, WHITE);

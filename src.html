@@ -1384,7 +1384,14 @@ const voucherCard = (t) => { const p = props.find((x) => x.property === t.proper
   const two = h('div', 'grid gap-5 sm:grid-cols-2'); const sec = (title, rows) => { const w = h('div', 'min-w-0'); w.appendChild(h('p', 'text-[10.5px] font-bold uppercase tracking-wider text-mint-700 pb-1.5 mb-2 border-b border-zuna-100', title)); const dl = h('dl', 'grid grid-cols-[96px_minmax(0,1fr)] gap-x-3 gap-y-1.5 text-[13px]');
     rows.filter((r) => r[1]).forEach(([k, v]) => dl.append(h('dt', 'text-zuna-500', k), h('dd', 'font-semibold break-words', v))); w.appendChild(dl); return w; };
   two.append(sec('Guest', [['Name', t.guest], ['Grade', t.grade], ['Employee code', t.emp_code], ['Email', t.email], ['Mobile', t.phone]]), sec('Stay', [['Guest house', t.property + (p.city ? ', ' + p.city : '')], ['Address', p.address], ['Room', t.room + (t.occupancy === 'Double' ? ' (shared)' : '')], ['Concur ID', t.concur_tr], ['WBS ID', t.wbs], ['Remarks', t.note]]));
-  bd.appendChild(two); c.appendChild(bd); return c; };
+  bd.appendChild(two);
+  const hdl = (t.helpdesk && t.helpdesk.length ? t.helpdesk : (p.contacts || []).filter((x) => x.phone || x.email)).slice(0, 4);
+  const hs = h('div', 'rounded-xl bg-zuna-50 ring-1 ring-zuna-100 px-4 py-3'); hs.appendChild(h('p', 'text-[10.5px] font-bold uppercase tracking-wider text-mint-700 mb-1.5', 'Guest house helpdesk'));
+  if (!hdl.length) hs.appendChild(h('p', 'text-xs text-zuna-500', 'Not listed yet. Call Zuna customer support: +91 91009 90530 · hotel@zuna.ai'));
+  hdl.forEach((x) => { const r = h('div', 'flex flex-wrap items-baseline gap-x-3 gap-y-0.5 text-[13px] py-1'); const nm = h('span', 'font-semibold', x.name); r.appendChild(nm); if (x.designation) r.appendChild(h('span', 'text-xs text-zuna-500', x.designation)); if (x.phone) r.appendChild(h('span', 'font-semibold tabular-nums sm:ml-auto', x.phone)); if (x.email) r.appendChild(h('span', 'text-xs text-zuna-600', x.email)); hs.appendChild(r); });
+  bd.appendChild(hs);
+  const zs = h('p', 'text-xs text-zuna-500'); zs.append(h('b', 'text-zuna-900 font-semibold', 'Zuna customer support: '), document.createTextNode('+91 91009 90530 · hotel@zuna.ai')); bd.appendChild(zs);
+  c.appendChild(bd); return c; };
 const bkSuccess = (card) => { const t = BK.done.trip, w = h('div', 'p-6 sm:p-8');
   const top = h('div', 'flex flex-wrap items-center gap-4 mb-6'); const tk = h('div', 'w-12 h-12 rounded-full bg-mint-500 text-zuna-900 grid place-items-center shrink-0'); tk.appendChild(icon('check', 'w-6 h-6')); top.appendChild(tk);
   const tt = h('div', 'min-w-0 flex-1'); tt.appendChild(h('p', 'text-lg font-extrabold', BK.done.changed ? 'Booking changed' : 'Booking confirmed')); tt.appendChild(h('p', 'text-sm text-zuna-500', t.mail_status === 'sent' ? 'The voucher has been emailed to ' + (t.email || 'the guest') + '.' : 'Download the voucher below and share it with the guest.')); top.appendChild(tt);

@@ -304,6 +304,7 @@ check('old host redirects to PRIMARY_HOST', r.status === 301 && r.headers.get('l
     x = await B(asha, 'book', {property: 'Acme House', check_in: D(200), check_out: D(203), room: 'A1', title: 'Mr.', name: 'Karan Mehta', grade: 'E1', email: 'karan@acme.example', cc: 'someone@else.example', bcc: 'spy@else.example', note: 'Late arrival'});
     const t1 = x.j.trip;
     check('booker never sees or sets the email copies', t1.cc === '' && t1.bcc === '');
+    check('booking carries the guest house helpdesk for the voucher', t1.helpdesk.length === 1 && t1.helpdesk[0].name === 'Ravi' && t1.helpdesk[0].phone === '+91 90000 00000');
     check('booking is confirmed instantly with a ZUNA code', x.status === 200 && /^ZUNA\d+$/.test(t1.code) && t1.status === 'Confirmed' && t1.room === 'A1');
     const em = mails[m0];
     check('confirmation e-mail goes to the guest with CC and BCC', mails.length === m0 + 1 && em.to[0] === 'karan@acme.example' && em.cc[0] === 'desk@zuna.example' && em.bcc[0] === 'audit@zuna.example' && /Booking confirmed/.test(em.subject) && em.text.includes(t1.code) && em.text.includes('Late arrival') && t1.mail_status === 'sent');

@@ -313,7 +313,7 @@ const renderRates = (D, c) => {
   const ghs = c.guesthouses; if (!ghs.length) { D.appendChild(h('div', 'card p-10 text-center text-sm text-zuna-500', 'Add a guest house first.')); return; }
   if (!ghs.some((g) => g.id === RT.gh[c.id])) RT.gh[c.id] = ghs[0].id; const g = ghs.find((x) => x.id === RT.gh[c.id]);
   const types = g.room_types || [], tName = (id) => id ? ((types.find((t) => t.id === id) || {}).name || 'Room type') : 'Whole guest house';
-  const allRates = (c.rates || []).filter((r) => r.gh_id === g.id), blocks = (c.blocks || []).filter((b) => b.gh_id === g.id), pf0 = RT.plan || '', rates = allRates.filter((r) => !pf0 || r.plan === pf0);
+  const cancels = (c.cancels || []).filter((r) => r.gh_id === g.id), allRates = (c.rates || []).filter((r) => r.gh_id === g.id), blocks = (c.blocks || []).filter((b) => b.gh_id === g.id), pf0 = RT.plan || '', rates = allRates.filter((r) => !pf0 || r.plan === pf0);
   const view = RT.view || 'rates', today = new Date().toISOString().slice(0, 10);
   const iconBtn = (ic, lab, cls) => { const x = h('button', 'iconbtn ' + (cls || '')); x.type = 'button'; x.title = lab; x.setAttribute('aria-label', lab); x.appendChild(icon(ic, 'w-4 h-4')); return x; };
   const shell = h('div', 'card overflow-hidden'); D.appendChild(shell);
@@ -337,12 +337,13 @@ const renderRates = (D, c) => {
   // sub-views + the action for the open one
   const sb = h('div', 'flex flex-wrap items-center gap-3 px-5 py-2.5 bg-zuna-50/50 border-b border-zuna-100');
   const seg = h('div', 'flex gap-1 rounded-xl bg-white ring-1 ring-zuna-100 p-1'); seg.setAttribute('role', 'tablist');
-  [['rates', 'Rates', allRates.length], ['blocks', 'Blackout dates', blocks.length], ['price', 'Price check', null]].forEach(([k, l, n]) => { const b = h('button', 'flex items-center gap-1.5 rounded-lg px-3 py-1.5 text-xs font-semibold transition-colors ' + (view === k ? 'bg-zuna-900 text-white' : 'text-zuna-600 hover:text-zuna-900'));
+  [['rates', 'Rates', allRates.length], ['blocks', 'Blackout dates', blocks.length], ['cancel', 'Cancellation', cancels.length], ['price', 'Price check', null]].forEach(([k, l, n]) => { const b = h('button', 'flex items-center gap-1.5 rounded-lg px-3 py-1.5 text-xs font-semibold transition-colors ' + (view === k ? 'bg-zuna-900 text-white' : 'text-zuna-600 hover:text-zuna-900'));
     b.type = 'button'; b.setAttribute('role', 'tab'); b.setAttribute('aria-selected', view === k ? 'true' : 'false'); b.appendChild(document.createTextNode(l)); if (n != null) b.appendChild(h('span', 'rounded-full px-1.5 text-[10px] tabular-nums ' + (view === k ? 'bg-white/20' : 'bg-zuna-100'), String(n))); b.onclick = () => { RT.view = k; render(); }; seg.appendChild(b); });
   sb.appendChild(seg);
-  sb.appendChild(h('p', 'text-xs text-zuna-500', view === 'rates' ? 'Price per night by meal plan · tax 5% below ₹7,500 a night, 18% from ₹7,500' : view === 'blocks' ? 'Blocked rooms cannot be booked by clients or by the Zuna team' : 'Fare, tax, service charge and GST for a stay'));
+  sb.appendChild(h('p', 'text-xs text-zuna-500', view === 'rates' ? 'Price per night by meal plan · tax 5% below ₹7,500 a night, 18% from ₹7,500' : view === 'blocks' ? 'Blocked rooms cannot be booked by clients or by the Zuna team' : view === 'cancel' ? 'Free cancellation window and the charge after it · a room type rule wins over the guest house rule' : 'Fare, tax, service charge and GST for a stay'));
   if (view === 'rates') { const a = ib('button', 'ml-auto btn-primary !py-1.5', 'Add rate', 'plus'); a.onclick = () => rateForm(c, g, null); sb.appendChild(a); }
   if (view === 'blocks') { const a = ib('button', 'ml-auto btn-primary !py-1.5', 'Block dates', 'ban'); a.onclick = () => blockForm(c, g, null); sb.appendChild(a); }
+  if (view === 'cancel') { const a = ib('button', 'ml-auto btn-primary !py-1.5', 'Add policy', 'plus'); a.onclick = () => cancelForm(c, g, null); sb.appendChild(a); }
   shell.appendChild(sb);
   const th = (cols) => { const t = h('thead'); const r = h('tr', 'text-left text-xs font-semibold text-zuna-500'); cols.forEach((x) => { const e = h('th', 'px-5 py-2.5 whitespace-nowrap border-b border-zuna-100', x); e.scope = 'col'; if (!x) e.appendChild(h('span', 'sr-only', 'Actions')); r.appendChild(e); }); t.appendChild(r); return t; };
   const empty = (msg) => shell.appendChild(h('p', 'px-5 py-10 text-center text-sm text-zuna-500', msg));
@@ -378,6 +379,20 @@ const renderRates = (D, c) => {
       const c4 = h('td', 'px-4 py-2 text-right whitespace-nowrap'); const e = iconBtn('pencil', 'Edit blocked dates'); e.onclick = () => blockForm(c, g, b);
       const x = iconBtn('trash-2', 'Remove block', 'text-rose-600'); x.onclick = async () => { try { await api('block', {gh_id: g.id, id: b.id, delete: true}); toast('Block removed'); load(true); } catch (er) { toast(er.message, true); } };
       const ac = h('div', 'inline-flex gap-1'); ac.append(e, x); c4.appendChild(ac); tr.append(c1, c2, c3, c4); bd.appendChild(tr); });
+    t.appendChild(bd); sc.appendChild(t); shell.appendChild(sc); return; }
+
+  if (view === 'cancel') {
+    if (!cancels.length) return empty('No cancellation policy for ' + g.property + ' yet. Without one, bookings can be cancelled free at any time.');
+    const sc = h('div', 'overflow-x-auto'); const t = h('table', 'w-full text-sm'); t.appendChild(th(['Applies to', 'Free cancellation', 'After that', 'Example', 'Note', ''])); const bd = h('tbody', 'divide-y divide-zuna-50');
+    cancels.slice().sort((a, b) => a.room_type_id - b.room_type_id).forEach((r) => { const tr = h('tr', 'hover:bg-zuna-50/50');
+      tr.appendChild(h('td', 'px-5 py-3 font-semibold whitespace-nowrap', tName(r.room_type_id)));
+      const f = h('td', 'px-5 py-3 whitespace-nowrap'); f.appendChild(h('span', 'rounded-md px-2 py-0.5 text-xs font-bold ' + (r.free_hours ? 'bg-mint-50 text-mint-700 ring-1 ring-mint-200' : 'bg-rose-50 text-rose-700 ring-1 ring-rose-200'), r.free_hours ? 'Until ' + cxlH(r.free_hours) + ' before check-in' : 'No free cancellation')); tr.appendChild(f);
+      tr.appendChild(h('td', 'px-5 py-3 whitespace-nowrap', cxlWhat(r)));
+      tr.appendChild(h('td', 'px-5 py-3 text-xs text-zuna-500', r.free_hours ? 'Check-in 5 Dec ' + ciTxt(g) + ' → free until ' + cxlEx(g, r.free_hours) : 'Charged whenever cancelled'));
+      const n = h('td', 'px-5 py-3 text-xs text-zuna-500 max-w-[200px] truncate', r.note || ''); n.title = r.note || ''; tr.appendChild(n);
+      const ac = h('td', 'px-4 py-2 text-right whitespace-nowrap'); const e = iconBtn('pencil', 'Edit policy'); e.onclick = () => cancelForm(c, g, r);
+      const x = iconBtn('trash-2', 'Delete policy', 'text-rose-600'); x.onclick = async () => { if (!(await ZUI.confirm({title: 'Delete this cancellation policy?', message: tName(r.room_type_id) + ' · ' + cxlWhat(r), ok: 'Delete policy', tone: 'danger'}))) return; try { await api('cancel', {gh_id: g.id, id: r.id, delete: true}); toast('Policy deleted'); load(true); } catch (er) { toast(er.message, true); } };
+      const w = h('div', 'inline-flex gap-1'); w.append(e, x); ac.appendChild(w); tr.appendChild(ac); bd.appendChild(tr); });
     t.appendChild(bd); sc.appendChild(t); shell.appendChild(sc); return; }
 
   // price check: form on the left, the breakdown beside it
@@ -420,6 +435,30 @@ const rateForm = (c, g, r) => { const types = g.room_types || [], f = h('div', '
   const save = ib('button', 'btn-primary w-full justify-center', r ? 'Save rate' : 'Add rate', 'check'); f.appendChild(save);
   save.onclick = async () => { save.disabled = true; try { await api('rate', {gh_id: g.id, id: r ? r.id : undefined, room_type_id: +ap.value, plans: [...chosen], from: dp.from.value, to: dp.to.value, nil: nilSw.input.checked, fare: +fa.value || 0, fare_double: +fd.value || 0, extra_bed: +fx.value || 0, note: nt.value}); closeModal(); toast(r ? 'Rate saved' : chosen.size > 1 ? chosen.size + ' rates added (' + [...chosen].join(', ') + ')' : 'Rate added'); load(true); } catch (er) { toast(er.message, true); save.disabled = false; } };
   modal((r ? 'Edit rate · ' : 'Add rate · ') + g.property, f); };
+// cancellation policy helpers + form
+const ciTxt = (g) => { const [H, M] = String(g.checkin_time || '12:00').split(':').map(Number); return ((H % 12) || 12) + ':' + String(M || 0).padStart(2, '0') + (H < 12 ? ' AM' : ' PM'); };
+const cxlH = (hrs) => hrs % 24 === 0 && hrs >= 48 ? hrs / 24 + ' days' : hrs + (hrs === 1 ? ' hour' : ' hours');
+const cxlWhat = (r) => r.charge_type === 'full' ? 'Full stay charged' : r.charge_type === 'percent' ? r.charge_value + '% of the stay charged' : r.charge_type === 'fixed' ? money(r.charge_value) + ' charged' : (r.charge_value || 1) === 1 ? 'One night charged' : r.charge_value + ' nights charged';
+const cxlEx = (g, hrs) => { const [H, M] = String(g.checkin_time || '12:00').split(':').map(Number), d = new Date(Date.UTC(2026, 11, 5, H, M) - hrs * 3600e3), h2 = d.getUTCHours(); return d.getUTCDate() + ' Dec ' + ((h2 % 12) || 12) + ':' + String(d.getUTCMinutes()).padStart(2, '0') + (h2 < 12 ? ' AM' : ' PM'); };
+const cancelForm = (c, g, r) => { const types = g.room_types || [], f = h('div', 'space-y-4');
+  const ap = sel(String(r ? r.room_type_id : 0), [['0', 'Whole guest house (all rooms)']].concat(types.map((t) => [String(t.id), 'Room type · ' + (t.name || 'Rooms') + (t.room_nos ? ' (' + t.room_nos + ')' : '')]))); if (r) ap.disabled = true; f.appendChild(field('Applies to', ap));
+  const hrs = inp(r ? r.free_hours : 24, '24', 'number'); hrs.min = '0'; hrs.max = '720'; hrs.step = '1';
+  const qk = h('div', 'flex flex-wrap gap-1.5 mt-2'); [[0, 'None'], [12, '12 hours'], [24, '24 hours'], [48, '48 hours'], [72, '72 hours'], [168, '7 days']].forEach(([v, l]) => { const b = h('button', 'rounded-lg px-2.5 py-1 text-xs font-semibold ring-1 ring-zuna-100 hover:ring-zuna-900', l); b.type = 'button'; b.onclick = () => { hrs.value = v; paint(); }; qk.appendChild(b); });
+  const hw = field('Free cancellation until this many hours before check-in (' + ciTxt(g) + ')', hrs); hw.appendChild(qk); f.appendChild(hw);
+  const ct = sel(r ? r.charge_type : 'nights', [['nights', 'Nights charged'], ['percent', 'Percentage of the stay'], ['full', 'Full stay'], ['fixed', 'Fixed amount (₹)']]);
+  const cv = inp(r ? (r.charge_type === 'full' ? '' : r.charge_value) : 1, '1', 'number'); cv.min = '0'; cv.step = '0.01'; const cvw = field('How many / how much', cv);
+  const row = h('div', 'grid gap-3 sm:grid-cols-2'); row.append(field('After that', ct), cvw); f.appendChild(row);
+  const nt = inp(r ? r.note : '', 'Optional, e.g. as per 2026 agreement'); f.appendChild(field('Note', nt));
+  const pv = h('div', 'rounded-xl bg-zuna-50 ring-1 ring-zuna-100 px-4 py-3 text-sm'); f.appendChild(pv);
+  const paint = () => { cvw.classList.toggle('hidden', ct.value === 'full'); const H0 = Math.max(0, Math.round(+hrs.value || 0)), rr = {charge_type: ct.value, charge_value: +cv.value || 0}; pv.replaceChildren();
+    pv.appendChild(h('p', 'text-[11px] font-bold uppercase tracking-wider text-zuna-500 mb-1', 'Shown to bookers, on the voucher and in emails'));
+    pv.appendChild(h('p', 'font-semibold', (H0 ? 'Free cancellation until ' + cxlH(H0) + ' before check-in; after that ' : 'No free cancellation: ') + cxlWhat(rr).toLowerCase().replace(/ charged$/, ' is charged').replace(/nights is/, 'nights are') + '.'));
+    if (H0) pv.appendChild(h('p', 'text-xs text-zuna-500 mt-1', 'Example: check-in 5 Dec at ' + ciTxt(g) + ' → free until ' + cxlEx(g, H0) + '.'));
+    pv.appendChild(h('p', 'text-xs text-zuna-500 mt-1', 'The charge uses the booking\'s own rate plan and occupancy, with tax. With a Nil fare the charge is ₹0.')); };
+  [hrs, cv].forEach((x) => x.addEventListener('input', paint)); ct.addEventListener('change', paint); paint();
+  const save = ib('button', 'btn-primary w-full justify-center', r ? 'Save policy' : 'Add policy', 'check'); f.appendChild(save);
+  save.onclick = async () => { save.disabled = true; try { await api('cancel', {gh_id: g.id, id: r ? r.id : undefined, room_type_id: +ap.value, free_hours: +hrs.value, charge_type: ct.value, charge_value: +cv.value || 0, note: nt.value}); closeModal(); toast(r ? 'Policy saved' : 'Policy added'); load(true); } catch (er) { toast(er.message, true); save.disabled = false; } };
+  modal((r ? 'Edit cancellation policy · ' : 'Add cancellation policy · ') + g.property, f); };
 const blockForm = (c, g, b) => { const f = h('div', 'space-y-4'), rooms = g.rooms_list || [];
   const whole = switchEl('Whole guest house (all rooms)', b ? !b.rooms.length : true); f.appendChild(whole);
   const rl = h('div', 'grid grid-cols-3 sm:grid-cols-4 gap-2'); const picks = rooms.map((rn) => { const l = h('label', 'flex items-center gap-2 rounded-lg ring-1 ring-zuna-100 px-2.5 py-2 text-sm cursor-pointer'); const cb = h('input'); cb.type = 'checkbox'; cb.value = rn; cb.checked = !!(b && b.rooms.includes(rn)); l.append(cb, document.createTextNode(rn)); rl.appendChild(l); return cb; });

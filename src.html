@@ -1250,9 +1250,14 @@ const inr2 = (v) => '₹' + Number(v || 0).toLocaleString('en-IN', {maximumFract
 BK.qc = {};
 const bkQuoteKey = () => [BK.prop, BK.ci, BK.co].join('|');
 const bkQuotes = () => { const k = bkQuoteKey(); if (!(BK.co > BK.ci) || !BK.prop) return Promise.resolve(null); if (BK.qc[k]) return BK.qc[k];
-  BK.qc[k] = bApi('book/quote', {property: BK.prop, all: true, check_in: BK.ci, check_out: BK.co}).then((j) => j.costs).catch(() => { delete BK.qc[k]; return null; }); return BK.qc[k]; };
+  BK.qc[k] = bApi('book/quote', {property: BK.prop, all: true, check_in: BK.ci, check_out: BK.co}).then((j) => { BK.cxl = {rules: j.cancel || {}, ci: j.checkin_time || '12:00'}; return j.costs; }).catch(() => { delete BK.qc[k]; return null; }); return BK.qc[k]; };
 const bkRoomType = (room) => room ? ((BK.rooms || []).find((r) => r.room === room) || {}).type_id || 0 : 0;
 const BK_PLANS = {EP: 'Room only', CP: 'Breakfast included', MAP: 'Breakfast + one meal', AP: 'All meals'};
+// the cancellation policy for the chosen room, with its deadline for these dates (IST)
+const bkCxlLine = (room) => { const c = BK.cxl; if (!c) return ''; const r = c.rules[bkRoomType(room)] || c.rules[0]; if (!r) return '';
+  if (!(r.free_hours > 0)) return r.text; const dl = new Date(Date.parse(BK.ci + 'T' + c.ci + ':00+05:30') - r.free_hours * 3600e3);
+  const when = dl.toLocaleString('en-IN', {timeZone: 'Asia/Kolkata', day: 'numeric', month: 'short', year: 'numeric', hour: 'numeric', minute: '2-digit'}).replace(/\b(am|pm)\b/, (m) => m.toUpperCase());
+  return 'Free cancellation until ' + when + '; after that ' + r.text.split('; after that ')[1]; };
 const bkPlansFor = (costs, room) => { const by = costs ? (costs[bkRoomType(room)] || costs[0]) : null; return by ? Object.keys(BK_PLANS).filter((p) => by[p]) : []; };
 const bkQuoteFor = (costs, room) => { const by = costs ? (costs[bkRoomType(room)] || costs[0]) : null; if (!by) return null; const ps = bkPlansFor(costs, room); if (!ps.length) return null;
   if (!ps.includes(BK.v.plan)) BK.v.plan = ps[0]; return by[BK.v.plan][BK.v.occupancy === 'Double' ? 'Double' : 'Single']; };
@@ -1475,6 +1480,9 @@ const bkConfirm = (pane) => { const v = BK.v, p = bkHouse();
   left.appendChild(dl);
   const g = h('div', 'grid gap-4 sm:grid-cols-2'); g.append(bkLabel('Guest email', bkVal('email', bInput('name@company.com', 'email'))), bkLabel('Mobile', bkPhone()));
   const nt = bkLabel('Remarks', bkVal('note', bInput('e.g. late arrival'))); nt.classList.add('sm:col-span-2'); g.appendChild(nt); left.appendChild(g);
+  const cx = h('div', 'flex items-start gap-2.5 rounded-xl bg-zuna-50 ring-1 ring-zuna-100 px-4 py-3 text-sm'); cx.appendChild(icon('calendar-x', 'w-4 h-4 text-zuna-500 mt-0.5 shrink-0')); const cxt = h('div'); cx.appendChild(cxt); left.appendChild(cx);
+  const cxPaint = () => { const l = bkCxlLine(BK.room); cxt.replaceChildren(h('p', 'font-semibold', 'Cancellation policy'), h('p', 'text-zuna-600', l || 'No cancellation charge is set for this guest house.')); };
+  cxPaint(); bkQuotes().then(() => { if (cx.isConnected) cxPaint(); });
   v.send = true;   // the guest is always emailed; copies are set by Zuna
   wrap.append(left, rightC); pane.appendChild(wrap); bkCharges(rightC, BK.room); };
 
@@ -1544,7 +1552,7 @@ const tripDrawer = (t) => {
     mk('Download voucher', 'download').onclick = () => dlVoucher(t);
     if (USER.book) mk('Resend email', 'send').onclick = async (ev) => { const b = ev.currentTarget; b.disabled = true; try { const ms = await mailWithVoucher(t); toast(ms === 'sent' ? 'Email sent again' : mailTxt(ms)); paintTrips(); } catch (x) { toast(x.message, true); } b.disabled = false; };
     box.appendChild(acts); }
-  box.appendChild(kv([['Guest', t.guest], ['Gender', t.gender], ['Grade', t.grade], ['Employee code', t.emp_code], ['Email', t.email], ['Mobile', t.phone], ['Base location', t.base], ['Concur ID', t.concur_tr], ['WBS ID', t.wbs], ['Occupancy', t.occupancy === 'Double' ? 'Double · shares the room' : 'Single'], ['Meal plan', t.plan_label || ''], ['Remarks', t.note],
+  box.appendChild(kv([['Guest', t.guest], ['Gender', t.gender], ['Grade', t.grade], ['Employee code', t.emp_code], ['Email', t.email], ['Mobile', t.phone], ['Base location', t.base], ['Concur ID', t.concur_tr], ['WBS ID', t.wbs], ['Occupancy', t.occupancy === 'Double' ? 'Double · shares the room' : 'Single'], ['Meal plan', t.plan_label || ''], ...(t.status === 'Cancelled' ? (t.cancel_charge != null ? [['Cancellation charge', (t.cancel_charge > 0 ? inr2(t.cancel_charge) : 'No charge') + (t.cancel_basis ? ' · ' + t.cancel_basis : '')]] : []) : t.cancel_policy ? [['Cancellation policy', t.cancel_policy]] : []), ['Remarks', t.note],
     ...(USER.admin ? [['Email copies', [t.cc && 'CC ' + t.cc, t.bcc && 'BCC ' + t.bcc].filter(Boolean).join(' · ')]] : []), ['Email status', mailTxt(t.mail_status)], ['Booked by', t.booked_by + ' · ' + fLong(String(t.booked_at).slice(0, 10))]]));
   if (USER.admin) {   // cost from the guest house rates: Zuna team only
     const p = props.find((x) => x.property === t.property) || {}, cs = h('div', 'rounded-xl ring-1 ring-zuna-100 overflow-hidden'); const ch = h('div', 'flex items-center gap-2 px-3.5 py-2 bg-zuna-50 text-xs font-bold uppercase tracking-wider text-zuna-500'); ch.appendChild(icon('lock', 'w-3.5 h-3.5')); ch.appendChild(document.createTextNode('Cost · Zuna team only')); cs.appendChild(ch);
@@ -1563,11 +1571,17 @@ const tripDrawer = (t) => {
 };
 const cancelPanel = (t, box) => { if (box.querySelector('[data-cancel]')) return; const p = h('div', 'rounded-xl bg-rose-50 ring-1 ring-rose-200 p-4 space-y-3'); p.dataset.cancel = '1';
   p.appendChild(h('p', 'text-sm font-semibold text-rose-800', 'Cancel this booking?')); p.appendChild(h('p', 'text-xs text-rose-700', 'The room is released at once' + (t.email ? ' and ' + t.email + ' is told by email.' : '.')));
+  const cq = h('div', 'rounded-lg bg-white ring-1 ring-rose-100 px-3 py-2.5 text-sm'); cq.appendChild(h('div', 'chart-skel h-10 rounded')); p.appendChild(cq); let waive = null;
+  bApi('book/cancel/preview', {id: t.id}).then((q) => { cq.replaceChildren(); const free = !(q.charge > 0);
+    cq.appendChild(h('p', 'font-bold ' + (free ? 'text-mint-700' : 'text-rose-700'), free ? (q.late ? 'Cancellation charge: ₹0' : 'Free cancellation') : 'Cancellation charge: ' + inr2(q.charge)));
+    cq.appendChild(h('p', 'text-xs text-zuna-600 mt-0.5', q.basis)); if (q.policy) cq.appendChild(h('p', 'text-[11px] text-zuna-500 mt-1', 'Policy: ' + q.policy.text));
+    if (!free && USER.admin) { const l = h('label', 'flex items-center gap-2 mt-2 text-xs font-semibold text-zuna-700'); waive = h('input'); waive.type = 'checkbox'; l.append(waive, document.createTextNode('Waive the charge (Zuna team)')); cq.appendChild(l); } })
+    .catch((x) => { cq.replaceChildren(h('p', 'text-xs text-rose-700', x.message)); });
   const r = h('input', fldCls); r.placeholder = 'Reason (optional), e.g. trip postponed'; r.maxLength = 200; p.appendChild(r);
   const row = h('div', 'grid grid-cols-2 gap-2'); const no = h('button', 'btn justify-center', 'Keep booking'); no.type = 'button'; no.onclick = () => p.remove();
   const yes = h('button', 'btn-primary justify-center !bg-rose-600', 'Cancel booking'); yes.type = 'button';
   yes.onclick = async () => { if (!(await ZUI.confirm({title: 'Cancel ' + t.code + '?', message: [cleanName(t.guest) + ' · ' + t.property + ' · ' + fShort(t.check_in) + ' – ' + fShort(t.check_out), 'This cannot be undone. Make a new booking if plans change again.'], ok: 'Cancel booking', tone: 'danger', hold: true}))) return;
-    yes.disabled = true; try { const j = await bApi('book/cancel', {id: t.id, reason: r.value}); Object.assign(t, j.trip); toast('Booking cancelled' + (j.trip.mail_status === 'sent' ? ' · guest told by email' : '')); await refreshStays(); paintTrips(); tripDrawer(t); } catch (x) { toast(x.message, true); yes.disabled = false; } };
+    yes.disabled = true; try { const j = await bApi('book/cancel', {id: t.id, reason: r.value, waive: !!(waive && waive.checked)}); Object.assign(t, j.trip); toast('Booking cancelled' + (j.trip.cancel_charge > 0 ? ' · charge ' + inr2(j.trip.cancel_charge) : '') + (j.trip.mail_status === 'sent' ? ' · guest told by email' : '')); await refreshStays(); paintTrips(); tripDrawer(t); } catch (x) { toast(x.message, true); yes.disabled = false; } };
   row.append(no, yes); p.appendChild(row); box.insertBefore(p, box.children[2] || null); r.focus(); };
 
 /* ---------- routing ---------- */

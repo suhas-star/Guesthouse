@@ -435,7 +435,8 @@
     T(M + 24, y - 53, 'Please quote booking code ' + (t.code || '') + '.', 8.6, false, [0.79, 0.76, 0.93]);
     const sx2 = W - M - 24; LBLR(sx2, y - 20, 'Email', LAV); TR(sx2, y - 33, 'hotel@zuna.ai', 10, true, WHITE); LBLR(sx2 - 130, y - 20, 'Phone', LAV); TR(sx2 - 130, y - 33, '+91 91009 90530', 10, true, WHITE);
     y -= SH + 22;
-    // notes
+    // cancellation policy (from the guest house / room type rule), then notes
+    if (t.cancel_policy && !cancelled) { LBL(M + 2, y, 'Cancellation policy'); y -= 15; fitLines(t.cancel_policy, W - 2 * M - 4, 9.4, true).slice(0, 2).forEach((ln) => { T(M + 2, y, ln, 9.4, true, INK); y -= 13; }); y -= 9; }
     LBL(M + 2, y, 'Please note'); y -= 15;
     ['Please carry a photo ID for check-in.', 'Changes and cancellations are made in the portal (Trips) or through Zuna customer support.', 'Rooms are shared only between guests of the same gender.'].forEach((n) => { circle(M + 5, y + 3, 1.8, RED); T(M + 13, y, n, 8.8, false, INK); y -= 13; });
     // footer

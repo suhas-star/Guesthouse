@@ -397,6 +397,32 @@ check('old host redirects to PRIMARY_HOST', r.status === 301 && r.headers.get('l
       check('the chosen plan is saved on the booking', x.status === 200 && x.j.trip.plan === 'MAP' && /MAP/.test(x.j.trip.plan_label));
       x = await B(asha, 'book', {property: 'Acme House', check_in: D(310), check_out: D(311), room: dRoom, title: 'Ms.', name: 'Plan Test Two', grade: 'E1', send_mail: false});
       check('no plan chosen: the first priced plan is used', x.status === 200 && x.j.trip.plan === 'EP');
+      // cancellation charges: guest house rule, room type rule wins, charge on cancel, Zuna can waive
+      check('client admin cannot set a cancellation policy', (await call('/api/admin/cancel', {method: 'POST', body: {gh_id: g0.id, free_hours: 24, charge_type: 'nights', charge_value: 1}, cookie: meera})).status === 403);
+      check('cancellation hours are checked', (await A('cancel', {gh_id: g0.id, free_hours: 9999, charge_type: 'nights', charge_value: 1})).status === 400);
+      check('cancellation charge type is checked', (await A('cancel', {gh_id: g0.id, free_hours: 24, charge_type: 'x'})).status === 400);
+      x = await A('cancel', {gh_id: g0.id, free_hours: 24, charge_type: 'nights', charge_value: 1});
+      await A('cancel', {gh_id: g0.id, free_hours: 24, charge_type: 'nights', charge_value: 2});   // same scope again: updates, no second rule
+      await A('cancel', {gh_id: g0.id, room_type_id: suite, free_hours: 48, charge_type: 'full'});
+      let cs = (await A('state', {})).j.clients.find((c) => c.id === acme).cancels;
+      check('one rule per guest house / room type', x.status === 200 && cs.length === 2 && cs.find((r) => !r.room_type_id).charge_value === 2);
+      x = await B(asha, 'book/quote', {property: 'Acme House', all: true, check_in: D(305), check_out: D(307)});
+      check('booker sees the policy per room type', /24 hours before check-in; after that 2 nights are charged/.test(x.j.cancel[deluxe].text) && /2 days before check-in; after that the full stay/.test(x.j.cancel[suite].text));
+      x = await B(asha, 'book', {property: 'Acme House', check_in: D(316), check_out: D(318), room: dRoom, title: 'Ms.', name: 'Cancel Free', grade: 'E1', send_mail: false});
+      check('booking carries its cancellation deadline', /^Free cancellation until \d+ \w+ \d{4}, 12:00 PM; after that 2 nights are charged\.$/.test(x.j.trip.cancel_policy));
+      const tf = x.j.trip; x = await B(asha, 'book/cancel/preview', {id: tf.id});
+      check('cancelling well before the deadline is free', x.status === 200 && x.j.late === false && x.j.charge === 0);
+      x = await B(asha, 'book/cancel', {id: tf.id}); check('free cancellation is saved as no charge', x.j.trip.cancel_charge === 0 && /Free cancellation/.test(x.j.trip.cancel_basis));
+      await A('cancel', {gh_id: g0.id, free_hours: 720, charge_type: 'nights', charge_value: 1});   // 30 days: anything booked within a month is already late
+      await A('rate', {gh_id: g0.id, from: D(5), to: D(20), fare: 5000});
+      x = await B(asha, 'book', {property: 'Acme House', check_in: D(10), check_out: D(12), room: dRoom, title: 'Ms.', name: 'Cancel Late', grade: 'E1', send_mail: false});
+      const tl = x.j.trip; x = await B(asha, 'book/cancel/preview', {id: tl.id});
+      check('late cancellation is charged one night with tax', x.j.late === true && x.j.charge === 5250);
+      x = await B(asha, 'book/cancel', {id: tl.id, waive: true}); check('a client cannot waive the charge', x.j.trip.cancel_charge === 5250);
+      x = await B(admin, 'book', {client_id: acme, property: 'Acme House', check_in: D(13), check_out: D(15), room: dRoom, title: 'Ms.', name: 'Cancel Waive', grade: 'E1', send_mail: false});
+      x = await B(admin, 'book/cancel', {client_id: acme, id: x.j.trip.id, waive: true});
+      check('Zuna can waive the charge, and it is recorded', x.j.trip.cancel_charge === 0 && /Waived by Zuna \(would have been ₹5,250\)/.test(x.j.trip.cancel_basis));
+      x = await A('audit', {kind: 'bookings'}); check('cancellations with a waived charge are in the audit log', x.j.rows.some((r) => r.action === 'Cancelled a booking' && r.detail.waive === true));
       q = (await A('quote', {gh_id: g0.id, room_type_id: deluxe, check_in: D(329), check_out: D(333)})).j.cost;
       check('nights without a rate are counted as missing', q.nights === 4 && q.missing === 2);
       await A('block', {gh_id: g0.id, rooms: ['A1'], from: D(340), to: D(342), reason: 'Painting'});
@@ -406,7 +432,7 @@ check('old host redirects to PRIMARY_HOST', r.status === 301 && r.headers.get('l
       await A('block', {gh_id: g0.id, rooms: [], from: D(350), to: D(352), reason: 'Closed'});
       check('a whole-house block leaves no room to book', (await B(asha, 'book', {property: 'Acme House', check_in: D(350), check_out: D(351), title: 'Mr.', name: 'Block Test', grade: 'E1'})).status === 409);
       const st2 = (await A('state', {})).j.clients.find((c) => c.id === acme);
-      check('admin state lists rates and blocks', st2.rates.length === 6 && st2.blocks.length === 2);
+      check('admin state lists rates and blocks', st2.rates.length === 7 && st2.blocks.length === 2);
       await A('block', {gh_id: g0.id, id: st2.blocks[0].id, delete: true}); check('a block can be removed', (await A('state', {})).j.clients.find((c) => c.id === acme).blocks.length === 1);
     }
     { // audit log + backups (Zuna admin only)

@@ -410,6 +410,7 @@ const SCHEMA = [
   "CREATE INDEX IF NOT EXISTS gh_blocks_gh ON gh_blocks (gh_id, from_date)",
   "CREATE TABLE IF NOT EXISTS audit (id INTEGER PRIMARY KEY AUTOINCREMENT, at TEXT NOT NULL, email TEXT, role TEXT, client_id INTEGER, action TEXT NOT NULL, target TEXT, detail TEXT, ip TEXT, ok INTEGER DEFAULT 1)",
   "CREATE INDEX IF NOT EXISTS audit_at ON audit (at)",
+  "CREATE TABLE IF NOT EXISTS gh_cancel (id INTEGER PRIMARY KEY AUTOINCREMENT, gh_id INTEGER NOT NULL, room_type_id INTEGER DEFAULT 0, free_hours REAL DEFAULT 24, charge_type TEXT DEFAULT 'nights', charge_value REAL DEFAULT 1, note TEXT, by_email TEXT, at TEXT)",
   "CREATE TABLE IF NOT EXISTS guests (id INTEGER PRIMARY KEY AUTOINCREMENT, client_id INTEGER NOT NULL, gkey TEXT NOT NULL, title TEXT, name TEXT, gender TEXT, email TEXT, phone TEXT, grade TEXT, emp_code TEXT, base TEXT, uses INTEGER DEFAULT 0, last_used TEXT, UNIQUE (client_id, gkey))",
   // hotel bookings removed by the Zuna team (kept so they can be restored)
   "CREATE TABLE IF NOT EXISTS tx_removed (id INTEGER PRIMARY KEY AUTOINCREMENT, client_id INTEGER NOT NULL, code TEXT NOT NULL, row TEXT NOT NULL, upload_id INTEGER, by_email TEXT, at TEXT, restored TEXT)",
@@ -418,7 +419,7 @@ let schemaReady = false;
 async function ensureSchema(env) {
   if (schemaReady) return;
   for (const q of SCHEMA) await env.DB.prepare(q).run();
-  for (const c of ["users ADD COLUMN role TEXT", "users ADD COLUMN client_id INTEGER", "guesthouses ADD COLUMN state TEXT", "guesthouses ADD COLUMN country TEXT", "room_types ADD COLUMN bed_type TEXT", "clients ADD COLUMN legal_name TEXT", "users ADD COLUMN tx_access INTEGER", "tx_uploads ADD COLUMN hash TEXT", "tx_uploads ADD COLUMN file_id INTEGER", "transactions ADD COLUMN held INTEGER", "users ADD COLUMN book_access INTEGER", "clients ADD COLUMN mail_cc TEXT", "clients ADD COLUMN mail_bcc TEXT", "trips ADD COLUMN wbs TEXT", "clients ADD COLUMN elig TEXT", "clients ADD COLUMN svc_fee REAL", "guesthouses ADD COLUMN checkin_time TEXT", "guesthouses ADD COLUMN checkout_time TEXT", "guesthouses ADD COLUMN team_emails TEXT", "gh_rates ADD COLUMN plan TEXT", "gh_rates ADD COLUMN fare_double REAL", "gh_rates ADD COLUMN extra_bed REAL", "trips ADD COLUMN plan TEXT"]) { try { await env.DB.prepare("ALTER TABLE " + c).run(); } catch (e) { /* exists */ } }
+  for (const c of ["users ADD COLUMN role TEXT", "users ADD COLUMN client_id INTEGER", "guesthouses ADD COLUMN state TEXT", "guesthouses ADD COLUMN country TEXT", "room_types ADD COLUMN bed_type TEXT", "clients ADD COLUMN legal_name TEXT", "users ADD COLUMN tx_access INTEGER", "tx_uploads ADD COLUMN hash TEXT", "tx_uploads ADD COLUMN file_id INTEGER", "transactions ADD COLUMN held INTEGER", "users ADD COLUMN book_access INTEGER", "clients ADD COLUMN mail_cc TEXT", "clients ADD COLUMN mail_bcc TEXT", "trips ADD COLUMN wbs TEXT", "clients ADD COLUMN elig TEXT", "clients ADD COLUMN svc_fee REAL", "guesthouses ADD COLUMN checkin_time TEXT", "guesthouses ADD COLUMN checkout_time TEXT", "guesthouses ADD COLUMN team_emails TEXT", "gh_rates ADD COLUMN plan TEXT", "gh_rates ADD COLUMN fare_double REAL", "gh_rates ADD COLUMN extra_bed REAL", "trips ADD COLUMN plan TEXT", "trips ADD COLUMN cancel_charge REAL", "trips ADD COLUMN cancel_basis TEXT"]) { try { await env.DB.prepare("ALTER TABLE " + c).run(); } catch (e) { /* exists */ } }
   schemaReady = true;
 }
 const DEFAULT_GRADES = "M1,M2,M3,M4,M5,M6,M7,M8,P1,P2,P3,E1,E2,E3,E4,E5,E6,E7";
@@ -714,11 +715,48 @@ function ghCostFrom(rows, roomTypeId, ci, co, svcFee, plan, occupancy) {
 // plans with a rate on at least one of these nights for this room type, in EP → AP order
 const plansFrom = (rows, roomTypeId) => PLAN_CODES.filter((p) => rows.some((x) => (!x.room_type_id || x.room_type_id === (+roomTypeId || 0)) && planOf(x.plan) === p));
 async function ghCost(env, ghId, roomTypeId, ci, co, svcFee, plan, occupancy) { return ghCostFrom(await ghRates(env, ghId, ci, co), roomTypeId, ci, co, svcFee, plan, occupancy); }
+/* ---------- Cancellation charges ----------
+   Per guest house, with room-type rules that win over it: free until N hours before check-in (the guest house's check-in time, IST),
+   then a charge: "nights" (the first N nights' fare + tax), "percent" (of the stay's fare + tax), "full" (the whole stay) or "fixed" (₹). */
+const CXL_TYPES = ["nights", "percent", "full", "fixed"];
+const cxlOut = (x) => ({id: x.id, gh_id: x.gh_id, room_type_id: x.room_type_id || 0, free_hours: +x.free_hours || 0, charge_type: CXL_TYPES.includes(x.charge_type) ? x.charge_type : "nights", charge_value: +x.charge_value || 0, note: x.note || "", by: x.by_email || "", at: x.at || ""});
+const cxlHours = (h) => h % 24 === 0 && h >= 48 ? h / 24 + " days" : h + (h === 1 ? " hour" : " hours");
+const cxlCharge = (r) => r.charge_type === "full" ? "the full stay is charged" : r.charge_type === "percent" ? r.charge_value + "% of the stay is charged" : r.charge_type === "fixed" ? "₹" + (+r.charge_value).toLocaleString("en-IN") + " is charged"
+  : (+r.charge_value || 1) === 1 ? "one night is charged" : r.charge_value + " nights are charged";
+const cxlText = (r) => r ? (r.free_hours > 0 ? "Free cancellation until " + cxlHours(r.free_hours) + " before check-in; after that " + cxlCharge(r) + "." : "No free cancellation: " + cxlCharge(r) + ".") : "";
+const cxlDeadline = (ci, time, hours) => new Date(Date.parse(ci + "T" + (/^\d{2}:\d{2}$/.test(time || "") ? time : "12:00") + ":00+05:30") - (+hours || 0) * 3600e3);
+const istStamp = (d) => { const t = new Date(d.getTime() + 330 * 60e3), H = t.getUTCHours(); return t.getUTCDate() + " " + ["Jan", "Feb", "Mar", "Apr", "May", "Jun", "Jul", "Aug", "Sep", "Oct", "Nov", "Dec"][t.getUTCMonth()] + " " + t.getUTCFullYear() + ", " + ((H % 12) || 12) + ":" + String(t.getUTCMinutes()).padStart(2, "0") + (H < 12 ? " AM" : " PM"); };
+async function cxlRules(env, ghId) { const {results} = await env.DB.prepare("SELECT * FROM gh_cancel WHERE gh_id = ?").bind(+ghId || 0).all(); return results.map(cxlOut); }
+const cxlFor = (rules, roomTypeId) => rules.find((r) => roomTypeId && r.room_type_id === roomTypeId) || rules.find((r) => !r.room_type_id) || null;
+const roomTypeOf = (gh, room) => (((gh && gh.room_types) || []).find((t) => expandRooms(t.room_nos).includes(String(room))) || {}).id || 0;
+// the policy for one booking, with its own deadline in words
+async function cxlPolicy(env, gh, trip) { return gh && gh.id ? cxlPolicyFrom(await cxlRules(env, gh.id), gh, trip) : null; }
+function cxlPolicyFrom(rules, gh, trip) {
+  const r = cxlFor(rules, roomTypeOf(gh, trip.room)); if (!r) return null;
+  const dl = cxlDeadline(trip.check_in, gh.checkin_time, r.free_hours);
+  return Object.assign({}, r, {text: cxlText(r), free_until: dl.toISOString(), free_until_text: r.free_hours > 0 ? istStamp(dl) : "",
+    line: r.free_hours > 0 ? "Free cancellation until " + istStamp(dl) + "; after that " + cxlCharge(r) + "." : cxlText(r)});
+}
+// what cancelling now would cost
+async function cxlQuote(env, gh, trip, when) {
+  const pol = await cxlPolicy(env, gh, trip); if (!pol) return {policy: null, late: false, charge: 0, basis: "No cancellation policy is set for this guest house, so there is no charge."};
+  const late = (when || Date.now()) >= Date.parse(pol.free_until);
+  if (!late) return {policy: pol, late, charge: 0, basis: "Free cancellation (before " + pol.free_until_text + ")."};
+  const c = await ghCost(env, gh.id, roomTypeOf(gh, trip.room), trip.check_in, trip.check_out, 0, trip.plan, trip.occupancy);
+  let amt = 0;
+  if (pol.charge_type === "fixed") amt = +pol.charge_value || 0;
+  else if (pol.charge_type === "full") amt = c.fare + c.fare_tax;
+  else if (pol.charge_type === "percent") amt = (c.fare + c.fare_tax) * (+pol.charge_value || 0) / 100;
+  else { let left = Math.max(1, Math.round(+pol.charge_value || 1)); for (const sg of c.segments) { const n = Math.min(left, sg.nights); amt += n * sg.fare * (1 + sg.tax_rate); left -= n; if (!left) break; } }
+  amt = r2(amt); const nil = c.fare === 0 && c.missing === 0;
+  return {policy: pol, late, charge: amt, basis: (pol.free_hours > 0 ? "Cancelled after the free-cancellation time (" + pol.free_until_text + "): " : "") + cxlCharge(pol) + (nil ? " (Nil fare, so ₹0)" : c.missing ? " (some nights have no rate yet)" : "") + "."};
+}
 async function ratesState(env, ghIds) {
-  if (!ghIds.length) return {rates: [], blocks: []};
+  if (!ghIds.length) return {rates: [], blocks: [], cancels: []};
   const q = "(" + ghIds.map(() => "?").join(",") + ")";
   const [{results: rates}, {results: blocks}] = await Promise.all([env.DB.prepare("SELECT * FROM gh_rates WHERE gh_id IN " + q + " ORDER BY gh_id, from_date DESC, id DESC").bind(...ghIds).all(), env.DB.prepare("SELECT * FROM gh_blocks WHERE gh_id IN " + q + " ORDER BY gh_id, from_date DESC, id DESC").bind(...ghIds).all()]);
-  return {rates: rates.map((x) => ({id: x.id, gh_id: x.gh_id, room_type_id: x.room_type_id || 0, from: x.from_date, to: x.to_date, plan: planOf(x.plan), nil: !!x.nil, fare: +x.fare || 0, fare_double: +x.fare_double || 0, extra_bed: +x.extra_bed || 0, svc: +x.svc || 0, svc_unit: x.svc_unit || "night", note: x.note || "", by: x.by_email || "", at: x.at || ""})),
+  const {results: cx} = await env.DB.prepare("SELECT * FROM gh_cancel WHERE gh_id IN " + q + " ORDER BY gh_id, room_type_id").bind(...ghIds).all();
+  return {cancels: cx.map(cxlOut), rates: rates.map((x) => ({id: x.id, gh_id: x.gh_id, room_type_id: x.room_type_id || 0, from: x.from_date, to: x.to_date, plan: planOf(x.plan), nil: !!x.nil, fare: +x.fare || 0, fare_double: +x.fare_double || 0, extra_bed: +x.extra_bed || 0, svc: +x.svc || 0, svc_unit: x.svc_unit || "night", note: x.note || "", by: x.by_email || "", at: x.at || ""})),
     blocks: blocks.map((x) => ({id: x.id, gh_id: x.gh_id, rooms: String(x.rooms || "").split(",").map((s) => s.trim()).filter(Boolean), from: x.from_date, to: x.to_date, reason: x.reason || "", by: x.by_email || "", at: x.at || ""}))};
 }
 async function ratesApi(env, user, path, b) {
@@ -749,6 +787,22 @@ async function ratesApi(env, user, path, b) {
       if (b.id) await env.DB.prepare("UPDATE gh_blocks SET rooms = ?, from_date = ?, to_date = ?, reason = ?, by_email = ?, at = ? WHERE id = ? AND gh_id = ?").bind(...vals, +b.id, gh.id).run();
       else await env.DB.prepare("INSERT INTO gh_blocks (gh_id, rooms, from_date, to_date, reason, by_email, at) VALUES (?, ?, ?, ?, ?, ?, ?)").bind(gh.id, ...vals).run();
     }
+    return json({ok: true});
+  }
+  if (path === "/api/admin/cancel") {
+    if (b.delete) { await env.DB.prepare("DELETE FROM gh_cancel WHERE id = ? AND gh_id = ?").bind(+b.id || 0, gh.id).run(); return json({ok: true}); }
+    const rt = +b.room_type_id || 0;
+    if (rt && !(await env.DB.prepare("SELECT id FROM room_types WHERE id = ? AND gh_id = ?").bind(rt, gh.id).first())) return json({error: "That room type is not in " + gh.name + "."}, 400);
+    const hours = Math.round(+b.free_hours), type = CXL_TYPES.includes(b.charge_type) ? b.charge_type : "", val = Math.round((+b.charge_value || 0) * 100) / 100;
+    if (!(hours >= 0 && hours <= 720)) return json({error: "Free cancellation must be between 0 and 720 hours (30 days) before check-in."}, 400);
+    if (!type) return json({error: "Choose what is charged after the free-cancellation time."}, 400);
+    if (type === "nights" && !(val >= 1 && val <= 30)) return json({error: "Enter how many nights are charged (1 to 30)."}, 400);
+    if (type === "percent" && !(val > 0 && val <= 100)) return json({error: "Enter a percentage between 1 and 100."}, 400);
+    if (type === "fixed" && !(val > 0 && val <= 1000000)) return json({error: "Enter the amount charged."}, 400);
+    const ex = await env.DB.prepare("SELECT id FROM gh_cancel WHERE gh_id = ? AND room_type_id = ?").bind(gh.id, rt).first(), id = +b.id || (ex && ex.id) || 0;
+    const vals = [rt, hours, type, type === "full" ? 0 : val, clean(b.note, 160), user.email, now];
+    if (id) await env.DB.prepare("UPDATE gh_cancel SET room_type_id = ?, free_hours = ?, charge_type = ?, charge_value = ?, note = ?, by_email = ?, at = ? WHERE id = ? AND gh_id = ?").bind(...vals, id, gh.id).run();
+    else await env.DB.prepare("INSERT INTO gh_cancel (gh_id, room_type_id, free_hours, charge_type, charge_value, note, by_email, at) VALUES (?, ?, ?, ?, ?, ?, ?, ?)").bind(gh.id, ...vals).run();
     return json({ok: true});
   }
   if (path === "/api/admin/quote") {
@@ -791,7 +845,7 @@ async function backupList(env) {
    One row for every change made through the portal (and every sign-in): who, when, what, on which client, from which IP.
    Written after the request has been handled; reads (lists, quotes, previews) are not logged. Secrets and files are never stored. */
 const AUDIT_READS = new Set(["/api/admin/state", "/api/admin/quote", "/api/admin/tx/preview", "/api/admin/tx/stored", "/api/admin/tx/uploads", "/api/admin/tx/file", "/api/admin/backups", "/api/admin/backup/download", "/api/admin/audit",
-  "/api/manage/state", "/api/book/avail", "/api/book/quote", "/api/trips", "/api/bookings", "/api/guests", "/api/tx"]);
+  "/api/manage/state", "/api/book/avail", "/api/book/quote", "/api/book/cancel/preview", "/api/trips", "/api/bookings", "/api/guests", "/api/tx"]);
 const AUDIT_LABEL = {"/api/login": "Signed in", "/api/forgot": "Asked for a password reset code", "/api/reset": "Reset own password", "/api/vouchers": "Hotel Desk update",
   "/api/book": "Booked a stay", "/api/book/update": "Changed a booking", "/api/book/cancel": "Cancelled a booking", "/api/book/resend": "Sent the booking email",
   "/api/admin/rate": "Saved a rate", "/api/admin/block": "Saved blackout dates", "/api/admin/svc": "Changed the service charge", "/api/admin/cancel": "Saved a cancellation policy",
@@ -933,23 +987,25 @@ async function placeTrip(env, user, cid, b, trip) {
   const saved = await env.DB.prepare("SELECT * FROM trips WHERE id = ?").bind(id).first();
   const mail = b.send_mail === false ? "not sent" : b.mail_later ? "pending" : await tripMail(env, client, saved, av.gh, trip ? "changed" : "confirmed");
   await env.DB.prepare("UPDATE trips SET mail_status = ? WHERE id = ?").bind(mail, id).run();
-  return json({ok: true, trip: Object.assign(tripOut(Object.assign(saved, {mail_status: mail}), user.admin), {helpdesk: helpdeskOf(av.gh)})});
+  const pol = await cxlPolicy(env, av.gh, saved);
+  return json({ok: true, trip: Object.assign(tripOut(Object.assign(saved, {mail_status: mail}), user.admin), {helpdesk: helpdeskOf(av.gh), cancel_policy: pol ? pol.line : ""})});
 }
 // guest house helpdesk for the voucher: the guest house's contacts from the directory
 const helpdeskOf = (gh) => ((gh && gh.contacts) || []).filter((c) => c.phone || c.email).slice(0, 4).map((c) => ({name: c.name || '', designation: c.designation || '', phone: c.phone || '', email: c.email || ''}));
 const tripOut = (x, admin) => ({id: x.id, code: x.code || "", property: x.property, room: x.room, title: x.title || "", name: x.name, guest: guestOf(x), gender: x.gender, grade: x.grade, emp_code: x.emp_code || "", email: x.email || "", phone: x.phone || "",
   base: x.base || "", concur_tr: x.concur_tr || "", wbs: x.wbs || "", occupancy: x.occupancy, plan: x.plan || "", plan_label: planLabel(x.plan), check_in: x.check_in, check_out: x.check_out, note: x.note || "", status: x.status, cc: admin ? x.cc || "" : "", bcc: admin ? x.bcc || "" : "",
-  booked_by: x.booked_by, booked_at: x.booked_at, changed_by: x.changed_by || "", changed_at: x.changed_at || "", cancelled_by: x.cancelled_by || "", cancelled_at: x.cancelled_at || "", cancel_reason: x.cancel_reason || "", mail_status: x.mail_status || "", history: jparse(x.history, [])});
+  booked_by: x.booked_by, booked_at: x.booked_at, changed_by: x.changed_by || "", changed_at: x.changed_at || "", cancelled_by: x.cancelled_by || "", cancelled_at: x.cancelled_at || "", cancel_reason: x.cancel_reason || "", cancel_charge: x.cancel_charge == null ? null : +x.cancel_charge, cancel_basis: x.cancel_basis || "", mail_status: x.mail_status || "", history: jparse(x.history, [])});
 async function tripFor(env, user, cid, id) { return env.DB.prepare("SELECT * FROM trips WHERE id = ? AND client_id = ?").bind(+id || 0, cid).first(); }
 async function cancelTrip(env, user, cid, b) {
   const trip = await tripFor(env, user, cid, b.id); if (!trip) return json({error: "Booking not found."}, 404);
   if (trip.status === "Cancelled") return json({error: "This booking is already cancelled."}, 409);
   if (trip.check_out <= istToday()) return json({error: "This stay has already ended."}, 409);
-  const client = await bookClient(env, cid);
+  const client = await bookClient(env, cid), gh = (await clientGuestHouses(env, client, true)).find((g) => g.property === trip.property) || {property: trip.property};
+  const cq = await cxlQuote(env, gh, trip), waive = !!(b.waive && user.admin && cq.charge > 0), charge = waive ? 0 : cq.charge, basis = waive ? "Waived by Zuna (would have been ₹" + cq.charge.toLocaleString("en-IN") + ")" : cq.basis;
   const res = await cancelBooking(env, client, {guest: guestOf(trip), check_in: trip.check_in}); if (!res.ok && res.status !== 404) return res;
-  const now = new Date().toISOString(), hist = jparse(trip.history, []), reason = clean(b.reason, 200); hist.push({at: now, by: user.email, what: "Cancelled", detail: reason});
-  await env.DB.prepare("UPDATE trips SET status = 'Cancelled', cancelled_by = ?, cancelled_at = ?, cancel_reason = ?, history = ? WHERE id = ?").bind(user.email, now, reason, JSON.stringify(hist), trip.id).run();
-  const saved = await env.DB.prepare("SELECT * FROM trips WHERE id = ?").bind(trip.id).first(), gh = (await clientGuestHouses(env, client, true)).find((g) => g.property === trip.property) || {property: trip.property};
+  const now = new Date().toISOString(), hist = jparse(trip.history, []), reason = clean(b.reason, 200); hist.push({at: now, by: user.email, what: "Cancelled", detail: [reason, "charge ₹" + charge.toLocaleString("en-IN") + (waive ? " (waived)" : "")].filter(Boolean).join(" · ")});
+  await env.DB.prepare("UPDATE trips SET status = 'Cancelled', cancelled_by = ?, cancelled_at = ?, cancel_reason = ?, cancel_charge = ?, cancel_basis = ?, history = ? WHERE id = ?").bind(user.email, now, reason, charge, basis, JSON.stringify(hist), trip.id).run();
+  const saved = await env.DB.prepare("SELECT * FROM trips WHERE id = ?").bind(trip.id).first();
   const mail = b.send_mail === false ? "not sent" : await tripMail(env, client, saved, gh, "cancelled");
   await env.DB.prepare("UPDATE trips SET mail_status = ? WHERE id = ?").bind(mail, trip.id).run();
   return json({ok: true, trip: Object.assign(tripOut(Object.assign(saved, {mail_status: mail}), user.admin), {helpdesk: helpdeskOf(gh)})});
@@ -964,9 +1020,11 @@ async function tripMail(env, client, trip, gh, kind, pdf) {
     changed: {head: "Your booking has been changed", tag: "CHANGED", bg: "#F5B83D", fg: "#2b1a00", subj: "Booking changed"},
     cancelled: {head: "Your booking has been cancelled", tag: "CANCELLED", bg: "#F06B7A", fg: "#ffffff", subj: "Booking cancelled"}}[kind];
   const subject = K.subj + " · " + trip.property + " · " + fmtD(trip.check_in) + " – " + fmtD(trip.check_out) + " · " + (trip.code || "");
+  const pol = kind !== "cancelled" ? await cxlPolicy(env, gh, trip).catch(() => null) : null;
   const att = pdf && pdf.content && kind !== "cancelled" ? [{filename: pdf.filename || "Voucher.pdf", content: pdf.content, content_type: "application/pdf"}] : [];
   const live = kind !== "cancelled", L = "font-size:10.5px;letter-spacing:1.2px;font-weight:700;color:#6b6496";
-  const rows = [["Guest", guestOf(trip) + (trip.grade ? " · " + trip.grade : "")], ["Room", trip.room + " · " + (trip.occupancy === "Double" ? "Double occupancy (shared)" : "Single occupancy")], ["Meal plan", planLabel(trip.plan)],
+  const rows = [["Guest", guestOf(trip) + (trip.grade ? " · " + trip.grade : "")], ["Room", trip.room + " · " + (trip.occupancy === "Double" ? "Double occupancy (shared)" : "Single occupancy")], ["Meal plan", planLabel(trip.plan)], kind !== "cancelled" && pol ? ["Cancellation", pol.line] : null,
+    kind === "cancelled" && trip.cancel_charge != null ? ["Cancellation charge", (+trip.cancel_charge ? "₹" + (+trip.cancel_charge).toLocaleString("en-IN") : "No charge") + (trip.cancel_basis ? " · " + trip.cancel_basis : "")] : null,
     ["Employee code", trip.emp_code || ""], ["Remarks", trip.note || ""], kind === "cancelled" ? ["Reason", trip.cancel_reason || ""] : null].filter((r) => r && r[1]);
   const c0 = helpdeskOf(gh)[0];
   const ln = (t, st) => t ? '<div style="' + (st || "color:#4a4475") + '">' + esc(t) + '</div>' : "";
@@ -1031,8 +1089,10 @@ async function bookApi(req, env, user, path) {
   let b; try { b = await req.json(); } catch (e) { return json({error: "Bad request."}, 400); }
   const cid = user.admin ? +b.client_id : user.client_id; if (!cid) return json({error: "No client."}, 400);
   if (path === "/api/trips") { if (!user.book && !user.manager) return json({error: "You don't have access to bookings. Ask your admin."}, 403);
-    const {results} = await env.DB.prepare("SELECT * FROM trips WHERE client_id = ? ORDER BY check_in DESC, id DESC LIMIT 3000").bind(cid).all(); const ghs = new Map((await clientGuestHouses(env, await bookClient(env, cid) || {id: cid}, true)).map((g) => [g.property, helpdeskOf(g)]));
-    return json({trips: results.map((t) => Object.assign(tripOut(t, user.admin), {helpdesk: ghs.get(t.property) || []}))}); }
+    const {results} = await env.DB.prepare("SELECT * FROM trips WHERE client_id = ? ORDER BY check_in DESC, id DESC LIMIT 3000").bind(cid).all(); const gl = await clientGuestHouses(env, await bookClient(env, cid) || {id: cid}, true), ghs = new Map(gl.map((g) => [g.property, g]));
+    const ids = gl.map((g) => g.id).filter(Boolean), cx = ids.length ? (await env.DB.prepare("SELECT * FROM gh_cancel WHERE gh_id IN (" + ids.map(() => "?").join(",") + ")").bind(...ids).all()).results.map(cxlOut) : [];
+    return json({trips: results.map((t) => { const g = ghs.get(t.property), pol = g && t.status !== "Cancelled" ? cxlPolicyFrom(cx.filter((r) => r.gh_id === g.id), g, t) : null;
+      return Object.assign(tripOut(t, user.admin), {helpdesk: g ? helpdeskOf(g) : [], cancel_policy: pol ? pol.line : ""}); })}); }
   if (path === "/api/bookings") {   // fresh stay list for the dashboard after a booking changes
     const client = await bookClient(env, cid); if (!client) return json({error: "No client."}, 404);
     const names = new Set((await clientGuestHouses(env, client, false)).map((g) => g.property)), bk = await readSet(env, "bookings");
@@ -1053,12 +1113,15 @@ async function bookApi(req, env, user, path) {
     if (b.all) {   // every room type at once, so the page can show charges the moment a room is picked
       const ids = [0].concat((gh.room_types || []).map((t) => t.id)), costs = {}, rows = await ghRates(env, gh.id, b.check_in, b.check_out);
       ids.forEach((id) => { const by = {}; const ps = plansFrom(rows, id); (ps.length ? ps : ["EP"]).forEach((p) => { by[p] = {Single: ghCostFrom(rows, id, b.check_in, b.check_out, svc, p, "Single"), Double: ghCostFrom(rows, id, b.check_in, b.check_out, svc, p, "Double")}; }); costs[id] = by; });
-      return json({costs, plans: PLANS}); }
+      const cr = await cxlRules(env, gh.id), cancel = {}; ids.forEach((id) => { const r = cxlFor(cr, id); cancel[id] = r ? Object.assign({text: cxlText(r)}, r) : null; });
+      return json({costs, plans: PLANS, cancel, checkin_time: gh.checkin_time || "12:00"}); }
     return json({cost: await ghCost(env, gh.id, rt, b.check_in, b.check_out, svc, b.plan, b.occupancy)}); }
   if (path === "/api/book") return placeTrip(env, user, cid, b, null);
   if (path === "/api/book/update") { const tr = await tripFor(env, user, cid, b.id); if (!tr) return json({error: "Booking not found."}, 404);
     if (tr.status === "Cancelled") return json({error: "A cancelled booking can't be changed. Make a new booking instead."}, 409);
     if (tr.check_out <= istToday()) return json({error: "This stay has already ended."}, 409); return placeTrip(env, user, cid, b, tr); }
+  if (path === "/api/book/cancel/preview") { const tr = await tripFor(env, user, cid, b.id); if (!tr) return json({error: "Booking not found."}, 404); const client = await bookClient(env, cid);
+    const gh = (await clientGuestHouses(env, client, true)).find((g) => g.property === tr.property); return json(await cxlQuote(env, gh, tr)); }
   if (path === "/api/book/cancel") return cancelTrip(env, user, cid, b);
   if (path === "/api/book/resend") { const tr = await tripFor(env, user, cid, b.id); if (!tr) return json({error: "Booking not found."}, 404); const client = await bookClient(env, cid);
     const gh = (await clientGuestHouses(env, client, true)).find((g) => g.property === tr.property) || {property: tr.property};
@@ -1257,7 +1320,8 @@ async function adminApi(req, env, user, path) {
       case "/api/admin/audit": return json(await auditList(env, b));
       case "/api/admin/rate":
       case "/api/admin/block":
-      case "/api/admin/quote": return ratesApi(env, user, path, b);
+      case "/api/admin/quote":
+      case "/api/admin/cancel": return ratesApi(env, user, path, b);
       case "/api/admin/svc": {   // the client's service charge per booking (before 18% GST)
         const fee = Math.round((+b.svc_fee || 0) * 100) / 100; if (fee < 0 || fee > 1000000) return json({error: "Check the amount."}, 400);
         const r = await env.DB.prepare("UPDATE clients SET svc_fee = ? WHERE id = ?").bind(fee, +b.client_id || 0).run(); return json({ok: true, svc_fee: fee}); }

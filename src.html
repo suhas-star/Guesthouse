@@ -1261,6 +1261,17 @@ const bkCharges = (box, room) => { box.replaceChildren(); if (!(BK.co > BK.ci) |
     if (q.missing) bd.appendChild(h('p', 'mt-2 rounded-lg bg-amber-50 ring-1 ring-amber-200 px-2.5 py-1.5 text-[11.5px] font-semibold text-amber-800', (q.missing === n ? 'The room rate for these dates is not set yet.' : q.missing + ' of ' + n + ' nights have no room rate yet.') + ' Zuna will confirm the final charges.')); };
   const key = [BK.prop, room || '', BK.ci, BK.co].join('|'); if (BK.qc[key]) { paint(BK.qc[key]); return; }
   bApi('book/quote', {property: BK.prop, room: room || '', check_in: BK.ci, check_out: BK.co}).then((j) => { BK.qc[key] = j.cost; if (box.isConnected) paint(j.cost); }).catch(() => { box.replaceChildren(); }); };
+const bkChargesBar = (box, room) => { if (!(BK.co > BK.ci) || !BK.prop) { box.replaceChildren(); return; }
+  const key = [BK.prop, room || '', BK.ci, BK.co].join('|');
+  const paint = (q) => { box.replaceChildren(); const bar = h('div', 'flex flex-wrap items-center gap-x-5 gap-y-1.5 rounded-xl bg-zuna-50 ring-1 ring-zuna-100 px-4 py-3 text-sm');
+    const lab = h('span', 'inline-flex items-center gap-2 font-bold'); lab.appendChild(icon('receipt', 'w-4 h-4 text-mint-600')); lab.appendChild(document.createTextNode(room ? 'Charges · room ' + room : 'Charges')); bar.appendChild(lab);
+    const part = (k, v) => { const x = h('span', 'text-zuna-500'); x.appendChild(document.createTextNode(k + ' ')); x.appendChild(h('b', 'text-zuna-900 font-semibold tabular-nums', v)); bar.appendChild(x); };
+    part('Basic fare', q.fare === 0 && !q.missing ? 'Nil' : inr2(q.fare + q.fare_tax) + (q.fare_tax ? ' incl. tax' : '')); part('Service charge', inr2(q.svc)); part('GST', inr2(q.svc_gst));
+    const tt = h('span', 'ml-auto font-bold text-base tabular-nums', 'Total ' + inr2(q.total)); bar.appendChild(tt); box.appendChild(bar);
+    if (q.missing) box.appendChild(h('p', 'mt-1.5 text-[11.5px] font-semibold text-amber-700', 'The room rate for some nights is not set yet. Zuna will confirm the final charges.')); };
+  if (BK.qc[key]) { paint(BK.qc[key]); return; }
+  box.replaceChildren(h('div', 'chart-skel h-12 rounded-xl'));
+  bApi('book/quote', {property: BK.prop, room: room || '', check_in: BK.ci, check_out: BK.co}).then((j) => { BK.qc[key] = j.cost; if (box.isConnected) paint(j.cost); }).catch(() => box.replaceChildren()); };
 // right of the Stay step: the chosen guest house with live availability for the chosen nights
 const bkPreview = (box) => { const p = bkHouse(); box.replaceChildren(); if (!p.property) return;
   const c = h('div', 'rounded-2xl overflow-hidden bg-white ring-1 ring-zuna-100 shadow-sm');
@@ -1271,7 +1282,7 @@ const bkPreview = (box) => { const p = bkHouse(); box.replaceChildren(); if (!p.
   const tags = [].concat(p.inclusions || [], p.amenities || []).filter(Boolean).slice(0, 4);
   if (tags.length) { const tg = h('div', 'flex flex-wrap gap-1.5'); tags.forEach((x) => tg.appendChild(h('span', 'rounded-md bg-white ring-1 ring-zuna-100 px-2 py-0.5 text-[11px] font-semibold text-zuna-600', x))); bd.appendChild(tg); }
   const hd = (p.contacts || []).filter((x) => x.phone)[0]; if (hd) { const r = h('p', 'flex items-center gap-2 text-xs text-zuna-500 truncate'); r.appendChild(icon('phone', 'w-3.5 h-3.5 text-mint-600 shrink-0')); r.appendChild(document.createTextNode('Helpdesk · ' + hd.name + ' · ')); r.appendChild(h('b', 'text-zuna-900 font-semibold', hd.phone)); bd.appendChild(r); }
-  c.appendChild(bd); box.appendChild(c); const chg = h('div', 'mt-3'); box.appendChild(chg); bkCharges(chg, '');
+  c.appendChild(bd); box.appendChild(c);
   const paintAv = () => { av.replaceChildren(); const rs = BK.rooms || [], tot = rs.length, free = rs.filter((r) => r.state === 'free').length, one = rs.filter((r) => r.state === 'shared').length;
     if (!(BK.co > BK.ci)) { av.appendChild(h('p', 'text-xs font-semibold text-rose-600', 'Pick a check-out after check-in.')); return; }
     const top = h('div', 'flex items-baseline justify-between gap-2'); top.appendChild(h('p', 'text-sm font-bold ' + (free || one ? '' : 'text-rose-600'), free || one ? free + ' of ' + tot + ' rooms free' + (one ? ' · ' + one + ' with a bed left' : '') : 'No rooms free for these nights'));
@@ -1375,7 +1386,7 @@ const bkGuestStep = (pane) => { const v = BK.v;
 const bkRoom = (pane) => { const p = bkHouse(), v = BK.v;
   bkHead(pane, 'Pick a room', 'Rooms ' + bkGuest() + ' (' + v.grade + ') can have in ' + BK.prop + ', ' + fShort(BK.ci) + ' → ' + fShort(BK.co) + '.');
   const grid = h('div', 'grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-4 xl:grid-cols-5 gap-2'); grid.setAttribute('role', 'radiogroup'); grid.setAttribute('aria-label', 'Rooms'); pane.appendChild(grid);
-  const note = h('p', 'text-xs text-zuna-500 mt-3'); pane.appendChild(note);
+  const note = h('p', 'text-xs text-zuna-500 mt-3'); pane.appendChild(note); const chb = h('div', 'mt-4'); pane.appendChild(chb);   // charges for the chosen room
   const tile = (val, top, sub, dis, tone) => { const on = BK.room === val; const b = h('button', 'text-left rounded-xl px-3 py-2 ring-1 transition-all min-w-0 ' + (dis ? 'ring-zuna-100 bg-zuna-50/60 text-zuna-400 cursor-not-allowed' : on ? 'ring-2 ring-mint-500 bg-mint-50' : 'ring-zuna-100 bg-white hover:ring-mint-500'));
     b.type = 'button'; b.setAttribute('role', 'radio'); b.setAttribute('aria-checked', on ? 'true' : 'false'); b.title = top + ' · ' + sub;
     const hd = h('div', 'flex items-center gap-2 min-w-0'); hd.appendChild(h('span', 'w-2 h-2 rounded-full shrink-0 ' + tone)); hd.appendChild(h('span', 'font-bold text-sm truncate', top)); if (on) hd.appendChild(icon('circle-check', 'w-4 h-4 text-mint-600 ml-auto shrink-0')); b.appendChild(hd);
@@ -1383,6 +1394,7 @@ const bkRoom = (pane) => { const p = bkHouse(), v = BK.v;
   const paint = () => { grid.replaceChildren(); note.replaceChildren();
     if (!BK.rooms) { for (let i = 0; i < 8; i++) grid.appendChild(h('div', 'chart-skel h-[52px] rounded-xl')); return; }
     const ok = BK.rooms.filter((r) => !bkWhy(r)); if (BK.room && !ok.some((r) => r.room === BK.room)) BK.room = '';
+    bkChargesBar(chb, BK.room);
     grid.appendChild(tile('', 'Any room', 'We pick one · ' + ok.filter((r) => r.state === 'free').length + ' free', !ok.length, ok.length ? 'bg-mint-500' : 'bg-zuna-200'));
     let hidden = 0; BK.rooms.forEach((r) => { const w = bkWhy(r); if (w && !BK.showAll) { hidden++; return; }
       grid.appendChild(tile(r.room, r.room, w || (r.state === 'shared' ? 'One bed left · ' + (r.type || '') : [r.type, gradeSpan(r.grades)].filter(Boolean).join(' · ')), !!w, w ? 'bg-zuna-200' : r.state === 'shared' ? 'bg-amber-400' : 'bg-mint-500')); });

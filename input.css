@@ -436,3 +436,28 @@ button.gs-pill { cursor: pointer; } button.gs-pill:hover { transform: scale(1.3)
 .gs-band-sub { font-size: .85rem; color: rgba(255,255,255,.7); margin-top: .1rem; }
 @media (max-width: 640px) { .gs-band-hint { display: none; } }
 @media (prefers-reduced-motion: reduce) { .gs-pill { transition: none; } }
+
+/* Book a room · Guest step fields: one narrow column, underline fields (CRED-style) */
+.gs-u { max-width: 520px; margin: .4rem auto .2rem; display: grid; gap: 1.35rem; }
+.gs-two { display: grid; gap: 1.35rem; grid-template-columns: 1fr 1fr; align-items: start; }
+@media (max-width: 520px) { .gs-two { grid-template-columns: 1fr; } }
+.gs-u label > span:first-child { font-size: 10.5px; font-weight: 700; letter-spacing: .12em; text-transform: uppercase; color: #6b6496; margin-bottom: .2rem; }
+.gs-u input:not([type=checkbox]), .gs-u .zd-btn, .gs-u select { border: 0 !important; border-bottom: 2px solid #e2def2 !important; border-radius: 0 !important; box-shadow: none !important; background: transparent !important;
+  padding: .45rem 0 .55rem !important; font-size: 1.1rem !important; font-weight: 600; color: inherit; transition: border-color .2s; }
+.gs-u input:focus, .gs-u .zd-btn:focus, .gs-u .zd-btn[aria-expanded=true] { border-bottom-color: #02C988 !important; outline: none; }
+.gs-u input::placeholder { color: #a7a1c9; font-weight: 500; }
+.gs-u .flex.rounded-xl { border-radius: 0 !important; box-shadow: none !important; background: transparent !important; border-bottom: 2px solid #e2def2; }
+.gs-u .flex.rounded-xl:focus-within { border-bottom-color: #02C988; }
+.gs-u .flex.rounded-xl input, .gs-u .flex.rounded-xl .zd-btn, .gs-u .flex.rounded-xl select { border-bottom: 0 !important; }
+.gs-u .flex.rounded-xl .zd-btn, .gs-u .flex.rounded-xl select { width: 84px !important; color: #6b6496; }
+.gs-chips { display: flex; gap: .5rem; flex-wrap: wrap; padding-top: .25rem; }
+.gs-chip { font-size: .9rem; font-weight: 600; padding: .5rem 1rem; border-radius: 999px; border: 1px solid #e2def2; background: transparent; color: #12005A; transition: background .15s, color .15s, border-color .15s; }
+.gs-chip:hover { border-color: #12005A; }
+.gs-chip.on { background: #12005A; border-color: #12005A; color: #fff; }
+.gs-chip:focus-visible { outline: 3px solid #02C988; outline-offset: 2px; }
+html.dark .gs-u input:not([type=checkbox]), html.dark .gs-u .zd-btn, html.dark .gs-u .flex.rounded-xl { border-bottom-color: #2a1f66 !important; }
+html.dark .gs-u label > span:first-child { color: #a49cd6; }
+html.dark .gs-chip { color: #eeeaff; border-color: #2a1f66; } html.dark .gs-chip.on { background: #02C988; border-color: #02C988; color: #0b0630; }
+.gs-u .flex.rounded-xl input { padding-left: .9rem !important; }
+.gs-u .flex.rounded-xl .zd-btn { border-right: 1px solid #e2def2 !important; padding-right: .6rem !important; margin: .35rem 0; padding-top: .1rem !important; padding-bottom: .2rem !important; }
+html.dark .gs-u .flex.rounded-xl .zd-btn { border-right-color: #2a1f66 !important; }

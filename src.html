@@ -1383,20 +1383,28 @@ const bkGuestStep = (pane) => { const v = BK.v; bkQuotes();   // charges are rea
   bd.append(row, tl, h('p', 'gs-band-sub', p.sub)); pane.appendChild(bd);
   // the slide
   const sl = h('section', 'gs-slide ' + (BK.gdir === -1 ? 'gs-from-left' : 'gs-from-right')); BK.gdir = 1;
-  const g = h('div'); let first = null;
+  // fields: one narrow column, values on an underline, small spaced labels; title, gender and occupancy are tap chips
+  const g = h('div', 'gs-u'); let first = null;
+  const chips = (sel, opts, label) => { const w = h('div', 'gs-chips'); w.setAttribute('role', 'radiogroup'); w.setAttribute('aria-label', label); const bs = [];
+    const paint = () => bs.forEach((b) => { const on = b.dataset.v === sel.value; b.classList.toggle('on', on); b.setAttribute('aria-checked', on ? 'true' : 'false'); });
+    opts.forEach((o) => { const [val, txt] = Array.isArray(o) ? o : [o, o]; const b = h('button', 'gs-chip', txt); b.type = 'button'; b.dataset.v = val; b.setAttribute('role', 'radio');
+      b.onclick = () => { sel.value = val; sel.dispatchEvent(new Event('change')); paint(); w.dispatchEvent(new Event('change', {bubbles: true})); }; bs.push(b); w.appendChild(b); });
+    w.paint = paint; paint(); return w; };
+  const row2 = (...els) => { const r = h('div', 'gs-two'); r.append(...els); return r; };
   if (p.k === 'guest') {
     const ttl = bkVal('title', bSelect(['Mr.', 'Ms.', 'Mrs.', 'Dr.']), 'change'), gen = bkVal('gender', bSelect(['Male', 'Female']), 'change');
+    const tc = chips(ttl, ['Mr.', 'Ms.', 'Mrs.', 'Dr.'], 'Title'), gc = chips(gen, ['Male', 'Female'], 'Gender');
     const nm = bkVal('name', bInput('Type 3 letters to find a saved guest')); nm.required = true; const nmw = h('div', 'relative'); nmw.appendChild(nm); bkSuggest(nm, nmw); first = nm;
     const gr = bkVal('grade', gradeSelect(), 'change'); const el = h('p', 'text-xs font-semibold mt-1.5 min-h-[1rem]');
     const paintElig = () => { const ok = bkGradeOk(); el.textContent = !v.grade ? '' : ok ? '✓ Eligible' : '✕ Not eligible for ' + bkGender().toLowerCase() + ' guests'; el.className = 'text-xs font-semibold mt-1.5 min-h-[1rem] ' + (ok ? 'text-mint-700' : 'text-rose-600'); };
-    ttl.addEventListener('change', () => { if (v.title === 'Mr.') v.gender = 'Male'; else if (v.title === 'Ms.' || v.title === 'Mrs.') v.gender = 'Female'; gen.value = v.gender; paintElig(); });
+    ttl.addEventListener('change', () => { if (v.title === 'Mr.') v.gender = 'Male'; else if (v.title === 'Ms.' || v.title === 'Mrs.') v.gender = 'Female'; gen.value = v.gender; gc.paint(); paintElig(); });
     gr.addEventListener('change', paintElig); gen.addEventListener('change', paintElig); const gw = h('div'); gw.append(bkLabel('Grade', gr, true), el);
-    g.className = 'grid gap-4 grid-cols-[96px_minmax(0,1fr)] lg:grid-cols-[96px_minmax(0,1fr)_150px_170px] items-start'; g.append(bkLabel('Title', ttl, true), bkLabel('Full name', nmw, true), bkLabel('Gender', gen, true), gw);
-    const em = bkVal('email', bInput('name@company.com', 'email')); em.required = true; const cg = h('div', 'grid gap-4 sm:grid-cols-2 col-span-full'); cg.append(bkLabel('Email', em, true), bkLabel('Mobile', bkPhone(), true)); g.appendChild(cg); setTimeout(paintElig); }
-  if (p.k === 'work') { const ec = bkVal('emp_code', bInput('e.g. 104523')); first = ec; g.className = 'grid gap-4 sm:grid-cols-2';
-    g.append(bkLabel('Employee code', ec), bkLabel('Base location', bkVal('base', bInput('e.g. Mumbai'))), bkLabel('Concur ID', bkVal('concur_tr', bInput('Travel request ID'))), bkLabel('WBS ID', bkVal('wbs', bInput('WBS / cost code')))); }
-  if (p.k === 'prefs') { const oc = bkVal('occupancy', bSelect([['Single', 'Single'], ['Double', 'Double · shares the room']]), 'change'); first = oc; g.className = 'grid gap-4 sm:grid-cols-[240px_minmax(0,1fr)]';
-    g.append(bkLabel('Occupancy', oc), bkLabel('Remarks', bkVal('note', bInput('e.g. late arrival, veg meals')))); }
+    const em = bkVal('email', bInput('name@company.com', 'email')); em.required = true;
+    g.append(bkLabel('Title', tc, true), bkLabel('Full name', nmw, true), row2(bkLabel('Gender', gc, true), gw), bkLabel('Email', em, true), bkLabel('Mobile', bkPhone(), true)); setTimeout(paintElig); }
+  if (p.k === 'work') { const ec = bkVal('emp_code', bInput('e.g. 104523')); first = ec;
+    g.append(row2(bkLabel('Employee code', ec), bkLabel('Base location', bkVal('base', bInput('e.g. Mumbai')))), bkLabel('Concur ID', bkVal('concur_tr', bInput('Travel request ID'))), bkLabel('WBS ID', bkVal('wbs', bInput('WBS / cost code')))); }
+  if (p.k === 'prefs') { const oc = bkVal('occupancy', bSelect(['Single', 'Double']), 'change'); const rm = bkVal('note', bInput('e.g. late arrival, veg meals')); first = rm;
+    g.append(bkLabel('Occupancy', chips(oc, [['Single', 'Single'], ['Double', 'Double · shares the room']], 'Occupancy')), bkLabel('Remarks', rm)); }
   sl.appendChild(g); pane.appendChild(sl);
   // fill it in and the next part slides in by itself: once the part is complete and the cursor leaves a field (or the mobile number is complete)
   const full = () => p.k === 'guest' ? !BK_GPARTS[0].check() : p.k === 'work' ? ['emp_code', 'base', 'concur_tr', 'wbs'].every((k) => String(v[k] || '').trim()) : false;

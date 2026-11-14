@@ -919,6 +919,13 @@ async function bookApi(req, env, user, path) {
     let skip = null; if (b.exclude_id) { const tr = await tripFor(env, user, cid, b.exclude_id); if (tr) skip = guestKey({guest: guestOf(tr), check_in: tr.check_in}); }
     const av = await roomAvailability(env, client, clean(b.property, 120), b.check_in, b.check_out, skip); if (av.error) return json({error: av.error}, 400);
     return json({rooms: av.rooms, nights: av.nights, unassigned: av.unassigned}); }
+  if (path === "/api/book/quote") {   // charges for a stay, shown while booking: fare (or Nil), tax, the client's service charge and GST
+    const client = await bookClient(env, cid); if (!client) return json({error: "No such client."}, 404);
+    if (!isoD.test(b.check_in || "") || !isoD.test(b.check_out || "") || b.check_out <= b.check_in) return json({error: "Check-out must be after check-in."}, 400);
+    const gh = (await clientGuestHouses(env, client, true)).find((g) => g.property === clean(b.property, 120)); if (!gh) return json({error: "Pick one of " + client.name + "'s guest houses."}, 400);
+    const rt = b.room ? ((gh.room_types || []).find((t) => expandRooms(t.room_nos).includes(String(b.room))) || {}).id || 0 : 0;
+    const fee = await env.DB.prepare("SELECT svc_fee FROM clients WHERE id = ?").bind(client.id).first();
+    return json({cost: await ghCost(env, gh.id, rt, b.check_in, b.check_out, fee ? fee.svc_fee : 0)}); }
   if (path === "/api/book") return placeTrip(env, user, cid, b, null);
   if (path === "/api/book/update") { const tr = await tripFor(env, user, cid, b.id); if (!tr) return json({error: "Booking not found."}, 404);
     if (tr.status === "Cancelled") return json({error: "A cancelled booking can't be changed. Make a new booking instead."}, 409);

@@ -46,6 +46,8 @@ check('login ok (case-insensitive email)', r.status === 200 && cookie.startsWith
 check('cookie is HttpOnly + Secure + SameSite', /HttpOnly/.test(r.headers.get('set-cookie')) && /Secure/.test(r.headers.get('set-cookie')) && /SameSite=Lax/.test(r.headers.get('set-cookie')));
 r = await call('/', {cookie});
 const dash = await r.text();
+{ const bad = []; for (const m of dash.matchAll(/<script>([\s\S]*?)<\/script>/g)) { try { new Function(m[1]); } catch (e) { bad.push(e.message); } }
+  check('dashboard scripts compile', !bad.length, bad.join('; ')); }
 check('dashboard served with data', r.status === 200 && dash.includes('Arjun Mehta') && !dash.includes('__DATA__'));
 
 r = await call('/api/forgot', {method: 'POST', body: {email: 'smoke@example.com'}});
@@ -359,6 +361,8 @@ check('old host redirects to PRIMARY_HOST', r.status === 301 && r.headers.get('l
       await A('rate', {gh_id: g0.id, from: D(320), to: D(325), nil: true});
       q = (await A('quote', {gh_id: g0.id, room_type_id: deluxe, check_in: D(321), check_out: D(323)})).j.cost;
       check('Nil fare: only the service charge and its GST', q.fare === 0 && q.fare_tax === 0 && q.svc === 200 && q.svc_gst === 36 && q.total === 236);
+      x = await B(asha, 'book/quote', {property: 'Acme House', room: 'A1', check_in: D(321), check_out: D(323)});
+      check('booker sees the charges while booking', x.status === 200 && x.j.cost.fare === 0 && x.j.cost.svc === 200 && x.j.cost.total === 236);
       q = (await A('quote', {gh_id: g0.id, room_type_id: deluxe, check_in: D(329), check_out: D(333)})).j.cost;
       check('nights without a rate are counted as missing', q.nights === 4 && q.missing === 2);
       await A('block', {gh_id: g0.id, rooms: ['A1'], from: D(340), to: D(342), reason: 'Painting'});

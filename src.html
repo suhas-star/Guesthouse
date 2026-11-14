@@ -1246,6 +1246,21 @@ const bkStepper = () => { const ol = h('ol', 'grid grid-cols-4 gap-2 mb-6');
 const bkHead = (pane, title, sub) => { pane.appendChild(h('h3', 'text-lg font-bold', title)); pane.appendChild(h('p', 'text-sm text-zuna-500 mt-0.5 mb-4', sub)); };
 
 // step 1 · where and when
+// charges for the stay: basic fare (or Nil), tax, the client's service charge and GST
+const inr2 = (v) => '₹' + Number(v || 0).toLocaleString('en-IN', {maximumFractionDigits: 2});
+BK.qc = {};
+const bkCharges = (box, room) => { box.replaceChildren(); if (!(BK.co > BK.ci) || !BK.prop) return;
+  const c = h('div', 'rounded-2xl bg-white ring-1 ring-zuna-100 overflow-hidden'); const hd = h('div', 'flex items-center gap-2 px-4 py-2.5 border-b border-zuna-50'); hd.appendChild(icon('receipt', 'w-4 h-4 text-mint-600')); hd.appendChild(h('p', 'text-sm font-bold', 'Charges'));
+  const sub = h('span', 'ml-auto text-[11px] text-zuna-500'); hd.appendChild(sub); c.appendChild(hd); const bd = h('div', 'px-4 py-3'); bd.appendChild(h('div', 'chart-skel h-24 rounded-lg')); c.appendChild(bd); box.appendChild(c);
+  const paint = (q) => { bd.replaceChildren(); const n = q.nights; sub.textContent = n + (n === 1 ? ' night' : ' nights') + (room ? ' · room ' + room : '');
+    const dl = h('dl', 'text-sm divide-y divide-zuna-50'); const row = (k, v, cls) => { const d = h('div', 'flex justify-between gap-3 py-1.5 ' + (cls || '')); d.append(h('dt', cls ? '' : 'text-zuna-500', k), h('dd', 'font-semibold tabular-nums text-right', v)); dl.appendChild(d); };
+    const allSet = q.missing === 0;
+    if (q.fare === 0 && allSet) row('Basic fare', 'Nil'); else if (q.fare) { row('Basic fare', inr2(q.fare)); row('Tax on fare', inr2(q.fare_tax)); }
+    row('Service charge · per booking', inr2(q.svc)); row('GST on service charge (18%)', inr2(q.svc_gst));
+    row('Total', inr2(q.total), 'font-bold text-base text-zuna-900 pt-2'); bd.appendChild(dl);
+    if (q.missing) bd.appendChild(h('p', 'mt-2 rounded-lg bg-amber-50 ring-1 ring-amber-200 px-2.5 py-1.5 text-[11.5px] font-semibold text-amber-800', (q.missing === n ? 'The room rate for these dates is not set yet.' : q.missing + ' of ' + n + ' nights have no room rate yet.') + ' Zuna will confirm the final charges.')); };
+  const key = [BK.prop, room || '', BK.ci, BK.co].join('|'); if (BK.qc[key]) { paint(BK.qc[key]); return; }
+  bApi('book/quote', {property: BK.prop, room: room || '', check_in: BK.ci, check_out: BK.co}).then((j) => { BK.qc[key] = j.cost; if (box.isConnected) paint(j.cost); }).catch(() => { box.replaceChildren(); }); };
 // right of the Stay step: the chosen guest house with live availability for the chosen nights
 const bkPreview = (box) => { const p = bkHouse(); box.replaceChildren(); if (!p.property) return;
   const c = h('div', 'rounded-2xl overflow-hidden bg-white ring-1 ring-zuna-100 shadow-sm');
@@ -1256,7 +1271,7 @@ const bkPreview = (box) => { const p = bkHouse(); box.replaceChildren(); if (!p.
   const tags = [].concat(p.inclusions || [], p.amenities || []).filter(Boolean).slice(0, 4);
   if (tags.length) { const tg = h('div', 'flex flex-wrap gap-1.5'); tags.forEach((x) => tg.appendChild(h('span', 'rounded-md bg-white ring-1 ring-zuna-100 px-2 py-0.5 text-[11px] font-semibold text-zuna-600', x))); bd.appendChild(tg); }
   const hd = (p.contacts || []).filter((x) => x.phone)[0]; if (hd) { const r = h('p', 'flex items-center gap-2 text-xs text-zuna-500 truncate'); r.appendChild(icon('phone', 'w-3.5 h-3.5 text-mint-600 shrink-0')); r.appendChild(document.createTextNode('Helpdesk · ' + hd.name + ' · ')); r.appendChild(h('b', 'text-zuna-900 font-semibold', hd.phone)); bd.appendChild(r); }
-  c.appendChild(bd); box.appendChild(c);
+  c.appendChild(bd); box.appendChild(c); const chg = h('div', 'mt-3'); box.appendChild(chg); bkCharges(chg, '');
   const paintAv = () => { av.replaceChildren(); const rs = BK.rooms || [], tot = rs.length, free = rs.filter((r) => r.state === 'free').length, one = rs.filter((r) => r.state === 'shared').length;
     if (!(BK.co > BK.ci)) { av.appendChild(h('p', 'text-xs font-semibold text-rose-600', 'Pick a check-out after check-in.')); return; }
     const top = h('div', 'flex items-baseline justify-between gap-2'); top.appendChild(h('p', 'text-sm font-bold ' + (free || one ? '' : 'text-rose-600'), free || one ? free + ' of ' + tot + ' rooms free' + (one ? ' · ' + one + ' with a bed left' : '') : 'No rooms free for these nights'));
@@ -1382,7 +1397,7 @@ const bkRoom = (pane) => { const p = bkHouse(), v = BK.v;
 // step 4 · confirm, with the email as the guest will receive it
 const bkConfirm = (pane) => { const v = BK.v, p = bkHouse();
   bkHead(pane, 'Check and confirm', 'Check the details, then confirm. The booking is confirmed instantly.');
-  const wrap = h('div', 'max-w-3xl'); const left = h('div', 'space-y-4 min-w-0');
+  const wrap = h('div', 'grid gap-6 lg:grid-cols-[minmax(0,1fr)_340px] items-start'); const left = h('div', 'space-y-4 min-w-0'), rightC = h('div', 'min-w-0 lg:sticky lg:top-4');
   const dl = h('dl', 'rounded-xl ring-1 ring-zuna-100 divide-y divide-zuna-50 text-sm');
   const row = (k, val, step) => { const d = h('div', 'grid grid-cols-[72px_minmax(0,1fr)_auto] gap-3 px-4 py-2.5 items-start'); d.append(h('dt', 'text-zuna-500 text-xs pt-0.5', k), h('dd', 'font-semibold break-words', val));
     const ed = h('button', 'text-xs font-semibold text-mint-700 hover:underline', 'Edit'); ed.type = 'button'; ed.onclick = () => { BK.step = step; if (BK.from === 'timeline' && (step === 0 || step === 2)) BK.step = 0; bkDraw(); }; d.appendChild(ed); dl.appendChild(d); };
@@ -1394,7 +1409,7 @@ const bkConfirm = (pane) => { const v = BK.v, p = bkHouse();
   const g = h('div', 'grid gap-4 sm:grid-cols-2'); g.append(bkLabel('Guest email', bkVal('email', bInput('name@company.com', 'email'))), bkLabel('Mobile', bkPhone()));
   const nt = bkLabel('Remarks', bkVal('note', bInput('e.g. late arrival'))); nt.classList.add('sm:col-span-2'); g.appendChild(nt); left.appendChild(g);
   v.send = true;   // the guest is always emailed; copies are set by Zuna
-  wrap.appendChild(left); pane.appendChild(wrap); };
+  wrap.append(left, rightC); pane.appendChild(wrap); bkCharges(rightC, BK.room); };
 
 // booking voucher: shown after confirming, downloadable as PDF here and from Trips
 const dlVoucher = (t) => window.__ltm && window.__ltm.voucher ? window.__ltm.voucher(t, props.find((p) => p.property === t.property) || {}, DATA.client || {}) : toast('Voucher download is not ready yet. Reload the page.', true);

@@ -434,6 +434,24 @@ check('old host redirects to PRIMARY_HOST', r.status === 301 && r.headers.get('l
       const st2 = (await A('state', {})).j.clients.find((c) => c.id === acme);
       check('admin state lists rates and blocks', st2.rates.length === 7 && st2.blocks.length === 2);
       await A('block', {gh_id: g0.id, id: st2.blocks[0].id, delete: true}); check('a block can be removed', (await A('state', {})).j.clients.find((c) => c.id === acme).blocks.length === 1);
+      // bulk tools
+      const stB = (await A('state', {})).j.clients.find((c) => c.id === acme), gB = stB.guesthouses.find((g) => g.property === 'Acme House'), dlx = gB.room_types.find((t2) => t2.name === 'Deluxe');
+      check('client admin cannot use bulk update', (await call('/api/admin/bulk', {method: 'POST', body: {client_id: acme, kind: 'rate', items: [{gh_id: gB.id}], plans: ['CP'], from: D(400), to: D(410), fare: 1000}, cookie: meera})).status === 403);
+      let xb = await A('bulk', {client_id: acme, kind: 'rate', items: [{gh_id: gB.id}, {gh_id: gB.id, room_type_id: dlx.id}, {gh_id: 99999}], plans: ['CP', 'AP'], from: D(400), to: D(410), fare: 2000, fare_double: 2500});
+      let rB = (await A('state', {})).j.clients.find((c) => c.id === acme).rates.filter((r) => r.from === D(400));
+      check('bulk rate: one per guest house / room type and plan, other clients refused', xb.status === 200 && xb.j.done === 2 && xb.j.failed.length === 1 && rB.length === 4 && rB.every((r) => r.fare === 2000 && r.fare_double === 2500));
+      xb = await A('bulk', {client_id: acme, kind: 'rate', items: [{gh_id: gB.id}], plans: ['CP'], from: D(400), to: D(410)});
+      check('bulk rate keeps the single-rate checks', xb.status === 400 && /single occupancy price/.test(xb.j.failed[0].error));
+      xb = await A('bulk', {client_id: acme, kind: 'rate', op: 'extend', to: D(420), items: rB.map((r) => r.id)});
+      check('selected rates can be extended together', xb.j.done === 4 && (await A('state', {})).j.clients.find((c) => c.id === acme).rates.filter((r) => r.from === D(400)).every((r) => r.to === D(420)));
+      xb = await A('bulk', {client_id: acme, kind: 'block', items: [{gh_id: gB.id, room_type_id: dlx.id}], from: D(430), to: D(431), reason: 'Painting'});
+      const bB = (await A('state', {})).j.clients.find((c) => c.id === acme).blocks.find((b2) => b2.from === D(430));
+      check('bulk blackout for a room type blocks each of its rooms', xb.j.done === 1 && bB && bB.rooms.length > 0 && bB.rooms.every((r) => (gB.rooms_list || []).includes(r)) && bB.rooms.length < (gB.rooms_list || []).length);
+      xb = await A('bulk', {client_id: acme, kind: 'cancel', items: [{gh_id: gB.id, room_type_id: dlx.id}], free_hours: 12, charge_type: 'percent', charge_value: 50});
+      check('bulk cancellation policy saved', xb.j.done === 1 && (await A('state', {})).j.clients.find((c) => c.id === acme).cancels.some((r) => r.room_type_id === dlx.id && r.charge_type === 'percent' && r.charge_value === 50));
+      xb = await A('bulk', {client_id: acme, kind: 'rate', op: 'delete', items: rB.map((r) => r.id)});
+      check('selected rates can be deleted together', xb.j.done === 4 && !(await A('state', {})).j.clients.find((c) => c.id === acme).rates.some((r) => r.from === D(400)));
+      check('bulk updates are in the audit log', (await A('audit', {kind: 'changes'})).j.rows.some((r) => r.action === 'Bulk update' && r.detail.op === 'delete'));
     }
     { // audit log + backups (Zuna admin only)
       let x = await call('/api/login', {method: 'POST', body: {email: 'asha@acme.example', password: 'wrong-password-1'}});

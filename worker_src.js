@@ -848,7 +848,7 @@ const AUDIT_READS = new Set(["/api/admin/state", "/api/admin/quote", "/api/admin
   "/api/manage/state", "/api/book/avail", "/api/book/quote", "/api/book/cancel/preview", "/api/trips", "/api/bookings", "/api/guests", "/api/tx"]);
 const AUDIT_LABEL = {"/api/login": "Signed in", "/api/forgot": "Asked for a password reset code", "/api/reset": "Reset own password", "/api/vouchers": "Hotel Desk update",
   "/api/book": "Booked a stay", "/api/book/update": "Changed a booking", "/api/book/cancel": "Cancelled a booking", "/api/book/resend": "Sent the booking email",
-  "/api/admin/rate": "Saved a rate", "/api/admin/block": "Saved blackout dates", "/api/admin/svc": "Changed the service charge", "/api/admin/cancel": "Saved a cancellation policy",
+  "/api/admin/rate": "Saved a rate", "/api/admin/block": "Saved blackout dates", "/api/admin/svc": "Changed the service charge", "/api/admin/cancel": "Saved a cancellation policy", "/api/admin/bulk": "Bulk update",
   "/api/admin/gh": "Saved a guest house", "/api/admin/gh/delete": "Deleted a guest house", "/api/admin/client": "Saved client settings", "/api/admin/client/logo": "Changed the client logo",
   "/api/admin/doc": "Saved a document", "/api/admin/doc/delete": "Deleted a document", "/api/admin/photo": "Added a photo", "/api/admin/photo/delete": "Deleted a photo",
   "/api/admin/booking": "Saved a stay", "/api/admin/booking/delete": "Removed a stay", "/api/admin/booking/restore": "Restored a stay",
@@ -1322,6 +1322,27 @@ async function adminApi(req, env, user, path) {
       case "/api/admin/block":
       case "/api/admin/quote":
       case "/api/admin/cancel": return ratesApi(env, user, path, b);
+      case "/api/admin/bulk": {   // the same rule saved for several guest houses (or room types) at once, or several rates deleted / extended
+        const kind = {rate: "/api/admin/rate", block: "/api/admin/block", cancel: "/api/admin/cancel"}[b.kind]; if (!kind) return json({error: "Choose what to update."}, 400);
+        const cid = +b.client_id || 0, {results: owned} = await env.DB.prepare("SELECT id, name FROM guesthouses WHERE client_id = ?").bind(cid).all(), own = new Map(owned.map((g) => [g.id, g.name]));
+        let items = Array.isArray(b.items) ? b.items.slice(0, 500) : [];
+        if (b.op === "delete" || b.op === "extend") {
+          if (kind !== "/api/admin/rate" && b.op === "extend") return json({error: "Only rates can be extended."}, 400);
+          const tbl = kind === "/api/admin/rate" ? "gh_rates" : kind === "/api/admin/block" ? "gh_blocks" : "gh_cancel";
+          if (b.op === "extend" && !isoD.test(b.to || "")) return json({error: "Pick the new last night."}, 400);
+          let n = 0; for (const id of items.map((x) => +x).filter(Boolean)) { const r = await env.DB.prepare("SELECT id, gh_id, from_date FROM " + tbl + " WHERE id = ?").bind(id).first(); if (!r || !own.has(r.gh_id)) continue;
+            if (b.op === "delete") await env.DB.prepare("DELETE FROM " + tbl + " WHERE id = ?").bind(id).run();
+            else { if (b.to < r.from_date) continue; await env.DB.prepare("UPDATE gh_rates SET to_date = ?, by_email = ?, at = ? WHERE id = ?").bind(b.to, user.email, now, id).run(); }
+            n++; }
+          return json({ok: true, done: n, failed: []}); }
+        // items: [{gh_id, room_type_id}] — one save per guest house / room type, with the shared fields
+        const done = [], failed = [];
+        for (const it of items) { const gid = +it.gh_id || 0; if (!own.has(gid)) { failed.push({gh_id: gid, error: "Not this client's guest house."}); continue; }
+          const one = Object.assign({}, b, {gh_id: gid, room_type_id: +it.room_type_id || 0, id: undefined}); if (kind === "/api/admin/block") { one.rooms = Array.isArray(it.rooms) ? it.rooms : [];   // a room type: every room of that type
+            if (!one.rooms.length && one.room_type_id) { const t = await env.DB.prepare("SELECT room_nos FROM room_types WHERE id = ? AND gh_id = ?").bind(one.room_type_id, gid).first(); one.rooms = t ? expandRooms(t.room_nos) : []; if (!one.rooms.length) { failed.push({gh_id: gid, name: own.get(gid), room_type_id: one.room_type_id, error: "That room type has no rooms."}); continue; } } }
+          const r = await ratesApi(env, user, kind, one), j = await r.clone().json().catch(() => ({}));
+          (r.status < 400 ? done : failed).push({gh_id: gid, name: own.get(gid), room_type_id: +it.room_type_id || 0, error: j.error || ""}); }
+        return json({ok: true, done: done.length, failed}, done.length || !failed.length ? 200 : 400); }
       case "/api/admin/svc": {   // the client's service charge per booking (before 18% GST)
         const fee = Math.round((+b.svc_fee || 0) * 100) / 100; if (fee < 0 || fee > 1000000) return json({error: "Check the amount."}, 400);
         const r = await env.DB.prepare("UPDATE clients SET svc_fee = ? WHERE id = ?").bind(fee, +b.client_id || 0).run(); return json({ok: true, svc_fee: fee}); }

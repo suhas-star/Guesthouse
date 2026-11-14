@@ -332,7 +332,9 @@ const renderRates = (D, c) => {
     const go = async () => { s.disabled = true; try { await api('svc', {client_id: c.id, svc_fee: +i.value || 0}); toast('Service charge saved'); load(true); } catch (er) { toast(er.message, true); s.disabled = false; } };
     s.onclick = go; i.onkeydown = (ev) => { if (ev.key === 'Enter') go(); if (ev.key === 'Escape') svView(); }; sv.append(i, s, x); setTimeout(() => i.focus()); };
   svView(); tb.appendChild(sv);
-  tb.appendChild(ib('span', 'ml-auto text-xs font-semibold text-zuna-500', 'Zuna team only', 'lock')); shell.appendChild(tb);
+  tb.appendChild(ib('span', 'ml-auto text-xs font-semibold text-zuna-500', 'Zuna team only', 'lock'));
+  const bu = ib('button', 'btn !py-1.5', 'Bulk update', 'layers'); bu.title = 'Save one rate, blackout or cancellation policy for several guest houses or room types at once'; bu.onclick = () => bulkForm(c, RT.view === 'blocks' ? 'block' : RT.view === 'cancel' ? 'cancel' : 'rate'); tb.appendChild(bu);
+  shell.appendChild(tb);
 
   // sub-views + the action for the open one
   const sb = h('div', 'flex flex-wrap items-center gap-3 px-5 py-2.5 bg-zuna-50/50 border-b border-zuna-100');
@@ -355,9 +357,22 @@ const renderRates = (D, c) => {
       b.type = 'button'; b.title = k ? l : 'Every plan'; b.appendChild(document.createTextNode((k || 'All') + ' ')); b.appendChild(h('span', 'tabular-nums opacity-70', String(n))); b.onclick = () => { RT.plan = k; render(); }; fb.appendChild(b); });
     fb.appendChild(h('span', 'ml-auto text-[11px] text-zuna-500', 'EP room only · CP breakfast · MAP breakfast + one meal · AP all meals')); shell.appendChild(fb);
     if (!rates.length) return empty(pf0 ? 'No ' + pf0 + ' rates yet for ' + g.property + '.' : 'No rates yet for ' + g.property + '. Add one for the whole guest house or a room type.');
-    const sc = h('div', 'overflow-x-auto'); const t = h('table', 'w-full text-sm'); t.appendChild(th(['Plan', 'Applies to', 'Nights', 'Single / night', 'Double / night', 'Extra bed', 'Note', ''])); const bd = h('tbody', 'divide-y divide-zuna-50');
+    RT.sel = RT.sel || new Set(); [...RT.sel].forEach((id) => { if (!rates.some((r) => r.id === id)) RT.sel.delete(id); });
+    const selBar = h('div', 'hidden flex-wrap items-center gap-3 px-5 py-2.5 bg-mint-50 border-b border-mint-200 text-sm'); shell.appendChild(selBar);
+    const paintSel = () => { selBar.classList.toggle('hidden', !RT.sel.size); selBar.classList.toggle('flex', !!RT.sel.size); selBar.replaceChildren(); if (!RT.sel.size) return;
+      selBar.appendChild(h('b', '', RT.sel.size + (RT.sel.size === 1 ? ' rate selected' : ' rates selected')));
+      const nd = inp('', '', 'date'); nd.classList.add('!w-40'); nd.setAttribute('aria-label', 'New last night'); const ex = ib('button', 'btn !py-1.5 text-xs', 'Extend to this last night', 'calendar-range');
+      ex.onclick = async () => { if (!nd.value) { toast('Pick the new last night.', true); return; } try { const j = await api('bulk', {client_id: c.id, kind: 'rate', op: 'extend', to: nd.value, items: [...RT.sel]}); toast(j.done + (j.done === 1 ? ' rate' : ' rates') + ' extended'); RT.sel.clear(); load(true); } catch (er) { toast(er.message, true); } };
+      const dl = ib('button', 'btn !py-1.5 text-xs !text-rose-700', 'Delete', 'trash-2'); dl.onclick = async () => { if (!(await ZUI.confirm({title: 'Delete ' + RT.sel.size + (RT.sel.size === 1 ? ' rate?' : ' rates?'), message: 'Nights left without a rate show as "rate not set" to bookers.', ok: 'Delete', tone: 'danger'}))) return;
+        try { const j = await api('bulk', {client_id: c.id, kind: 'rate', op: 'delete', items: [...RT.sel]}); toast(j.done + (j.done === 1 ? ' rate' : ' rates') + ' deleted'); RT.sel.clear(); load(true); } catch (er) { toast(er.message, true); } };
+      const cl = h('button', 'ml-auto text-xs font-semibold text-zuna-500 hover:text-zuna-900', 'Clear selection'); cl.type = 'button'; cl.onclick = () => { RT.sel.clear(); render(); };
+      selBar.append(nd, ex, dl, cl); };
+    const sc = h('div', 'overflow-x-auto'); const t = h('table', 'w-full text-sm'); t.appendChild(th(['', 'Plan', 'Applies to', 'Nights', 'Single / night', 'Double / night', 'Extra bed', 'Note', ''])); const bd = h('tbody', 'divide-y divide-zuna-50');
+    const all = h('input'); all.type = 'checkbox'; all.className = 'w-4 h-4 accent-[#02C988]'; all.setAttribute('aria-label', 'Select all rates'); all.checked = rates.length > 0 && rates.every((r) => RT.sel.has(r.id));
+    all.onchange = () => { rates.forEach((r) => (all.checked ? RT.sel.add(r.id) : RT.sel.delete(r.id))); render(); }; t.querySelector('th').appendChild(all);
     const amt = (v) => { const x = h('td', 'px-5 py-3 whitespace-nowrap tabular-nums'); if (!v) { x.appendChild(h('span', 'text-zuna-300', '—')); return x; } x.appendChild(h('b', 'font-semibold', money(v))); x.appendChild(h('span', 'ml-1.5 text-xs text-zuna-500', '+ ' + Math.round(fareTax(v) * 100) + '%')); return x; };
     rates.forEach((r) => { const tr = h('tr', 'hover:bg-zuna-50/50'); const live = r.from <= today && r.to >= today, fare = r.nil ? 0 : r.fare;
+      const cb = h('td', 'pl-5 pr-1 py-3'); const ck = h('input'); ck.type = 'checkbox'; ck.className = 'w-4 h-4 accent-[#02C988]'; ck.checked = RT.sel.has(r.id); ck.setAttribute('aria-label', 'Select rate'); ck.onchange = () => { ck.checked ? RT.sel.add(r.id) : RT.sel.delete(r.id); all.checked = rates.every((x) => RT.sel.has(x.id)); paintSel(); }; cb.appendChild(ck);
       const c0 = h('td', 'px-5 py-3'); c0.appendChild(planChip(r.plan)); c0.title = (PLANS.find((p) => p[0] === r.plan) || [])[1] || '';
       const c1 = h('td', 'px-5 py-3 font-semibold whitespace-nowrap', tName(r.room_type_id));
       const c2 = h('td', 'px-5 py-3 whitespace-nowrap'); c2.appendChild(document.createTextNode(fD(r.from) + ' – ' + fD(r.to))); if (live) c2.appendChild(h('span', 'ml-2 rounded-full bg-mint-50 ring-1 ring-mint-200 px-2 py-0.5 text-[10.5px] font-bold text-mint-700', 'In use'));
@@ -366,8 +381,8 @@ const renderRates = (D, c) => {
       const c5 = h('td', 'px-5 py-3 text-xs text-zuna-500 max-w-[220px] truncate', r.note || ''); c5.title = r.note || '';
       const c6 = h('td', 'px-4 py-2 text-right whitespace-nowrap'); const e = iconBtn('pencil', 'Edit rate'); e.onclick = () => rateForm(c, g, r);
       const x = iconBtn('trash-2', 'Delete rate', 'text-rose-600'); x.onclick = async () => { if (!(await ZUI.confirm({title: 'Delete this rate?', message: r.plan + ' · ' + tName(r.room_type_id) + ' · ' + fD(r.from) + ' – ' + fD(r.to), ok: 'Delete rate', tone: 'danger'}))) return; try { await api('rate', {gh_id: g.id, id: r.id, delete: true}); toast('Rate deleted'); load(true); } catch (er) { toast(er.message, true); } };
-      const ac = h('div', 'inline-flex gap-1'); ac.append(e, x); c6.appendChild(ac); tr.append(...[c0, c1, c2, c3, c4, c4b, c5, c6].filter(Boolean)); bd.appendChild(tr); });
-    t.appendChild(bd); sc.appendChild(t); shell.appendChild(sc); return; }
+      const ac = h('div', 'inline-flex gap-1'); ac.append(e, x); c6.appendChild(ac); tr.append(...[cb, c0, c1, c2, c3, c4, c4b, c5, c6].filter(Boolean)); bd.appendChild(tr); });
+    t.appendChild(bd); sc.appendChild(t); shell.appendChild(sc); paintSel(); return; }
 
   if (view === 'blocks') {
     if (!blocks.length) return empty('Nothing blocked at ' + g.property + '.');
@@ -435,6 +450,53 @@ const rateForm = (c, g, r) => { const types = g.room_types || [], f = h('div', '
   const save = ib('button', 'btn-primary w-full justify-center', r ? 'Save rate' : 'Add rate', 'check'); f.appendChild(save);
   save.onclick = async () => { save.disabled = true; try { await api('rate', {gh_id: g.id, id: r ? r.id : undefined, room_type_id: +ap.value, plans: [...chosen], from: dp.from.value, to: dp.to.value, nil: nilSw.input.checked, fare: +fa.value || 0, fare_double: +fd.value || 0, extra_bed: +fx.value || 0, note: nt.value}); closeModal(); toast(r ? 'Rate saved' : chosen.size > 1 ? chosen.size + ' rates added (' + [...chosen].join(', ') + ')' : 'Rate added'); load(true); } catch (er) { toast(er.message, true); save.disabled = false; } };
   modal((r ? 'Edit rate · ' : 'Add rate · ') + g.property, f); };
+// bulk update: one rate / blackout / cancellation policy for several guest houses or room types at once
+const bulkForm = (c, kind0) => { let kind = kind0; const ghs = c.guesthouses, f = h('div', 'space-y-4');
+  const pick = {gh: new Set(ghs.map((g) => g.id)), scope: 'gh', rt: new Set()};
+  const seg = h('div', 'flex gap-1 rounded-xl bg-zuna-50 ring-1 ring-zuna-100 p-1'); f.appendChild(seg);
+  const who = h('div', 'space-y-2'); f.appendChild(who); const what = h('div', 'space-y-4'); f.appendChild(what); const sum = h('div', 'rounded-xl bg-zuna-50 ring-1 ring-zuna-100 px-4 py-3 text-sm'); f.appendChild(sum);
+  const save = ib('button', 'btn-primary w-full justify-center', 'Save for all selected', 'check'); f.appendChild(save); let fields = {};
+  const items = () => pick.scope === 'gh' ? ghs.filter((g) => pick.gh.has(g.id)).map((g) => ({gh_id: g.id, room_type_id: 0}))
+    : ghs.filter((g) => pick.gh.has(g.id)).flatMap((g) => (g.room_types || []).filter((t) => pick.rt.has(t.id)).map((t) => ({gh_id: g.id, room_type_id: t.id})));
+  const paintSum = () => { const n = items().length, k = kind === 'rate' ? (fields.plans ? fields.plans().size : 1) : 1; sum.replaceChildren();
+    sum.appendChild(h('p', 'font-semibold', n ? 'Saves ' + n * k + (kind === 'rate' ? (n * k === 1 ? ' rate' : ' rates') : kind === 'block' ? (n === 1 ? ' blackout' : ' blackouts') : (n === 1 ? ' policy' : ' policies')) + ': ' + n + (pick.scope === 'gh' ? (n === 1 ? ' guest house' : ' guest houses') : (n === 1 ? ' room type' : ' room types')) + (kind === 'rate' && k > 1 ? ' × ' + k + ' plans' : '') : 'Pick at least one guest house' + (pick.scope === 'rt' ? ' and room type' : '') + '.'));
+    sum.appendChild(h('p', 'text-xs text-zuna-500 mt-0.5', kind === 'cancel' ? 'An existing policy for the same guest house or room type is replaced.' : 'Existing ' + (kind === 'rate' ? 'rates' : 'blackouts') + ' stay as they are; for overlapping nights the newest rate is used.')); save.disabled = !n; };
+  const paintWho = () => { who.replaceChildren(); const hd = h('div', 'flex flex-wrap items-center gap-2'); hd.appendChild(h('p', 'text-xs font-semibold text-zuna-600', 'Guest houses'));
+    const allB = h('button', 'text-xs font-semibold text-mint-700 hover:underline', pick.gh.size === ghs.length ? 'Clear all' : 'Select all'); allB.type = 'button'; allB.onclick = () => { if (pick.gh.size === ghs.length) pick.gh.clear(); else ghs.forEach((g) => pick.gh.add(g.id)); paintWho(); paintSum(); }; hd.appendChild(allB); who.appendChild(hd);
+    const gg = h('div', 'flex flex-wrap gap-2'); ghs.forEach((g) => { const on = pick.gh.has(g.id), b = h('button', 'rounded-full px-3 py-1.5 text-xs font-semibold ring-1 ' + (on ? 'bg-zuna-900 text-white ring-zuna-900' : 'ring-zuna-100 hover:ring-zuna-900'), (on ? '✓ ' : '') + g.property + (g.city ? ' · ' + g.city : ''));
+      b.type = 'button'; b.setAttribute('aria-pressed', on ? 'true' : 'false'); b.onclick = () => { on ? pick.gh.delete(g.id) : pick.gh.add(g.id); paintWho(); paintSum(); }; gg.appendChild(b); }); who.appendChild(gg);
+    const sc = h('div', 'flex flex-wrap items-center gap-2 pt-1'); sc.appendChild(h('p', 'text-xs font-semibold text-zuna-600 mr-1', 'Applies to'));
+    [['gh', 'Whole guest house'], ['rt', 'Chosen room types']].forEach(([k, l]) => { const b = h('button', 'rounded-lg px-3 py-1 text-xs font-semibold ring-1 ' + (pick.scope === k ? 'bg-mint-50 ring-2 ring-mint-500' : 'ring-zuna-100'), l); b.type = 'button'; b.onclick = () => { pick.scope = k; paintWho(); paintSum(); }; sc.appendChild(b); }); who.appendChild(sc);
+    if (pick.scope === 'rt') { const box = h('div', 'grid gap-2 sm:grid-cols-2 max-h-48 overflow-auto rounded-xl ring-1 ring-zuna-100 p-2.5');
+      ghs.filter((g) => pick.gh.has(g.id)).forEach((g) => (g.room_types || []).forEach((t) => { const l = h('label', 'flex items-center gap-2 text-xs cursor-pointer'); const cb = h('input'); cb.type = 'checkbox'; cb.checked = pick.rt.has(t.id); cb.onchange = () => { cb.checked ? pick.rt.add(t.id) : pick.rt.delete(t.id); paintSum(); };
+        l.append(cb, h('span', 'font-semibold', t.name || 'Rooms'), h('span', 'text-zuna-500 truncate', g.property + (t.room_nos ? ' · ' + t.room_nos : ''))); box.appendChild(l); }));
+      if (!box.children.length) box.appendChild(h('p', 'text-xs text-zuna-500', 'The chosen guest houses have no room types.')); who.appendChild(box); } };
+  const today = new Date();
+  const paintWhat = () => { what.replaceChildren(); fields = {};
+    const dp = datePair(isoDay(new Date(Date.UTC(today.getFullYear(), today.getMonth(), 1))), today.getFullYear() + '-12-31', 'First night', 'Last night');
+    if (kind === 'block') { const bd = datePair(isoDay(new Date(today.getTime() + 864e5)), isoDay(new Date(today.getTime() + 7 * 864e5)), 'First night', 'Last night'); what.appendChild(bd.el); const rs = inp('', 'e.g. Maintenance, owner use'); what.appendChild(field('Reason', rs));
+      fields.body = () => ({from: bd.from.value, to: bd.to.value, reason: rs.value}); }
+    if (kind === 'rate') { const chosen = new Set(['EP']); const pc = h('div', 'grid grid-cols-2 sm:grid-cols-4 gap-2');
+      const pcPaint = () => [...pc.children].forEach((b) => { const on = chosen.has(b.dataset.p); b.className = 'text-left rounded-xl px-3 py-2 ring-1 ' + (on ? 'ring-2 ring-mint-500 bg-mint-50' : 'ring-zuna-100 hover:ring-zuna-900'); });
+      PLANS.forEach(([k, l]) => { const b = h('button'); b.type = 'button'; b.dataset.p = k; b.append(h('span', 'block text-sm font-bold', k), h('span', 'block text-[11px] text-zuna-500 leading-tight', l)); b.onclick = () => { if (chosen.has(k)) { if (chosen.size > 1) chosen.delete(k); } else chosen.add(k); pcPaint(); paintSum(); }; pc.appendChild(b); });
+      pcPaint(); what.appendChild(field('Rate plans', pc)); what.appendChild(dp.el);
+      const nil = switchEl('Nil fare (only the client\'s service charge applies)', false); what.appendChild(nil);
+      const fa = inp('', 'e.g. 3500', 'number'), fd = inp('', 'Same as single', 'number'), fx = inp('', 'Optional', 'number'); const fw = h('div', 'grid gap-3 sm:grid-cols-3'); fw.append(field('Single / night (₹)', fa), field('Double / night (₹)', fd), field('Extra bed / night (₹)', fx)); what.appendChild(fw);
+      nil.input.addEventListener('change', () => fw.classList.toggle('hidden', nil.input.checked)); const nt = inp('', 'Optional, e.g. 2027 contract rate'); what.appendChild(field('Note', nt));
+      fields.plans = () => chosen; fields.body = () => ({plans: [...chosen], from: dp.from.value, to: dp.to.value, nil: nil.input.checked, fare: +fa.value || 0, fare_double: +fd.value || 0, extra_bed: +fx.value || 0, note: nt.value}); }
+    if (kind === 'cancel') { const hrs = inp(24, '24', 'number'); hrs.min = '0'; const qk = h('div', 'flex flex-wrap gap-1.5 mt-2'); [[0, 'None'], [12, '12 hours'], [24, '24 hours'], [48, '48 hours'], [72, '72 hours']].forEach(([v, l]) => { const b = h('button', 'rounded-lg px-2.5 py-1 text-xs font-semibold ring-1 ring-zuna-100 hover:ring-zuna-900', l); b.type = 'button'; b.onclick = () => { hrs.value = v; }; qk.appendChild(b); });
+      const hw = field('Free cancellation until this many hours before check-in', hrs); hw.appendChild(qk); what.appendChild(hw);
+      const ct = sel('nights', [['nights', 'Nights charged'], ['percent', 'Percentage of the stay'], ['full', 'Full stay'], ['fixed', 'Fixed amount (₹)']]), cv = inp(1, '1', 'number'); const cvw = field('How many / how much', cv); ct.addEventListener('change', () => cvw.classList.toggle('hidden', ct.value === 'full'));
+      const row = h('div', 'grid gap-3 sm:grid-cols-2'); row.append(field('After that', ct), cvw); what.appendChild(row); const nt = inp('', 'Optional'); what.appendChild(field('Note', nt));
+      fields.body = () => ({free_hours: +hrs.value, charge_type: ct.value, charge_value: +cv.value || 0, note: nt.value}); }
+    paintSum(); };
+  [['rate', 'Rates', 'indian-rupee'], ['block', 'Blackout dates', 'ban'], ['cancel', 'Cancellation policy', 'calendar-x']].forEach(([k, l, ic]) => { const b = ib('button', 'flex-1 justify-center rounded-lg px-3 py-1.5 text-xs font-semibold ' + (kind === k ? 'bg-zuna-900 text-white' : 'text-zuna-600 hover:text-zuna-900'), l, ic); b.type = 'button';
+    b.onclick = () => { kind = k; [...seg.children].forEach((x) => { x.classList.toggle('bg-zuna-900', x === b); x.classList.toggle('text-white', x === b); x.classList.toggle('text-zuna-600', x !== b); }); paintWhat(); }; seg.appendChild(b); });
+  save.onclick = async () => { const it = items(); if (!it.length) return; save.disabled = true;
+    try { const j = await api('bulk', Object.assign({client_id: c.id, kind, items: it}, fields.body()));
+      if (j.failed && j.failed.length) toast('Saved for ' + j.done + ' · not saved for ' + j.failed.map((x) => x.name + (x.error ? ' (' + x.error + ')' : '')).join(', '), true); else toast('Saved for ' + j.done + (pick.scope === 'gh' ? (j.done === 1 ? ' guest house' : ' guest houses') : (j.done === 1 ? ' room type' : ' room types')));
+      closeModal(); load(true); } catch (er) { toast(er.message, true); save.disabled = false; } };
+  paintWho(); paintWhat(); modal('Bulk update · ' + c.name, f); };
 // cancellation policy helpers + form
 const ciTxt = (g) => { const [H, M] = String(g.checkin_time || '12:00').split(':').map(Number); return ((H % 12) || 12) + ':' + String(M || 0).padStart(2, '0') + (H < 12 ? ' AM' : ' PM'); };
 const cxlH = (hrs) => hrs % 24 === 0 && hrs >= 48 ? hrs / 24 + ' days' : hrs + (hrs === 1 ? ' hour' : ' hours');

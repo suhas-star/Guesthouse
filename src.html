@@ -1375,17 +1375,14 @@ const bkContactErr = () => { const v = BK.v, e = (v.email || '').trim(), n = spl
   return !e ? "Enter the guest's email address." : !/^[^@\s]+@[^@\s]+\.[^@\s]+$/.test(e) ? "The guest's email address doesn't look right." : !n ? "Enter the guest's mobile number." : !phoneOk(v.phone) ? (splitPhone(v.phone)[0] === '+91' ? 'Enter a 10-digit Indian mobile number, e.g. 98450 12345.' : 'The mobile number looks too short or too long.') : ''; };
 const bkGuestStep = (pane) => { const v = BK.v; bkQuotes();   // charges are ready by the Room step
   if (BK.gopen == null || BK.gopen < 0) BK.gopen = 0; const i = BK.gopen, p = BK_GPARTS[i];
-  // progress: four parts
-  const pr = h('div', 'mb-5'); const top = h('div', 'flex items-baseline justify-between gap-3 mb-2'); top.appendChild(h('p', 'text-xs font-bold uppercase tracking-wider text-zuna-500', 'Guest details · ' + (i + 1) + ' of ' + BK_GPARTS.length));
-  top.appendChild(h('p', 'text-xs text-zuna-400', 'Pick a saved guest to fill everything in')); pr.appendChild(top);
-  const bars = h('div', 'grid gap-1.5 ' + (BK_GPARTS.length === 3 ? 'grid-cols-3' : 'grid-cols-4')); BK_GPARTS.forEach((q, j) => { const b = h(j < i ? 'button' : 'div', 'text-left group'); if (j < i) { b.type = 'button'; b.onclick = () => { BK.gdir = -1; BK.gopen = j; bkDraw(); }; b.setAttribute('aria-label', 'Back to ' + q.title); }
-    const t = h('div', 'h-1.5 rounded-full overflow-hidden bg-zuna-100'); t.appendChild(h('div', 'h-full rounded-full transition-all duration-500 ' + (j < i ? 'w-full bg-mint-500' : j === i ? 'w-1/2 bg-mint-500' : 'w-0')));
-    b.appendChild(t); b.appendChild(h('p', 'text-[11px] font-semibold mt-1.5 truncate ' + (j === i ? 'text-zuna-900' : j < i ? 'text-mint-700 group-hover:underline' : 'text-zuna-400'), q.title)); bars.appendChild(b); });
-  pr.appendChild(bars); pane.appendChild(pr);
+  // progress: a dark band with a pill per part (current = glowing green pill, done = green dot), then the part's title
+  const bd = h('div', 'gs-band'); const row = h('div', 'flex items-center gap-4 flex-wrap'); const pills = h('div', 'flex items-center gap-2');
+  BK_GPARTS.forEach((q, j) => { const d = h(j < i ? 'button' : 'span', 'gs-pill' + (j < i ? ' done' : j === i ? ' on' : '')); if (j < i) { d.type = 'button'; d.title = 'Back to ' + q.title; d.setAttribute('aria-label', 'Back to ' + q.title); d.onclick = () => { BK.gdir = -1; BK.gopen = j; bkDraw(); }; } pills.appendChild(d); });
+  row.append(pills, h('span', 'gs-band-lbl', 'Guest details · ' + (i + 1) + ' of ' + BK_GPARTS.length), h('span', 'gs-band-hint ml-auto', i === 0 ? 'Type 3 letters of a name to pick a saved guest' : 'Moves on by itself once filled · or press Next'));
+  const tl = h('h3', 'gs-band-ttl'); tl.appendChild(document.createTextNode(p.title)); tl.appendChild(h('span', 'gs-band-tag' + (p.req ? ' req' : ''), p.req ? 'Required' : 'Optional'));
+  bd.append(row, tl, h('p', 'gs-band-sub', p.sub)); pane.appendChild(bd);
   // the slide
   const sl = h('section', 'gs-slide ' + (BK.gdir === -1 ? 'gs-from-left' : 'gs-from-right')); BK.gdir = 1;
-  const hd = h('div', 'flex items-center gap-3 mb-4'); const dot = h('span', 'grid place-items-center w-10 h-10 rounded-xl bg-zuna-900 text-white shrink-0'); dot.appendChild(icon(p.ic, 'w-5 h-5')); hd.appendChild(dot);
-  const tt = h('div'); const tl = h('h3', 'text-lg font-bold flex items-center gap-2'); tl.appendChild(document.createTextNode(p.title)); tl.appendChild(h('span', 'text-[10px] font-bold uppercase tracking-wider ' + (p.req ? 'text-rose-500' : 'text-zuna-400'), p.req ? 'Required' : 'Optional')); tt.append(tl, h('p', 'text-sm text-zuna-500', p.sub)); hd.appendChild(tt); sl.appendChild(hd);
   const g = h('div'); let first = null;
   if (p.k === 'guest') {
     const ttl = bkVal('title', bSelect(['Mr.', 'Ms.', 'Mrs.', 'Dr.']), 'change'), gen = bkVal('gender', bSelect(['Male', 'Female']), 'change');
@@ -1401,6 +1398,16 @@ const bkGuestStep = (pane) => { const v = BK.v; bkQuotes();   // charges are rea
   if (p.k === 'prefs') { const oc = bkVal('occupancy', bSelect([['Single', 'Single'], ['Double', 'Double · shares the room']]), 'change'); first = oc; g.className = 'grid gap-4 sm:grid-cols-[240px_minmax(0,1fr)]';
     g.append(bkLabel('Occupancy', oc), bkLabel('Remarks', bkVal('note', bInput('e.g. late arrival, veg meals')))); }
   sl.appendChild(g); pane.appendChild(sl);
+  // fill it in and the next part slides in by itself: once the part is complete and the cursor leaves a field (or the mobile number is complete)
+  const full = () => p.k === 'guest' ? !BK_GPARTS[0].check() : p.k === 'work' ? ['emp_code', 'base', 'concur_tr', 'wbs'].every((k) => String(v[k] || '').trim()) : false;
+  if (i < BK_GPARTS.length - 1 && !full()) { let tm = null;
+    const go = () => { clearTimeout(tm); tm = setTimeout(() => { if (!sl.isConnected || BK.step !== 1 || BK.gopen !== i || !full()) return; const a = document.activeElement;
+      if (a && sl.contains(a) && a.tagName === 'INPUT' && !a.value.trim()) return;   // still filling another field here
+      if (document.querySelector('#gSug:not(.hidden)')) return;                        // saved-guest list is open
+      BK.gdir = 1; BK.gopen = i + 1; bkDraw(); }, 650); };
+    sl.addEventListener('change', go); sl.addEventListener('focusout', go);
+    sl.addEventListener('input', (e) => { if (e.target.type === 'tel' && phoneOk(v.phone) && splitPhone(v.phone)[1].replace(/\D/g, '').length >= 10) go(); });
+    sl.addEventListener('focusin', () => clearTimeout(tm)); }
   setTimeout(() => { if (first && document.activeElement === document.body) (first._zd || first).focus({preventScroll: true}); }, 80); };
 
 // step 3 · room (only rooms this guest can have)

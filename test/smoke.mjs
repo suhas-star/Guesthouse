@@ -344,6 +344,17 @@ check('old host redirects to PRIMARY_HOST', r.status === 301 && r.headers.get('l
     check('admin saves eligibility by gender', (await A('state', {})).j.clients.find((c) => c.id === acme).elig_male === 'M6–M8, E1–E8');
     check('a male M5 guest is not eligible', (await B(asha, 'book', {property: 'Acme House', check_in: D(230), check_out: D(231), title: 'Mr.', name: 'Ajay Low', grade: 'M5'})).status === 400);
     check('a female M5 guest is eligible', (await B(asha, 'book', {property: 'Acme House', check_in: D(230), check_out: D(231), title: 'Ms.', name: 'Rina Low', grade: 'M5'})).status === 200);
+    { // guest house check-in/out times and team email; room type ids survive an edit
+      const st0 = (await A('state', {})).j.clients.find((c) => c.id === acme), g9 = st0.guesthouses.find((g) => g.property === 'Acme House'), ids0 = g9.room_types.map((t) => t.id).sort().join(',');
+      await A('gh', {id: g9.id, client_id: acme, name: g9.property, city: g9.city, status: 'Live', address: g9.address, checkin_time: '12:00', checkout_time: '11:00', team_emails: 'frontdesk@acmehouse.example, bad',
+        room_types: g9.room_types.map((t) => ({id: t.id, name: t.name, rooms: t.rooms, room_nos: t.room_nos, occupancy: t.occupancy, grades: t.grades})), contacts: g9.contacts, show: {}});
+      const g10 = (await A('state', {})).j.clients.find((c) => c.id === acme).guesthouses.find((g) => g.property === 'Acme House');
+      check('guest house keeps check-in/out times and the team email', g10.checkin_time === '12:00' && g10.checkout_time === '11:00' && g10.team_emails === 'frontdesk@acmehouse.example');
+      check('editing a guest house keeps its room type ids', g10.room_types.map((t) => t.id).sort().join(',') === ids0);
+      const m9 = mails.length; x = await B(asha, 'book', {property: 'Acme House', check_in: D(360), check_out: D(361), title: 'Mr.', name: 'Team Copy', grade: 'E1', email: 'team.copy@acme.example'});
+      check('booking email copies the guest house team and shows the times', x.status === 200 && mails.length === m9 + 1 && mails[m9].cc.includes('frontdesk@acmehouse.example') && /from 12:00 PM/.test(mails[m9].text) && /by 11:00 AM/.test(mails[m9].text));
+      const pg9 = await (await call('/', {cookie: asha})).text(); check('clients see the times but not the team email', pg9.includes('"checkin_time":"12:00"') && !pg9.includes('frontdesk@acmehouse.example'));
+    }
     { // rates and blackout dates (Zuna admin only)
       const st = (await A('state', {})).j.clients.find((c) => c.id === acme), g0 = st.guesthouses.find((g) => g.property === 'Acme House');
       const suite = g0.room_types.find((t) => t.name === 'Suite').id, deluxe = g0.room_types.find((t) => t.name === 'Deluxe').id;

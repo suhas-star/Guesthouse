@@ -397,7 +397,8 @@
     LBL(X, ty, 'Guest house stay'); ty -= 21; T(X, ty, t.property + (p.city ? ', ' + p.city : ''), 15, true);
     ty -= 14; fitLines(p.address || '', XR - X, 8.6, false).slice(0, 2).forEach((ln, i) => T(X, ty - i * 11, ln, 8.6, false, MUTED)); ty -= (Math.min(2, fitLines(p.address || '', XR - X, 8.6, false).length) - 1) * 11;
     ty -= 30; const a = dd(t.check_in), b = dd(t.check_out);
-    LBL(X, ty, 'Check-in'); LBLR(XR, ty, 'Check-out'); ty -= 22; T(X, ty, a.day, 17, true); TR(XR, ty, b.day, 17, true); ty -= 13; T(X, ty, a.wd, 8.6, false, MUTED); TR(XR, ty, b.wd, 8.6, false, MUTED);
+    const t12 = (x) => { const m = String(x || '').match(/^(\d{1,2}):(\d{2})/); if (!m) return ''; const H = +m[1]; return ((H % 12) || 12) + ':' + m[2] + (H < 12 ? ' AM' : ' PM'); };
+    LBL(X, ty, 'Check-in'); LBLR(XR, ty, 'Check-out'); ty -= 22; T(X, ty, a.day, 17, true); TR(XR, ty, b.day, 17, true); ty -= 13; T(X, ty, a.wd + (p.checkin_time ? ', from ' + t12(p.checkin_time) : ''), 8.6, false, MUTED); TR(XR, ty, b.wd + (p.checkout_time ? ', by ' + t12(p.checkout_time) : ''), 8.6, false, MUTED);
     const mx = (X + tw(a.day, 17, true) + XR - tw(b.day, 17, true)) / 2;
     TC(mx, ty + 22, nights + (nights === 1 ? ' night' : ' nights'), 8.6, true, MINT_D); Ln(mx - 34, ty + 15, mx + 34, ty + 15, RED, 1.1, '3 2.5'); TC(mx, ty + 3, 'Room ' + t.room, 8.6, true, MINT_D);
     ty -= 18; Ln(X, ty, XR, ty, LINE, 0.7); ty -= 17;

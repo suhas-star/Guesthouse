@@ -416,7 +416,7 @@ let schemaReady = false;
 async function ensureSchema(env) {
   if (schemaReady) return;
   for (const q of SCHEMA) await env.DB.prepare(q).run();
-  for (const c of ["users ADD COLUMN role TEXT", "users ADD COLUMN client_id INTEGER", "guesthouses ADD COLUMN state TEXT", "guesthouses ADD COLUMN country TEXT", "room_types ADD COLUMN bed_type TEXT", "clients ADD COLUMN legal_name TEXT", "users ADD COLUMN tx_access INTEGER", "tx_uploads ADD COLUMN hash TEXT", "tx_uploads ADD COLUMN file_id INTEGER", "transactions ADD COLUMN held INTEGER", "users ADD COLUMN book_access INTEGER", "clients ADD COLUMN mail_cc TEXT", "clients ADD COLUMN mail_bcc TEXT", "trips ADD COLUMN wbs TEXT", "clients ADD COLUMN elig TEXT", "clients ADD COLUMN svc_fee REAL"]) { try { await env.DB.prepare("ALTER TABLE " + c).run(); } catch (e) { /* exists */ } }
+  for (const c of ["users ADD COLUMN role TEXT", "users ADD COLUMN client_id INTEGER", "guesthouses ADD COLUMN state TEXT", "guesthouses ADD COLUMN country TEXT", "room_types ADD COLUMN bed_type TEXT", "clients ADD COLUMN legal_name TEXT", "users ADD COLUMN tx_access INTEGER", "tx_uploads ADD COLUMN hash TEXT", "tx_uploads ADD COLUMN file_id INTEGER", "transactions ADD COLUMN held INTEGER", "users ADD COLUMN book_access INTEGER", "clients ADD COLUMN mail_cc TEXT", "clients ADD COLUMN mail_bcc TEXT", "trips ADD COLUMN wbs TEXT", "clients ADD COLUMN elig TEXT", "clients ADD COLUMN svc_fee REAL", "guesthouses ADD COLUMN checkin_time TEXT", "guesthouses ADD COLUMN checkout_time TEXT", "guesthouses ADD COLUMN team_emails TEXT"]) { try { await env.DB.prepare("ALTER TABLE " + c).run(); } catch (e) { /* exists */ } }
   schemaReady = true;
 }
 const DEFAULT_GRADES = "M1,M2,M3,M4,M5,M6,M7,M8,P1,P2,P3,E1,E2,E3,E4,E5,E6,E7";
@@ -570,7 +570,7 @@ async function clientGuestHouses(env, client, forAdmin) {
     const types = rts.map((r) => ({id: r.id, name: r.name || "", rooms: r.rooms || 0, room_nos: r.room_nos || "", occupancy: r.occupancy || "Single", bed_type: r.bed_type || "", grades: list(r.grades), eligible: gradeText(list(r.grades), all)}));
     const contacts = cts.map((c) => ({id: c.id, name: c.name || "", designation: c.designation || "", email: c.email || "", phone: c.phone || ""}));
     const gh = {
-      id: g.id, property: g.name, city: g.city || "", state: g.state || "", country: g.country || "", address: g.address || "", map_url: g.map_url || "", operator: g.operator || "", status: g.status || "Coming soon",
+      id: g.id, property: g.name, city: g.city || "", state: g.state || "", country: g.country || "", address: g.address || "", map_url: g.map_url || "", operator: g.operator || "", status: g.status || "Coming soon", checkin_time: g.checkin_time || "", checkout_time: g.checkout_time || "",
       rooms: String(types.reduce((t, r) => t + (+r.rooms || 0), 0)),
       room_nos: types.map((r) => (multi && r.name ? r.name + " " : "") + r.room_nos).filter((x) => x.trim()).join(", "),
       rooms_list: types.flatMap((r) => expandRooms(r.room_nos)),
@@ -585,7 +585,7 @@ async function clientGuestHouses(env, client, forAdmin) {
     if (forAdmin || show.cancellation) gh.cancellation = g.cancellation || "";
     if (forAdmin || show.photos) gh.photos = phs.map((p) => ({id: p.id, url: "/files/" + p.file_id, caption: p.caption || ""}));
     gh.documents = dcs.map(docOut);
-    if (forAdmin) gh.show = show;
+    if (forAdmin) { gh.show = show; gh.team_emails = g.team_emails || ""; }
     out.push(gh);
   }
   return out;
@@ -753,6 +753,7 @@ async function ratesApi(env, user, path, b) {
 const emailList = (s) => [...new Set(String(s || "").split(/[,;\s]+/).map((e) => e.trim().toLowerCase()).filter((e) => /^[^@\s]+@[^@\s]+\.[^@\s]+$/.test(e)))].slice(0, 20);
 const dayAfter = (d) => new Date(Date.parse(d) + 864e5).toISOString().slice(0, 10);
 const genderRow = (x) => /^(m|male)$/i.test(x.gender || "") ? "Male" : /^(f|female)$/i.test(x.gender || "") ? "Female" : /^\s*mr\b/i.test(x.guest || "") ? "Male" : /^\s*(ms|mrs|miss)\b/i.test(x.guest || "") ? "Female" : "Not stated";
+const time12 = (t) => { const m = String(t || "").match(/^(\d{1,2}):(\d{2})/); if (!m) return ""; const H = +m[1]; return ((H % 12) || 12) + ":" + m[2] + (H < 12 ? " AM" : " PM"); };
 const fmtD = (d) => { const t = new Date(d + "T00:00:00Z"); return t.getUTCDate() + " " + ["Jan", "Feb", "Mar", "Apr", "May", "Jun", "Jul", "Aug", "Sep", "Oct", "Nov", "Dec"][t.getUTCMonth()] + " " + t.getUTCFullYear(); };
 const esc = (s) => String(s == null ? "" : s).replace(/[&<>"]/g, (c) => ({"&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;"})[c]);
 async function bookClient(env, cid) { return env.DB.prepare("SELECT id, name, grades, legal_name, mail_cc, mail_bcc, elig FROM clients WHERE id = ? AND active = 1").bind(+cid || 0).first(); }
@@ -856,13 +857,13 @@ async function cancelTrip(env, user, cid, b) {
 }
 // confirmation / change / cancellation e-mail to the guest, copies to the CC and BCC addresses
 async function tripMail(env, client, trip, gh, kind) {
-  const to = emailList(trip.email), cc = emailList(trip.cc).filter((e) => !to.includes(e)), bcc = emailList(trip.bcc).filter((e) => !to.includes(e) && !cc.includes(e));
+  const to = emailList(trip.email), cc = emailList(trip.cc).concat(emailList(gh.team_emails)).filter((e, i, a) => !to.includes(e) && a.indexOf(e) === i), bcc = emailList(trip.bcc).filter((e) => !to.includes(e) && !cc.includes(e));
   if (!to.length && !cc.length) return "no email address";
   if (!env.RESEND_API_KEY) return "not sent (email not set up)";
   const nights = Math.round((Date.parse(trip.check_out) - Date.parse(trip.check_in)) / 864e5), head = {confirmed: "Your stay is confirmed", changed: "Your booking has been changed", cancelled: "Your booking has been cancelled"}[kind];
   const subject = {confirmed: "Booking confirmed", changed: "Booking changed", cancelled: "Booking cancelled"}[kind] + " · " + trip.property + " · " + fmtD(trip.check_in) + " – " + fmtD(trip.check_out) + " · " + (trip.code || "");
   const rows = [["Booking code", trip.code], ["Guest", guestOf(trip)], ["Guest house", trip.property + (gh.city ? ", " + gh.city : "")], ["Address", gh.address || ""], ["Room", trip.room + (trip.occupancy === "Double" ? " · shared" : "")],
-    ["Check-in", fmtD(trip.check_in)], ["Check-out", fmtD(trip.check_out)], ["Nights", String(nights)], ["Remarks", trip.note || ""], kind === "cancelled" ? ["Reason", trip.cancel_reason || ""] : null].filter((r) => r && r[1]);
+    ["Check-in", fmtD(trip.check_in) + (gh.checkin_time ? ", from " + time12(gh.checkin_time) : "")], ["Check-out", fmtD(trip.check_out) + (gh.checkout_time ? ", by " + time12(gh.checkout_time) : "")], ["Nights", String(nights)], ["Remarks", trip.note || ""], kind === "cancelled" ? ["Reason", trip.cancel_reason || ""] : null].filter((r) => r && r[1]);
   const contacts = (gh.contacts || []).filter((c) => c.phone || c.email).slice(0, 2).map((c) => c.name + (c.designation ? " (" + c.designation + ")" : "") + (c.phone ? " · " + c.phone : "") + (c.email ? " · " + c.email : ""));
   const html = '<!doctype html><html><body style="margin:0;background:#f4f2fb;font-family:Segoe UI,Arial,sans-serif;color:#12005A"><table role="presentation" width="100%" cellpadding="0" cellspacing="0"><tr><td align="center" style="padding:28px 12px">'
     + '<table role="presentation" width="560" cellpadding="0" cellspacing="0" style="max-width:560px;background:#fff;border-radius:16px;overflow:hidden;border:1px solid #e6e2f6">'
@@ -1156,10 +1157,15 @@ async function adminApi(req, env, user, path) {
         if (id) { const ex = await env.DB.prepare("SELECT id FROM guesthouses WHERE id = ? AND client_id = ?").bind(id, c.id).first(); if (!ex) return json({error: "No such guest house."}, 404);
           await env.DB.prepare("UPDATE guesthouses SET name = ?, city = ?, state = ?, country = ?, address = ?, map_url = ?, operator = ?, status = ?, cancellation = ?, inclusions = ?, amenities = ?, show_json = ?, updated = ? WHERE id = ?").bind(...vals, id).run(); }
         else { const r = await env.DB.prepare("INSERT INTO guesthouses (name, city, state, country, address, map_url, operator, status, cancellation, inclusions, amenities, show_json, updated, client_id) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)").bind(...vals, c.id).run(); id = r.meta ? r.meta.last_row_id : r.lastInsertRowid; }
-        const stmts = [env.DB.prepare("DELETE FROM room_types WHERE gh_id = ?").bind(id), env.DB.prepare("DELETE FROM contacts WHERE gh_id = ?").bind(id)];
+        const hhmm = (t) => /^([01]\d|2[0-3]):[0-5]\d$/.test(String(t || "")) ? t : "";
+        const stmts = [env.DB.prepare("UPDATE guesthouses SET checkin_time = ?, checkout_time = ?, team_emails = ? WHERE id = ?").bind(hhmm(b.checkin_time), hhmm(b.checkout_time), emailList(b.team_emails).join(", "), id), env.DB.prepare("DELETE FROM contacts WHERE gh_id = ?").bind(id)];
+        const {results: oldRts} = await env.DB.prepare("SELECT id FROM room_types WHERE gh_id = ?").bind(id).all(), keepIds = new Set();
         const gradeList = (r) => [...new Set((Array.isArray(r.grades) ? r.grades : []).map((g) => clean(g, 20).replace(/,/g, " ")).filter(Boolean))];
-        (Array.isArray(b.room_types) ? b.room_types : []).slice(0, 20).forEach((r, i) => stmts.push(env.DB.prepare("INSERT INTO room_types (gh_id, name, rooms, room_nos, occupancy, bed_type, grades, sort) VALUES (?, ?, ?, ?, ?, ?, ?, ?)")
-          .bind(id, clean(r.name, 60), Math.max(0, Math.min(500, parseInt(r.rooms, 10) || 0)), clean(r.room_nos, 200), ["Single", "Double", "Single / Double"].includes(r.occupancy) ? r.occupancy : "Single", ["King", "Queen", "Twin", "Double"].includes(r.bed_type) ? r.bed_type : "", JSON.stringify(gradeList(r)), i)));
+        (Array.isArray(b.room_types) ? b.room_types : []).slice(0, 20).forEach((r, i) => {
+          const v = [clean(r.name, 60), Math.max(0, Math.min(500, parseInt(r.rooms, 10) || 0)), clean(r.room_nos, 200), ["Single", "Double", "Single / Double"].includes(r.occupancy) ? r.occupancy : "Single", ["King", "Queen", "Twin", "Double"].includes(r.bed_type) ? r.bed_type : "", JSON.stringify(gradeList(r)), i];
+          if (r.id && oldRts.some((o) => o.id === +r.id)) { keepIds.add(+r.id); stmts.push(env.DB.prepare("UPDATE room_types SET name = ?, rooms = ?, room_nos = ?, occupancy = ?, bed_type = ?, grades = ?, sort = ? WHERE id = ? AND gh_id = ?").bind(...v, +r.id, id)); }
+          else stmts.push(env.DB.prepare("INSERT INTO room_types (gh_id, name, rooms, room_nos, occupancy, bed_type, grades, sort) VALUES (?, ?, ?, ?, ?, ?, ?, ?)").bind(id, ...v)); });
+        oldRts.filter((o) => !keepIds.has(o.id)).forEach((o) => stmts.push(env.DB.prepare("DELETE FROM room_types WHERE id = ?").bind(o.id)));
         // grades typed in for a room type are added to the client's grade list
         const cg = await env.DB.prepare("SELECT grades FROM clients WHERE id = ?").bind(c.id).first();
         const before = (cg && cg.grades || DEFAULT_GRADES).split(",").filter(Boolean);

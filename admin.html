@@ -372,6 +372,8 @@ const editGH = (c, x) => {
       return r; }, 'Type to search',
     (o) => { if (o.st) state.set(o.st); if (o.co) country.set(o.co); });
   const map = inp(x.map_url, 'https://maps.app.goo.gl/…');
+  const cin = inp(x.checkin_time || '', '', 'time'), cout = inp(x.checkout_time || '', '', 'time');
+  const team = inp(x.team_emails || '', 'e.g. frontdesk@guesthouse.com, caretaker@guesthouse.com');
   const addrSrc = async (q) => (await photon(q + (city.get() && !q.toLowerCase().includes(city.get().toLowerCase()) ? ', ' + city.get() : ''))).map(({p, ll}) => {
       const line = [p.name !== p.street ? p.name : '', [p.housenumber, p.street].filter(Boolean).join(' '), p.locality || p.district].filter(Boolean);
       const full = [...new Set(line.concat([placeName(p) !== p.name ? placeName(p) : '', p.state, p.postcode, p.country]).filter(Boolean))].join(', ');
@@ -380,7 +382,7 @@ const editGH = (c, x) => {
   const addr = combo(x.address, addrSrc, 'Start typing the address',
     (o) => { const c = placeName(Object.assign({}, o.p, {name: ''})); if (c) city.set(c); if (o.p.state) state.set(o.p.state); if (o.p.country) country.set(o.p.country);
       if (!map.value.trim() && o.ll) map.value = 'https://www.google.com/maps/search/?api=1&query=' + o.ll[1].toFixed(6) + ',' + o.ll[0].toFixed(6); });
-  g1.append(field('Name', nm, 'sm:col-span-2'), field('Operator', op), field('Status', st), field('Address', addr, 'sm:col-span-2'), field('Country', country), field('State', state), field('City', city), field('Google Maps link', map));
+  g1.append(field('Name', nm, 'sm:col-span-2'), field('Operator', op), field('Status', st), field('Address', addr, 'sm:col-span-2'), field('Country', country), field('State', state), field('City', city), field('Google Maps link', map), field('Check-in time', cin), field('Check-out time', cout), field('Guest house team email · gets every booking voucher (comma separated)', team, 'sm:col-span-2'));
   g1.appendChild(h('p', 'sm:col-span-2 -mt-1 text-xs text-zuna-500', 'Pick an address from the list to fill city, state, country and the map link automatically.')); s1.appendChild(g1);
   // room types
   const s2 = sec('Room types', 'Each room type has its own rooms, occupancy and eligible grades.'); const rtBox = h('div', 'space-y-3'); s2.appendChild(rtBox);
@@ -392,7 +394,7 @@ const editGH = (c, x) => {
     gg.append(field('Room type', rn), field('No. of rooms', rc), field('Bed type', bd), field('Room numbers', rnos, 'col-span-2'), field('Occupancy', oc)); card.appendChild(gg);
     const gp = gradePicker(grades, r.grades || [], pickers); card.appendChild(field('Eligible grades', gp));
     const rm = ib('button', 'text-xs font-semibold text-rose-700 hover:underline', 'Remove room type', 'trash-2'); rm.type = 'button'; rm.onclick = () => { card.remove(); rts.splice(rts.indexOf(o), 1); pickers.splice(pickers.indexOf(gp), 1); }; card.appendChild(rm);
-    const o = {get: () => ({name: rn.get(), rooms: rc.value, room_nos: rnos.value, occupancy: oc.value, bed_type: bd.value, grades: gp.get()})}; rts.push(o); rtBox.appendChild(card); };
+    const o = {get: () => ({id: r.id, name: rn.get(), rooms: rc.value, room_nos: rnos.value, occupancy: oc.value, bed_type: bd.value, grades: gp.get()})}; rts.push(o); rtBox.appendChild(card); };
   (x.room_types || []).forEach(addRT);
   const arw = h('div', 'flex flex-wrap items-center gap-2'); arw.appendChild(h('span', 'text-xs font-semibold text-zuna-500 mr-1', 'Add room type'));
   [['Standard', 'Queen'], ['Deluxe', 'King'], ['Suite', 'King'], ['Other', '']].forEach(([n, bed]) => { const b = ib('button', 'btn !py-1.5 text-xs', n, 'plus'); b.type = 'button';
@@ -450,7 +452,7 @@ const editGH = (c, x) => {
   const save = h('button', 'ml-auto btn-primary', x.id ? 'Save changes' : 'Create guest house');
   save.onclick = async () => { save.disabled = true; try {
     const show = {}; Object.entries(shows).forEach(([k, v]) => show[k] = v.checked);
-    const r = await api('gh', {id: x.id, client_id: c.id, name: nm.value, city: city.get(), state: state.get(), country: country.get(), address: addr.get(), map_url: map.value, operator: op.value, status: st.value, cancellation: cpVal(), inclusions: inc.get(), amenities: am.get(), show, room_types: rts.map((o) => o.get()), client_grades: grades, contacts: cts.map((o) => o.get())});
+    const r = await api('gh', {id: x.id, client_id: c.id, name: nm.value, city: city.get(), state: state.get(), country: country.get(), address: addr.get(), map_url: map.value, checkin_time: cin.value, checkout_time: cout.value, team_emails: team.value, operator: op.value, status: st.value, cancellation: cpVal(), inclusions: inc.get(), amenities: am.get(), show, room_types: rts.map((o) => o.get()), client_grades: grades, contacts: cts.map((o) => o.get())});
     toast('Saved'); await load(true); const fresh = C().guesthouses.find((g) => g.id === r.id); if (!x.id) editGH(C(), fresh); else closeModal(); } catch (er) { toast(er.message, true); } finally { save.disabled = false; } };
   actions.appendChild(save); f.appendChild(actions);
   modal(x.id ? 'Edit ' + x.property : 'New guest house · ' + c.name, f);

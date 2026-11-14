@@ -293,7 +293,8 @@ check('old host redirects to PRIMARY_HOST', r.status === 301 && r.headers.get('l
   check('reminder not repeated the same day', mails.length === before + 2);
   { // Book a room + Trips
     const D = (n) => new Date(Date.now() + n * 864e5).toISOString().slice(0, 10);
-    const B = async (who, p, body) => { const y = await call('/api/' + p, {method: 'POST', body, cookie: who}); return {status: y.status, j: await y.json()}; };
+    const B = async (who, p, body, raw) => { if (!raw && body && body.name && /^book(\/update)?$/.test(p)) body = Object.assign({email: 'guest@acme.example', phone: '+91 98450 12345'}, body);
+      const y = await call('/api/' + p, {method: 'POST', body, cookie: who}); return {status: y.status, j: await y.json()}; };
     check('booking needs the Book rooms switch', (await B(asha, 'book/avail', {property: 'Acme House', check_in: D(200), check_out: D(203)})).status === 403);
     check('client admin switches Book rooms on', (await M('user/access', {email: 'asha@acme.example', book: true})).status === 200);
     await A('client', {id: acme, name: 'Acme', legal_name: 'Acme Industries Limited', grades: ['E1', 'E2'], mail_cc: 'desk@zuna.example, bad-address', mail_bcc: 'audit@zuna.example'});
@@ -301,6 +302,8 @@ check('old host redirects to PRIMARY_HOST', r.status === 301 && r.headers.get('l
       check('client dashboard does not carry the email copies', dd.client.mail_cc === undefined && dd.client.mail_bcc === undefined && pg.includes('"book":true')); }
     x = await B(asha, 'book/avail', {property: 'Acme House', check_in: D(200), check_out: D(203)});
     check('availability lists every room as free', x.status === 200 && x.j.rooms.length === 3 && x.j.rooms.every((r) => r.state === 'free') && x.j.nights === 3);
+    check('guest email is required', (await B(asha, 'book', {property: 'Acme House', check_in: D(240), check_out: D(241), title: 'Mr.', name: 'No Mail', grade: 'E1', phone: '+91 98450 12345'}, true)).status === 400);
+    check('guest mobile is required', (await B(asha, 'book', {property: 'Acme House', check_in: D(240), check_out: D(241), title: 'Mr.', name: 'No Phone', grade: 'E1', email: 'np@acme.example'}, true)).status === 400);
     check('past check-in refused', (await B(asha, 'book', {property: 'Acme House', check_in: D(-2), check_out: D(1), title: 'Mr.', name: 'Old Guest', grade: 'E1'})).status === 400);
     const m0 = mails.length;
     x = await B(asha, 'book', {property: 'Acme House', check_in: D(200), check_out: D(203), room: 'A1', title: 'Mr.', name: 'Karan Mehta', grade: 'E1', email: 'karan@acme.example', cc: 'someone@else.example', bcc: 'spy@else.example', note: 'Late arrival'});

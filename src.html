@@ -1217,13 +1217,13 @@ const bkNext = async (btn) => {
   if (BK.step === 0 && BK.ci < today && !BK.edit) return bkFail("Check-in can't be in the past.");
   if (BK.step === 1 && BK.gopen < BK_GPARTS.length - 1) { const m = BK_GPARTS[BK.gopen].check(); if (m) return bkFail(m); BK.gdir = 1; BK.gopen++; bkDraw(); return; }
   if (BK.step === 1) { if (!v.name.trim()) return bkFail("Enter the guest's name."); if (!v.grade) return bkFail("Choose the guest's grade.");
-    if (v.email.trim() && !/^[^@\s]+@[^@\s]+\.[^@\s]+$/.test(v.email.trim())) return bkFail("The guest's email address doesn't look right.");
     if (!bkGradeOk()) return bkFail('Grade ' + v.grade + ' is not eligible for a guest house stay. ' + bkGender() + ' guests: ' + gradeRanges(bkElig()) + '.');
-    if (!phoneOk(v.phone)) return bkFail(splitPhone(v.phone)[0] === '+91' ? 'Enter a 10-digit Indian mobile number, e.g. 98450 12345.' : 'The mobile number looks too short or too long.');
+    { const m = bkContactErr(); if (m) { BK.gopen = 0; BK.gdir = -1; bkDraw(); return bkFail(m); } }
     if (BK.from === 'timeline') { const r = (BK.tlRoom || {}); if (r.grades && r.grades.length && !r.grades.includes(v.grade)) return bkFail('Room ' + BK.room + ' is for grades ' + gradeSpan(r.grades) + ' only. Go back to the timeline and pick another room.'); BK.step = 3; bkDraw(); return; } }
   if (BK.step < 3) { BK.step++; bkDraw(); return; }
   // confirm
   if (!v.name.trim()) return bkFail("Enter the guest's name.");
+  { const m = bkContactErr(); if (m) { BK.step = 1; BK.gopen = 0; BK.gdir = -1; bkDraw(); return bkFail(m); } }
   const body = Object.assign({}, v, {property: BK.prop, check_in: BK.ci, check_out: BK.co, room: BK.room, send_mail: v.send, gender: bkGender()}); if (BK.edit) body.id = BK.edit.id;
   btn.disabled = true;
   try { const j = await bApi(BK.edit ? 'book/update' : 'book', body), t = j.trip;
@@ -1356,7 +1356,7 @@ const bkSuggest = (inp, wrap) => {
     try { const r = await fetch('/api/guests', {method: 'POST', headers: {'content-type': 'application/json'}, credentials: 'same-origin', body: JSON.stringify({client_id: DATA.client && DATA.client.id, q: q.length >= 3 ? q : ''})});
       const j = await r.json(); if (my !== seq || document.activeElement !== inp) return; items = j.guests || []; act = -1; head = q.length >= 3 ? 'Matching guests' : 'Recent guests'; paint(); } catch (e) { /* suggestions are optional */ } };
   const choose = (g) => { const v = BK.v; ['title', 'name', 'gender', 'email', 'phone', 'grade', 'emp_code', 'base'].forEach((k) => { if (g[k]) v[k] = g[k]; }); close();
-    BK.gdir = 1; BK.gopen = 2; bkDraw(); toast('Filled in ' + full(g) + "'s details"); };
+    BK.gdir = 1; BK.gopen = BK_GPARTS[0].check() ? 0 : 1; bkDraw(); toast('Filled in ' + full(g) + "'s details"); };
   inp.addEventListener('focus', () => { if (inp.value.trim().length < 3) load(); });
   inp.addEventListener('input', () => { clearTimeout(timer); const q = inp.value.trim(); if (q.length > 0 && q.length < 3) { close(); return; } timer = setTimeout(load, 160); });
   inp.addEventListener('keydown', (e) => { if (pan.classList.contains('hidden') || !items.length) return;
@@ -1367,18 +1367,18 @@ const bkSuggest = (inp, wrap) => {
 
 // step 2 · guest: one part per slide (Guest → Contact → Employee & billing → Stay preferences) with its own progress bar
 const BK_GPARTS = [
-  {k: 'guest', title: 'Guest', sub: "As on the guest's ID. Grade and gender decide which rooms are offered.", ic: 'user-round', req: true,
-    check: () => { const v = BK.v; return !v.name.trim() ? "Enter the guest's name." : !v.grade ? "Choose the guest's grade." : !bkGradeOk() ? 'Grade ' + v.grade + ' is not eligible for a guest house stay.' : ''; }},
-  {k: 'contact', title: 'Contact', sub: 'The booking confirmation is emailed to the guest.', ic: 'mail',
-    check: () => { const v = BK.v; return v.email.trim() && !/^[^@\s]+@[^@\s]+\.[^@\s]+$/.test(v.email.trim()) ? "The guest's email address doesn't look right." : !phoneOk(v.phone) ? 'Check the mobile number.' : ''; }},
+  {k: 'guest', title: 'Guest', sub: "As on the guest's ID. The confirmation goes to the guest's email.", ic: 'user-round', req: true,
+    check: () => { const v = BK.v; return !v.name.trim() ? "Enter the guest's name." : !v.grade ? "Choose the guest's grade." : !bkGradeOk() ? 'Grade ' + v.grade + ' is not eligible for a guest house stay.' : bkContactErr(); }},
   {k: 'work', title: 'Employee & billing', sub: 'Used in the reports and on the voucher.', ic: 'receipt', check: () => ''},
   {k: 'prefs', title: 'Stay preferences', sub: 'Anything the guest house should know.', ic: 'bed', check: () => ''}];
+const bkContactErr = () => { const v = BK.v, e = (v.email || '').trim(), n = splitPhone(v.phone || '')[1].replace(/\D/g, '');
+  return !e ? "Enter the guest's email address." : !/^[^@\s]+@[^@\s]+\.[^@\s]+$/.test(e) ? "The guest's email address doesn't look right." : !n ? "Enter the guest's mobile number." : !phoneOk(v.phone) ? (splitPhone(v.phone)[0] === '+91' ? 'Enter a 10-digit Indian mobile number, e.g. 98450 12345.' : 'The mobile number looks too short or too long.') : ''; };
 const bkGuestStep = (pane) => { const v = BK.v; bkQuotes();   // charges are ready by the Room step
   if (BK.gopen == null || BK.gopen < 0) BK.gopen = 0; const i = BK.gopen, p = BK_GPARTS[i];
   // progress: four parts
   const pr = h('div', 'mb-5'); const top = h('div', 'flex items-baseline justify-between gap-3 mb-2'); top.appendChild(h('p', 'text-xs font-bold uppercase tracking-wider text-zuna-500', 'Guest details · ' + (i + 1) + ' of ' + BK_GPARTS.length));
   top.appendChild(h('p', 'text-xs text-zuna-400', 'Pick a saved guest to fill everything in')); pr.appendChild(top);
-  const bars = h('div', 'grid grid-cols-4 gap-1.5'); BK_GPARTS.forEach((q, j) => { const b = h(j < i ? 'button' : 'div', 'text-left group'); if (j < i) { b.type = 'button'; b.onclick = () => { BK.gdir = -1; BK.gopen = j; bkDraw(); }; b.setAttribute('aria-label', 'Back to ' + q.title); }
+  const bars = h('div', 'grid gap-1.5 ' + (BK_GPARTS.length === 3 ? 'grid-cols-3' : 'grid-cols-4')); BK_GPARTS.forEach((q, j) => { const b = h(j < i ? 'button' : 'div', 'text-left group'); if (j < i) { b.type = 'button'; b.onclick = () => { BK.gdir = -1; BK.gopen = j; bkDraw(); }; b.setAttribute('aria-label', 'Back to ' + q.title); }
     const t = h('div', 'h-1.5 rounded-full overflow-hidden bg-zuna-100'); t.appendChild(h('div', 'h-full rounded-full transition-all duration-500 ' + (j < i ? 'w-full bg-mint-500' : j === i ? 'w-1/2 bg-mint-500' : 'w-0')));
     b.appendChild(t); b.appendChild(h('p', 'text-[11px] font-semibold mt-1.5 truncate ' + (j === i ? 'text-zuna-900' : j < i ? 'text-mint-700 group-hover:underline' : 'text-zuna-400'), q.title)); bars.appendChild(b); });
   pr.appendChild(bars); pane.appendChild(pr);
@@ -1391,11 +1391,11 @@ const bkGuestStep = (pane) => { const v = BK.v; bkQuotes();   // charges are rea
     const ttl = bkVal('title', bSelect(['Mr.', 'Ms.', 'Mrs.', 'Dr.']), 'change'), gen = bkVal('gender', bSelect(['Male', 'Female']), 'change');
     const nm = bkVal('name', bInput('Type 3 letters to find a saved guest')); nm.required = true; const nmw = h('div', 'relative'); nmw.appendChild(nm); bkSuggest(nm, nmw); first = nm;
     const gr = bkVal('grade', gradeSelect(), 'change'); const el = h('p', 'text-xs font-semibold mt-1.5 min-h-[1rem]');
-    const paintElig = () => { const ok = bkGradeOk(); el.textContent = !v.grade ? '' : ok ? '✓ ' + v.grade + ' can book a guest house' : '✕ ' + v.grade + ' ' + bkGender().toLowerCase() + ' guests can’t book a guest house'; el.className = 'text-xs font-semibold mt-1.5 min-h-[1rem] ' + (ok ? 'text-mint-700' : 'text-rose-600'); };
+    const paintElig = () => { const ok = bkGradeOk(); el.textContent = !v.grade ? '' : ok ? '✓ Eligible' : '✕ Not eligible for ' + bkGender().toLowerCase() + ' guests'; el.className = 'text-xs font-semibold mt-1.5 min-h-[1rem] ' + (ok ? 'text-mint-700' : 'text-rose-600'); };
     ttl.addEventListener('change', () => { if (v.title === 'Mr.') v.gender = 'Male'; else if (v.title === 'Ms.' || v.title === 'Mrs.') v.gender = 'Female'; gen.value = v.gender; paintElig(); });
     gr.addEventListener('change', paintElig); gen.addEventListener('change', paintElig); const gw = h('div'); gw.append(bkLabel('Grade', gr, true), el);
-    g.className = 'grid gap-4 grid-cols-[96px_minmax(0,1fr)] lg:grid-cols-[96px_minmax(0,1fr)_150px_170px] items-start'; g.append(bkLabel('Title', ttl, true), bkLabel('Full name', nmw, true), bkLabel('Gender', gen, true), gw); setTimeout(paintElig); }
-  if (p.k === 'contact') { const em = bkVal('email', bInput('name@company.com', 'email')); first = em; g.className = 'grid gap-4 sm:grid-cols-2'; g.append(bkLabel('Email', em), bkLabel('Mobile', bkPhone())); }
+    g.className = 'grid gap-4 grid-cols-[96px_minmax(0,1fr)] lg:grid-cols-[96px_minmax(0,1fr)_150px_170px] items-start'; g.append(bkLabel('Title', ttl, true), bkLabel('Full name', nmw, true), bkLabel('Gender', gen, true), gw);
+    const em = bkVal('email', bInput('name@company.com', 'email')); em.required = true; const cg = h('div', 'grid gap-4 sm:grid-cols-2 col-span-full'); cg.append(bkLabel('Email', em, true), bkLabel('Mobile', bkPhone(), true)); g.appendChild(cg); setTimeout(paintElig); }
   if (p.k === 'work') { const ec = bkVal('emp_code', bInput('e.g. 104523')); first = ec; g.className = 'grid gap-4 sm:grid-cols-2';
     g.append(bkLabel('Employee code', ec), bkLabel('Base location', bkVal('base', bInput('e.g. Mumbai'))), bkLabel('Concur ID', bkVal('concur_tr', bInput('Travel request ID'))), bkLabel('WBS ID', bkVal('wbs', bInput('WBS / cost code')))); }
   if (p.k === 'prefs') { const oc = bkVal('occupancy', bSelect([['Single', 'Single'], ['Double', 'Double · shares the room']]), 'change'); first = oc; g.className = 'grid gap-4 sm:grid-cols-[240px_minmax(0,1fr)]';

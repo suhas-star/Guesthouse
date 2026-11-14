@@ -790,7 +790,9 @@ function tripInput(b, client, isNew) {
   if (!t.name) return {err: "Enter the guest's name."};
   if (!t.gender) return {err: "Choose the guest's gender (it decides who can share a room)."};
   if (!t.grade) return {err: "Choose the guest's grade."};
-  if (b.email && !t.email) return {err: "The guest's email address doesn't look right."};
+  if (!String(b.email || "").trim()) return {err: "Enter the guest's email address."};
+  if (!t.email) return {err: "The guest's email address doesn't look right."};
+  if (t.phone.replace(/\D/g, "").length < 8) return {err: "Enter the guest's mobile number."};
   return {t};
 }
 const guestOf = (t) => (t.title ? t.title + " " : "") + t.name;

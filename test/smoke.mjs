@@ -342,6 +342,32 @@ check('old host redirects to PRIMARY_HOST', r.status === 301 && r.headers.get('l
     check('admin saves eligibility by gender', (await A('state', {})).j.clients.find((c) => c.id === acme).elig_male === 'M6–M8, E1–E8');
     check('a male M5 guest is not eligible', (await B(asha, 'book', {property: 'Acme House', check_in: D(230), check_out: D(231), title: 'Mr.', name: 'Ajay Low', grade: 'M5'})).status === 400);
     check('a female M5 guest is eligible', (await B(asha, 'book', {property: 'Acme House', check_in: D(230), check_out: D(231), title: 'Ms.', name: 'Rina Low', grade: 'M5'})).status === 200);
+    { // rates and blackout dates (Zuna admin only)
+      const st = (await A('state', {})).j.clients.find((c) => c.id === acme), g0 = st.guesthouses.find((g) => g.property === 'Acme House');
+      const suite = g0.room_types.find((t) => t.name === 'Suite').id, deluxe = g0.room_types.find((t) => t.name === 'Deluxe').id;
+      check('client admin cannot set rates', (await call('/api/admin/rate', {method: 'POST', body: {gh_id: g0.id, from: D(300), to: D(330), fare: 5000}, cookie: meera})).status === 403);
+      check('rate needs a fare or Nil', (await A('rate', {gh_id: g0.id, from: D(300), to: D(330)})).status === 400);
+      await A('rate', {gh_id: g0.id, from: D(300), to: D(330), fare: 6000, svc: 200, svc_unit: 'night'});
+      await A('rate', {gh_id: g0.id, room_type_id: suite, from: D(300), to: D(330), fare: 8000, svc: 300, svc_unit: 'booking'});
+      let q = (await A('quote', {gh_id: g0.id, room_type_id: deluxe, check_in: D(305), check_out: D(307)})).j.cost;
+      check('fare below 7,500 taxed at 5%, service charge per night with 18% GST', q.fare === 12000 && q.fare_tax === 600 && q.svc === 400 && q.svc_gst === 72 && q.total === 13072 && q.missing === 0);
+      q = (await A('quote', {gh_id: g0.id, room: 'S1', check_in: D(305), check_out: D(307)})).j.cost;
+      check('room type rate wins; 7,500 and above taxed at 18%; per-booking charge once', q.fare === 16000 && q.fare_tax === 2880 && q.svc === 300 && q.svc_gst === 54 && q.total === 19234);
+      await A('rate', {gh_id: g0.id, from: D(320), to: D(325), nil: true, svc: 150, svc_unit: 'night'});
+      q = (await A('quote', {gh_id: g0.id, room_type_id: deluxe, check_in: D(321), check_out: D(323)})).j.cost;
+      check('Nil fare: only the service charge and its GST', q.fare === 0 && q.fare_tax === 0 && q.svc === 300 && q.svc_gst === 54 && q.total === 354);
+      q = (await A('quote', {gh_id: g0.id, room_type_id: deluxe, check_in: D(329), check_out: D(333)})).j.cost;
+      check('nights without a rate are counted as missing', q.nights === 4 && q.missing === 2);
+      await A('block', {gh_id: g0.id, rooms: ['A1'], from: D(340), to: D(342), reason: 'Painting'});
+      x = await B(asha, 'book/avail', {property: 'Acme House', check_in: D(341), check_out: D(343)});
+      check('a blocked room shows as blocked', x.j.rooms.find((r) => r.room === 'A1').state === 'blocked' && x.j.rooms.find((r) => r.room === 'A2').state === 'free');
+      check('a blocked room cannot be booked', (await B(asha, 'book', {property: 'Acme House', check_in: D(341), check_out: D(342), room: 'A1', title: 'Mr.', name: 'Block Test', grade: 'E1'})).status === 409);
+      await A('block', {gh_id: g0.id, rooms: [], from: D(350), to: D(352), reason: 'Closed'});
+      check('a whole-house block leaves no room to book', (await B(asha, 'book', {property: 'Acme House', check_in: D(350), check_out: D(351), title: 'Mr.', name: 'Block Test', grade: 'E1'})).status === 409);
+      const st2 = (await A('state', {})).j.clients.find((c) => c.id === acme);
+      check('admin state lists rates and blocks', st2.rates.length === 3 && st2.blocks.length === 2);
+      await A('block', {gh_id: g0.id, id: st2.blocks[0].id, delete: true}); check('a block can be removed', (await A('state', {})).j.clients.find((c) => c.id === acme).blocks.length === 1);
+    }
     await M('user/access', {email: 'asha@acme.example', book: false});
     check('switching Book rooms off blocks booking', (await B(asha, 'book', {property: 'Acme House', check_in: D(220), check_out: D(221), title: 'Mr.', name: 'X Y', grade: 'E1'})).status === 403); }
   x = await A('user', {email: 'asha@acme.example', name: 'Asha Rao', active: false});

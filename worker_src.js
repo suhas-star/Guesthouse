@@ -403,6 +403,11 @@ const SCHEMA = [
   "CREATE TABLE IF NOT EXISTS trips (id INTEGER PRIMARY KEY AUTOINCREMENT, client_id INTEGER NOT NULL, code TEXT, property TEXT, room TEXT, title TEXT, name TEXT, gender TEXT, grade TEXT, emp_code TEXT, email TEXT, phone TEXT, base TEXT, concur_tr TEXT, wbs TEXT, occupancy TEXT, check_in TEXT, check_out TEXT, note TEXT, status TEXT, cc TEXT, bcc TEXT, booked_by TEXT, booked_at TEXT, changed_by TEXT, changed_at TEXT, cancelled_by TEXT, cancelled_at TEXT, cancel_reason TEXT, mail_status TEXT, history TEXT)",
   "CREATE INDEX IF NOT EXISTS trips_client ON trips (client_id, check_in)",
   // guests saved from bookings, offered as suggestions when the next booking is typed
+  // guest house rates and blackout dates (Zuna admin only)
+  "CREATE TABLE IF NOT EXISTS gh_rates (id INTEGER PRIMARY KEY AUTOINCREMENT, gh_id INTEGER NOT NULL, room_type_id INTEGER DEFAULT 0, from_date TEXT NOT NULL, to_date TEXT NOT NULL, nil INTEGER DEFAULT 0, fare REAL DEFAULT 0, svc REAL DEFAULT 0, svc_unit TEXT DEFAULT 'night', note TEXT, by_email TEXT, at TEXT)",
+  "CREATE INDEX IF NOT EXISTS gh_rates_gh ON gh_rates (gh_id, from_date)",
+  "CREATE TABLE IF NOT EXISTS gh_blocks (id INTEGER PRIMARY KEY AUTOINCREMENT, gh_id INTEGER NOT NULL, rooms TEXT, from_date TEXT NOT NULL, to_date TEXT NOT NULL, reason TEXT, by_email TEXT, at TEXT)",
+  "CREATE INDEX IF NOT EXISTS gh_blocks_gh ON gh_blocks (gh_id, from_date)",
   "CREATE TABLE IF NOT EXISTS guests (id INTEGER PRIMARY KEY AUTOINCREMENT, client_id INTEGER NOT NULL, gkey TEXT NOT NULL, title TEXT, name TEXT, gender TEXT, email TEXT, phone TEXT, grade TEXT, emp_code TEXT, base TEXT, uses INTEGER DEFAULT 0, last_used TEXT, UNIQUE (client_id, gkey))",
   // hotel bookings removed by the Zuna team (kept so they can be restored)
   "CREATE TABLE IF NOT EXISTS tx_removed (id INTEGER PRIMARY KEY AUTOINCREMENT, client_id INTEGER NOT NULL, code TEXT NOT NULL, row TEXT NOT NULL, upload_id INTEGER, by_email TEXT, at TEXT, restored TEXT)",
@@ -459,7 +464,7 @@ async function adminState(env, user) {
     const names = new Set(guesthouses.map((g) => g.property));
     const el = eligOf(c);
     return {id: c.id, name: c.name, legal_name: c.legal_name || "", mail_cc: c.mail_cc || "", mail_bcc: c.mail_bcc || "", elig_male: el && el.Male && el.Male.length ? gradeText(el.Male, []) : "", elig_female: el && el.Female && el.Female.length ? gradeText(el.Female, []) : "", active: !!c.active, logo: c.logo_file ? "/files/" + c.logo_file : "", grades: (c.grades || DEFAULT_GRADES).split(",").filter(Boolean), users, guesthouses,
-      bookings: bk.rows.filter((x) => names.has(x.property) && x.status !== "Cancelled").map((x) => Object.assign({}, x, {manual: manualKeys.has(guestKey(x))}))}; }));
+      bookings: bk.rows.filter((x) => names.has(x.property) && x.status !== "Cancelled").map((x) => Object.assign({}, x, {manual: manualKeys.has(guestKey(x))})), ...(await ratesState(env, guesthouses.map((g) => g.id)))}; }));
   return {clients: out, me: user.email};
 }
 // ---- guest house documents (agreements, licences…) ----
@@ -667,6 +672,79 @@ async function restoreBooking(env, client, b) {
   return json({ok: true});
 }
 
+/* ---------- Guest house rates and blackout dates (Zuna admin only) ----------
+   Rates: per guest house (room_type_id 0) or per room type, for a date range of nights (from_date..to_date, inclusive).
+   Basic fare per night, or Nil. Tax on the fare: 5% when the night's fare is below 7,500, otherwise 18%.
+   Service charge per night or per booking, with 18% GST; it applies even when the fare is Nil.
+   A room type's rate beats the whole-house rate for the same night; among equals the later start (then the newer entry) wins.
+   Blocks: a whole guest house (rooms empty) or some rooms, for a date range of nights; blocked rooms can't be booked. */
+const FARE_TAX = (fare) => fare < 7500 ? 0.05 : 0.18, SVC_GST = 0.18;
+const r2 = (v) => Math.round(v * 100) / 100;
+const isoD = /^\d{4}-\d{2}-\d{2}$/;
+async function ghBlocks(env, ghId, from, to) {   // blocks touching the nights from..to (to exclusive)
+  const {results} = await env.DB.prepare("SELECT * FROM gh_blocks WHERE gh_id = ? AND from_date < ? AND to_date >= ? ORDER BY from_date").bind(ghId, to, from).all();
+  return results.map((x) => ({id: x.id, rooms: String(x.rooms || "").split(",").map((s) => s.trim()).filter(Boolean), from: x.from_date, to: x.to_date, reason: x.reason || ""}));
+}
+const blocksFor = (blocks, room) => blocks.filter((b) => !b.rooms.length || b.rooms.includes(room));
+// cost of the nights ci..co (co exclusive) in a room type of a guest house
+async function ghCost(env, ghId, roomTypeId, ci, co) {
+  const {results} = await env.DB.prepare("SELECT * FROM gh_rates WHERE gh_id = ? AND from_date < ? AND to_date >= ? AND (room_type_id = 0 OR room_type_id = ?)").bind(ghId, co, ci, +roomTypeId || 0).all();
+  const pick = (d) => results.filter((x) => x.from_date <= d && x.to_date >= d).sort((a, b) => ((b.room_type_id ? 1 : 0) - (a.room_type_id ? 1 : 0)) || (b.from_date < a.from_date ? -1 : b.from_date > a.from_date ? 1 : 0) || b.id - a.id)[0];
+  const segs = [], out = {nights: 0, missing: 0, fare: 0, fare_tax: 0, svc: 0, svc_gst: 0, total: 0, segments: segs};
+  let first = null;
+  for (let d = ci; d < co; d = new Date(Date.parse(d) + 864e5).toISOString().slice(0, 10)) {
+    out.nights++; const r = pick(d); if (!r) { out.missing++; continue; } if (!first) first = r;
+    const fare = r.nil ? 0 : +r.fare || 0, tax = fare * FARE_TAX(fare), svc = r.svc_unit === "booking" ? 0 : +r.svc || 0;
+    out.fare += fare; out.fare_tax += tax; out.svc += svc;
+    const last = segs[segs.length - 1];
+    if (last && last.rate_id === r.id) { last.nights++; last.to = d; } else segs.push({rate_id: r.id, from: d, to: d, nights: 1, nil: !!r.nil, fare, tax_rate: fare ? FARE_TAX(fare) : 0, svc: +r.svc || 0, svc_unit: r.svc_unit || "night", scope: r.room_type_id ? "room type" : "guest house"});
+  }
+  if (first && first.svc_unit === "booking") out.svc += +first.svc || 0;   // a per-booking charge counts once, at the check-in night's rate
+  out.svc_gst = out.svc * SVC_GST;
+  ["fare", "fare_tax", "svc", "svc_gst"].forEach((k) => { out[k] = r2(out[k]); }); out.total = r2(out.fare + out.fare_tax + out.svc + out.svc_gst);
+  return out;
+}
+async function ratesState(env, ghIds) {
+  if (!ghIds.length) return {rates: [], blocks: []};
+  const q = "(" + ghIds.map(() => "?").join(",") + ")";
+  const [{results: rates}, {results: blocks}] = await Promise.all([env.DB.prepare("SELECT * FROM gh_rates WHERE gh_id IN " + q + " ORDER BY gh_id, from_date DESC, id DESC").bind(...ghIds).all(), env.DB.prepare("SELECT * FROM gh_blocks WHERE gh_id IN " + q + " ORDER BY gh_id, from_date DESC, id DESC").bind(...ghIds).all()]);
+  return {rates: rates.map((x) => ({id: x.id, gh_id: x.gh_id, room_type_id: x.room_type_id || 0, from: x.from_date, to: x.to_date, nil: !!x.nil, fare: +x.fare || 0, svc: +x.svc || 0, svc_unit: x.svc_unit || "night", note: x.note || "", by: x.by_email || "", at: x.at || ""})),
+    blocks: blocks.map((x) => ({id: x.id, gh_id: x.gh_id, rooms: String(x.rooms || "").split(",").map((s) => s.trim()).filter(Boolean), from: x.from_date, to: x.to_date, reason: x.reason || "", by: x.by_email || "", at: x.at || ""}))};
+}
+async function ratesApi(env, user, path, b) {
+  const gh = await env.DB.prepare("SELECT id, client_id, name FROM guesthouses WHERE id = ?").bind(+b.gh_id || 0).first();
+  if (!gh) return json({error: "Choose a guest house."}, 400);
+  const now = new Date().toISOString();
+  if (path === "/api/admin/rate" || path === "/api/admin/block") {
+    const tbl = path.endsWith("rate") ? "gh_rates" : "gh_blocks";
+    if (b.delete) { await env.DB.prepare("DELETE FROM " + tbl + " WHERE id = ? AND gh_id = ?").bind(+b.id || 0, gh.id).run(); return json({ok: true}); }
+    if (!isoD.test(b.from || "") || !isoD.test(b.to || "") || b.to < b.from) return json({error: "Pick the dates: the end date must be on or after the start date."}, 400);
+    if (tbl === "gh_rates") {
+      const rt = +b.room_type_id || 0;
+      if (rt && !(await env.DB.prepare("SELECT id FROM room_types WHERE id = ? AND gh_id = ?").bind(rt, gh.id).first())) return json({error: "That room type is not in " + gh.name + "."}, 400);
+      const nil = !!b.nil, fare = nil ? 0 : Math.round((+b.fare || 0) * 100) / 100, svc = Math.round((+b.svc || 0) * 100) / 100, unit = b.svc_unit === "booking" ? "booking" : "night";
+      if (!nil && !(fare > 0)) return json({error: "Enter the basic fare per night, or choose Nil."}, 400);
+      if (fare > 1000000 || svc < 0 || svc > 1000000) return json({error: "Check the amounts."}, 400);
+      const vals = [rt, b.from, b.to, nil ? 1 : 0, fare, svc, unit, clean(b.note, 160), user.email, now];
+      if (b.id) await env.DB.prepare("UPDATE gh_rates SET room_type_id = ?, from_date = ?, to_date = ?, nil = ?, fare = ?, svc = ?, svc_unit = ?, note = ?, by_email = ?, at = ? WHERE id = ? AND gh_id = ?").bind(...vals, +b.id, gh.id).run();
+      else await env.DB.prepare("INSERT INTO gh_rates (gh_id, room_type_id, from_date, to_date, nil, fare, svc, svc_unit, note, by_email, at) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)").bind(gh.id, ...vals).run();
+    } else {
+      const rooms = (Array.isArray(b.rooms) ? b.rooms : []).map((x) => clean(x, 40)).filter(Boolean).slice(0, 200).join(",");
+      const vals = [rooms, b.from, b.to, clean(b.reason, 160), user.email, now];
+      if (b.id) await env.DB.prepare("UPDATE gh_blocks SET rooms = ?, from_date = ?, to_date = ?, reason = ?, by_email = ?, at = ? WHERE id = ? AND gh_id = ?").bind(...vals, +b.id, gh.id).run();
+      else await env.DB.prepare("INSERT INTO gh_blocks (gh_id, rooms, from_date, to_date, reason, by_email, at) VALUES (?, ?, ?, ?, ?, ?, ?)").bind(gh.id, ...vals).run();
+    }
+    return json({ok: true});
+  }
+  if (path === "/api/admin/quote") {
+    if (!isoD.test(b.check_in || "") || !isoD.test(b.check_out || "") || b.check_out <= b.check_in) return json({error: "Check-out must be after check-in."}, 400);
+    let rt = +b.room_type_id || 0;
+    if (!rt && b.room) { const {results} = await env.DB.prepare("SELECT id, room_nos FROM room_types WHERE gh_id = ?").bind(gh.id).all(); const hit = results.find((t) => expandRooms(t.room_nos).includes(String(b.room))); if (hit) rt = hit.id; }
+    return json({cost: await ghCost(env, gh.id, rt, b.check_in, b.check_out), room_type_id: rt});
+  }
+  return json({error: "Not found."}, 404);
+}
+
 /* ---------- Book a room + Trips ----------
    Bookings made in the portal are confirmed instantly. Each one is written into the stay data exactly like an
    admin-panel booking (live `bookings` + `manual`), so the Room rack, reports and the hourly email update all see it:
@@ -685,7 +763,7 @@ async function roomAvailability(env, client, property, ci, co, skipKey) {
   const bk = await readSet(env, "bookings");
   const stays = bk.rows.filter((x) => x.property === property && x.status === "Confirmed" && x.check_in < co && x.check_out > ci && guestKey(x) !== skipKey);
   const rooms = [];
-  (gh.room_types || []).forEach((t) => expandRooms(t.room_nos).forEach((rn) => rooms.push({room: rn, type: t.name || "", occupancy: t.occupancy || "Single", bed_type: t.bed_type || "", grades: t.grades || []})));
+  (gh.room_types || []).forEach((t) => expandRooms(t.room_nos).forEach((rn) => rooms.push({room: rn, type: t.name || "", type_id: t.id || 0, occupancy: t.occupancy || "Single", bed_type: t.bed_type || "", grades: t.grades || []})));
   if (!rooms.length) (gh.rooms_list || []).forEach((rn) => rooms.push({room: rn, type: "", occupancy: "Single", bed_type: "", grades: []}));
   rooms.sort((a, b) => a.room.localeCompare(b.room, "en", {numeric: true}));
   rooms.forEach((r) => { const g = stays.filter((x) => x.room === r.room); let peak = 0;
@@ -693,6 +771,8 @@ async function roomAvailability(env, client, property, ci, co, skipKey) {
     r.capacity = /double|twin|shar/i.test(r.occupancy) ? 2 : 1;
     r.state = peak === 0 ? "free" : peak < r.capacity ? "shared" : "full";
     r.guests = g.map((x) => ({gender: genderRow(x), check_in: x.check_in, check_out: x.check_out})); });
+  const blocks = await ghBlocks(env, gh.id, ci, co);   // blackout dates set by Zuna
+  rooms.forEach((r) => { r.blocks = blocksFor(blocks, r.room).map((x) => ({from: x.from, to: x.to, reason: x.reason})); if (r.blocks.length) r.state = "blocked"; });
   const listed = new Set(rooms.map((r) => r.room));
   return {gh, rooms, nights: Math.round((Date.parse(co) - Date.parse(ci)) / 864e5), unassigned: stays.filter((x) => !listed.has(x.room)).length};
 }
@@ -726,6 +806,7 @@ async function placeTrip(env, user, cid, b, trip) {
   let room;
   if (t.room) { room = av.rooms.find((r) => r.room === t.room); if (!room) return json({error: "Room " + t.room + " is not in " + t.property + "."}, 400);
     if (!fits(room)) return json({error: "Room " + room.room + (room.type ? " (" + room.type + ")" : "") + " is for grades " + room.grades.join(", ") + " only."}, 400);
+    if (room.state === "blocked") { const k = room.blocks[0]; return json({error: "Room " + room.room + " is not available from " + fmtD(k.from) + " to " + fmtD(k.to) + (k.reason ? " (" + k.reason + ")" : "") + ". Choose another room or other dates."}, 409); }
     if (room.state === "full") return json({error: "Room " + room.room + " is already taken on some of these nights. Choose another room."}, 409);
     if (room.state === "shared" && !sharable(room)) return json({error: "Room " + room.room + " is shared with a guest of another gender on these nights. Choose another room."}, 409); }
   else { room = av.rooms.find((r) => r.state === "free" && fits(r)) || (t.occupancy === "Double" ? av.rooms.find((r) => sharable(r) && fits(r)) : null);
@@ -1031,6 +1112,9 @@ async function adminApi(req, env, user, path) {
   try {
     switch (path) {
       case "/api/admin/state": return json(await adminState(env, user));
+      case "/api/admin/rate":
+      case "/api/admin/block":
+      case "/api/admin/quote": return ratesApi(env, user, path, b);
       case "/api/admin/client": {
         const name = clean(b.name, 120); if (!name) return json({error: "Enter the client name."}, 400);
         const grades = (Array.isArray(b.grades) ? b.grades : String(b.grades || DEFAULT_GRADES).split(",")).map((g) => clean(g, 20)).filter(Boolean).join(",") || DEFAULT_GRADES;

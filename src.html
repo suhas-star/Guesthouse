@@ -1185,7 +1185,7 @@ const bkElig = () => { const e = DATA.client && DATA.client.elig, l = e && e[bkG
 const gradeRanges = (l) => { const out = [], ser = [...new Set(l.map((g) => g.replace(/\d+$/, '')))]; ser.forEach((sr) => { const n = l.filter((g) => g.replace(/\d+$/, '') === sr).map((g) => +(g.match(/\d+$/) || [0])[0]).sort((a, b) => a - b); for (let i = 0; i < n.length;) { let j = i; while (j + 1 < n.length && n[j + 1] === n[j] + 1) j++; out.push(j > i ? sr + n[i] + '–' + sr + n[j] : sr + n[i]); i = j + 1; } }); return out.join(', '); };
 const bkGradeOk = () => { const l = bkElig(); return !l || !BK.v.grade || l.includes(BK.v.grade); };
 const bkFits = (r) => bkGradeOk() && (!r.grades.length || !BK.v.grade || r.grades.includes(BK.v.grade));
-const bkWhy = (r) => r.state === 'full' ? 'Taken' : !bkFits(r) ? 'Not for ' + BK.v.grade : r.state === 'shared' && r.guests.some((g) => g.gender !== bkGender()) ? 'Shared · ' + String((r.guests[0] || {}).gender || '').toLowerCase() + ' guest' : '';
+const bkWhy = (r) => r.state === 'blocked' ? 'Blocked' + (r.blocks && r.blocks[0] && r.blocks[0].reason ? ' · ' + r.blocks[0].reason : '') : r.state === 'full' ? 'Taken' : !bkFits(r) ? 'Not for ' + BK.v.grade : r.state === 'shared' && r.guests.some((g) => g.gender !== bkGender()) ? 'Shared · ' + String((r.guests[0] || {}).gender || '').toLowerCase() + ' guest' : '';
 const bkNights = () => nightsOf(BK.ci, BK.co);
 const bkVal = (k, el, ev) => { el.value = BK.v[k] == null ? '' : BK.v[k]; el.addEventListener(ev || 'input', () => { BK.v[k] = el.value; if (BK.onEdit) BK.onEdit(k); }); return el; };
 
@@ -1433,11 +1433,11 @@ const bkTimeline = (body) => { const live = props.filter((p) => p.status === 'Li
   const hint = h('p', 'text-xs text-zuna-500 mb-2'); body.appendChild(hint);
   const sc = h('div', 'overflow-x-auto pb-1'); const grid = h('div', 'min-w-[720px] space-y-[3px]'); sc.appendChild(grid); body.appendChild(sc);
   const lg = h('div', 'flex flex-wrap gap-x-4 gap-y-1 text-[11px] font-semibold text-zuna-500 mt-3');
-  [['bg-white ring-1 ring-zuna-100', 'Free'], ['bg-amber-300', 'One bed left'], ['bg-zuna-200', 'Taken · male'], ['bg-rose-200', 'Taken · female'], ['bg-mint-500', 'Your selection'], ['tl-ng', 'Not for this grade']].forEach(([c, l]) => { const s = h('span', 'inline-flex items-center gap-1.5'); s.append(h('i', 'inline-block w-3 h-3 rounded ' + c), document.createTextNode(l)); lg.appendChild(s); });
+  [['bg-white ring-1 ring-zuna-100', 'Free'], ['bg-amber-300', 'One bed left'], ['bg-zuna-200', 'Taken · male'], ['bg-rose-200', 'Taken · female'], ['bg-mint-500', 'Your selection'], ['tl-ng', 'Not for this grade'], ['bg-zuna-700', 'Blocked']].forEach(([c, l]) => { const s = h('span', 'inline-flex items-center gap-1.5'); s.append(h('i', 'inline-block w-3 h-3 rounded ' + c), document.createTextNode(l)); lg.appendChild(s); });
   body.appendChild(lg);
   const dock = h('div', 'mt-4 rounded-2xl bg-zuna-900 text-white p-3 flex flex-wrap items-center gap-3'); body.appendChild(dock);
   const days = Array.from({length: BK_TL_DAYS}, (_, i) => addDays(T.from, i));
-  const nightOf = (r, d) => { const gs = r.guests.filter((g) => g.check_in <= d && g.check_out > d); const full = gs.length >= r.capacity; const clash = gs.some((g) => g.gender !== bkGender());
+  const nightOf = (r, d) => { const blk = (r.blocks || []).find((b) => b.from <= d && b.to >= d); if (blk) return {blocked: true, closed: blk}; const gs = r.guests.filter((g) => g.check_in <= d && g.check_out > d); const full = gs.length >= r.capacity; const clash = gs.some((g) => g.gender !== bkGender());
     return {n: gs.length, full, blocked: full || (gs.length && clash), female: gs.some((g) => g.gender === 'Female'), shared: gs.length && !full}; };
   const picked = () => BK.from === 'timeline' && BK.room;
   function paint() { grid.replaceChildren(); dock.replaceChildren();
@@ -1450,6 +1450,7 @@ const bkTimeline = (body) => { const live = props.filter((p) => p.status === 'Li
       days.forEach((d, i) => { const st = nightOf(r, d), c = h('button', 'h-[34px] rounded-md transition-shadow'); c.type = 'button';
         const inSel = picked() && BK.room === r.room && d >= BK.ci && d < BK.co, isStart = T.start && T.start.room === r.room && T.start.d === d;
         let lab = 'free'; if (inSel) c.className += ' bg-mint-500'; else if (isStart) c.className += ' bg-mint-500 ring-2 ring-inset ring-zuna-900';
+        else if (st.closed) { c.className += ' bg-zuna-700'; c.disabled = true; lab = 'blocked' + (st.closed.reason ? ' (' + st.closed.reason + ')' : ''); }
         else if (st.blocked) { c.className += st.female ? ' bg-rose-200' : ' bg-zuna-200'; c.disabled = true; lab = 'taken'; }
         else if (notG) { c.className += ' tl-ng'; c.disabled = true; lab = 'not for ' + v.grade; }
         else if (st.shared) { c.className += ' bg-amber-300 hover:ring-2 hover:ring-inset hover:ring-mint-500'; lab = 'one bed left'; }
@@ -1510,6 +1511,16 @@ const tripDrawer = (t) => {
     box.appendChild(acts); }
   box.appendChild(kv([['Guest', t.guest], ['Gender', t.gender], ['Grade', t.grade], ['Employee code', t.emp_code], ['Email', t.email], ['Mobile', t.phone], ['Base location', t.base], ['Concur ID', t.concur_tr], ['WBS ID', t.wbs], ['Occupancy', t.occupancy === 'Double' ? 'Double · shares the room' : 'Single'], ['Remarks', t.note],
     ...(USER.admin ? [['Email copies', [t.cc && 'CC ' + t.cc, t.bcc && 'BCC ' + t.bcc].filter(Boolean).join(' · ')]] : []), ['Email status', mailTxt(t.mail_status)], ['Booked by', t.booked_by + ' · ' + fLong(String(t.booked_at).slice(0, 10))]]));
+  if (USER.admin) {   // cost from the guest house rates: Zuna team only
+    const p = props.find((x) => x.property === t.property) || {}, cs = h('div', 'rounded-xl ring-1 ring-zuna-100 overflow-hidden'); const ch = h('div', 'flex items-center gap-2 px-3.5 py-2 bg-zuna-50 text-xs font-bold uppercase tracking-wider text-zuna-500'); ch.appendChild(icon('lock', 'w-3.5 h-3.5')); ch.appendChild(document.createTextNode('Cost · Zuna team only')); cs.appendChild(ch);
+    const cb = h('div', 'px-3.5 py-2 text-sm text-zuna-500', 'Working out…'); cs.appendChild(cb); box.appendChild(cs);
+    const inr = (v) => '₹' + Number(v || 0).toLocaleString('en-IN', {maximumFractionDigits: 2});
+    fetch('/api/admin/quote', {method: 'POST', headers: {'content-type': 'application/json'}, credentials: 'same-origin', body: JSON.stringify({gh_id: p.id, room: t.room, check_in: t.check_in, check_out: t.check_out})}).then((r) => r.json()).then((j) => { cb.replaceChildren();
+      if (j.error || !j.cost) { cb.textContent = j.error || 'Could not work out the cost.'; return; } const q = j.cost;
+      if (q.missing === q.nights) { cb.textContent = 'No rate set for these dates. Add one in Admin → Rates & blocks.'; return; }
+      const dl = h('dl', 'divide-y divide-zuna-50'); [['Basic fare', q.fare], ['Tax on fare', q.fare_tax], ['Service charge', q.svc], ['GST on service charge', q.svc_gst]].forEach(([k, v]) => { const d = h('div', 'flex justify-between py-1.5'); d.append(h('dt', null, k), h('dd', 'font-semibold text-zuna-900 tabular-nums', inr(v))); dl.appendChild(d); });
+      const tt = h('div', 'flex justify-between py-1.5 font-bold text-zuna-900'); tt.append(h('dt', null, 'Total · ' + q.nights + (q.nights === 1 ? ' night' : ' nights')), h('dd', 'tabular-nums', inr(q.total))); dl.appendChild(tt); cb.appendChild(dl);
+      if (q.missing) cb.appendChild(h('p', 'text-xs font-semibold text-amber-700 pb-1', q.missing + ' night(s) have no rate.')); }).catch(() => { cb.textContent = 'Could not work out the cost.'; }); }
   const hs = h('div', 'space-y-2'); hs.appendChild(h('p', 'text-xs font-bold uppercase tracking-wider text-zuna-500', 'History'));
   const ol = h('ol', 'relative border-l-2 border-zuna-100 ml-1.5 space-y-3'); (t.history || []).slice().reverse().forEach((x) => { const li = h('li', 'pl-4 relative'); li.appendChild(h('span', 'absolute -left-[7px] top-1 w-3 h-3 rounded-full ring-2 ring-white ' + (x.what === 'Cancelled' ? 'bg-rose-500' : x.what === 'Changed' ? 'bg-amber-400' : 'bg-mint-500')));
     li.appendChild(h('p', 'text-sm font-semibold', x.what + (x.detail ? ' · ' + x.detail : ''))); li.appendChild(h('p', 'text-xs text-zuna-500', x.by + ' · ' + fLong(String(x.at).slice(0, 10)) + ' ' + String(x.at).slice(11, 16) + ' UTC')); ol.appendChild(li); }); hs.appendChild(ol); box.appendChild(hs);

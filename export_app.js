@@ -164,7 +164,10 @@
     });
     const N = pages.length;
     pages.forEach((p, i) => { ops = p; T(M, 18, 'Confidential', 7.5, false, [0.5, 0.5, 0.5]); T(W - M - 50, 18, 'Page ' + (i + 1) + ' of ' + N, 7.5, false, [0.5, 0.5, 0.5]); });
-    // assemble
+    return pdfBlob(pages, imgs, W, H);
+  };
+  // write pages (lists of drawing operators) and JPEG images into a PDF file
+  const pdfBlob = (pages, imgs, W, H) => { const N = pages.length;
     const chunks = [], offsets = []; let len = 0;
     const put = (x) => { const b = typeof x === 'string' ? u8(x) : x; chunks.push(b); len += b.length; };
     const obj = (n, body) => { offsets[n] = len; put(n + ' 0 obj\n'); body.forEach(put); put('\nendobj\n'); };
@@ -336,6 +339,65 @@
     return {filename: fileTitle + '.xlsx', data: sheetZip('Sheet', cells, merges, widths)};
   };
   const dl = (f) => { const url = URL.createObjectURL(f.data), a = document.createElement('a'); a.href = url; a.download = f.filename; document.body.appendChild(a); a.click(); a.remove(); setTimeout(() => URL.revokeObjectURL(url), 4000); L.toast('Downloading ' + f.filename); };
+  // --- booking voucher: one A4 page per portal booking ---
+  // t: trip, p: guest house, client: {name, legal_name}
+  const voucherPdf = (t, p, client) => {
+    const W = 595, H = 842, M = 40, ops = [], MUTED = [0.42, 0.39, 0.56], LINE = [0.9, 0.886, 0.965], SOFT = [0.969, 0.965, 0.988], WHITE = [1, 1, 1];
+    const cancelled = t.status === 'Cancelled', ROSE = [0.784, 0.196, 0.227];
+    const T = (x, y, s, size, bold, color) => ops.push('BT /' + (bold ? 'F2' : 'F1') + ' ' + size + ' Tf ' + rgb(color || INK) + ' rg ' + x.toFixed(1) + ' ' + y.toFixed(1) + ' Td ' + pdfStr(s) + ' Tj ET');
+    const R = (x, y, w, h, color) => ops.push(rgb(color) + ' rg ' + x.toFixed(1) + ' ' + y.toFixed(1) + ' ' + w.toFixed(1) + ' ' + h.toFixed(1) + ' re f');
+    const B = (x, y, w, h, color) => ops.push(rgb(color) + ' RG 0.8 w ' + x.toFixed(1) + ' ' + y.toFixed(1) + ' ' + w.toFixed(1) + ' ' + h.toFixed(1) + ' re S');
+    const Ln = (x1, y1, x2, y2, color) => ops.push(rgb(color) + ' RG 0.6 w ' + x1.toFixed(1) + ' ' + y1.toFixed(1) + ' m ' + x2.toFixed(1) + ' ' + y2.toFixed(1) + ' l S');
+    const fmt = (d) => { if (!d) return '-'; const x = new Date(d + 'T00:00:00Z'); return ['Sun', 'Mon', 'Tue', 'Wed', 'Thu', 'Fri', 'Sat'][x.getUTCDay()] + ', ' + x.getUTCDate() + ' ' + ['Jan', 'Feb', 'Mar', 'Apr', 'May', 'Jun', 'Jul', 'Aug', 'Sep', 'Oct', 'Nov', 'Dec'][x.getUTCMonth()] + ' ' + x.getUTCFullYear(); };
+    const nights = Math.round((Date.parse(t.check_out) - Date.parse(t.check_in)) / 864e5);
+    // logos (client logo shown in the page) on the right of the band
+    const imgs = []; document.querySelectorAll('[data-logo]').forEach((im) => { const j = logoJpeg(im, '#ffffff'); if (j && imgs.length < 2) imgs.push(j); });
+    // header band
+    R(0, H - 104, W, 104, INK); R(0, H - 108, W, 4, RED);
+    T(M, H - 46, 'Guest house booking voucher', 19, true, WHITE);
+    T(M, H - 66, (client.legal_name || client.name || '') + '  -  issued by Zuna Hotel Desk', 9.5, false, [0.79, 0.76, 0.93]);
+    let lx = W - M; imgs.slice().reverse().forEach((im, k) => { const h = 26, w = Math.min(110, im.w * h / im.h); lx -= w; R(lx - 8, H - 72, w + 16, h + 12, WHITE); ops.push('q ' + w.toFixed(1) + ' 0 0 ' + h + ' ' + lx.toFixed(1) + ' ' + (H - 66) + ' cm /Im' + (imgs.length - 1 - k) + ' Do Q'); lx -= 24; });
+    // status + booking code
+    let y = H - 150;
+    const st = cancelled ? 'CANCELLED' : 'CONFIRMED', stw = textW(st, 9) * 1.4 + 22;
+    R(M, y - 4, stw, 20, cancelled ? [0.992, 0.925, 0.925] : [0.89, 0.98, 0.949]); B(M, y - 4, stw, 20, cancelled ? ROSE : RED); T(M + 11, y + 2, st, 9, true, cancelled ? ROSE : [0.004, 0.533, 0.361]);
+    T(M + stw + 12, y + 2, cancelled ? 'This booking was cancelled' + (t.cancelled_at ? ' on ' + fmt(String(t.cancelled_at).slice(0, 10)) : '') + '.' : 'Confirmed instantly. Please show this voucher at check-in.', 9, false, MUTED);
+    T(W - M - textW('BOOKING CODE', 8), y + 22, 'BOOKING CODE', 8, true, MUTED);
+    T(W - M - textW(t.code || '-', 20) * 1.08, y - 2, t.code || '-', 20, true, INK);
+    // stay tiles
+    y -= 34; const tw = (W - 2 * M - 16) / 3, th = 62;
+    [['CHECK-IN', fmt(t.check_in), ''], ['CHECK-OUT', fmt(t.check_out), ''], ['NIGHTS', String(nights), t.occupancy === 'Double' ? 'Shared room' : 'Single occupancy']].forEach(([k, v, s], i) => {
+      const x = M + i * (tw + 8); R(x, y - th, tw, th, SOFT); B(x, y - th, tw, th, LINE);
+      T(x + 12, y - 17, k, 7.5, true, MUTED); T(x + 12, y - 38, v, i === 2 ? 17 : 12.5, true, INK); if (s) T(x + 12, y - 52, s, 8, false, MUTED); });
+    y -= th + 26;
+    // two-column sections
+    const section = (title, rows, x, w) => { let yy = y; T(x, yy, title, 8, true, [0.004, 0.533, 0.361]); yy -= 8; Ln(x, yy, x + w, yy, LINE); yy -= 16;
+      rows.filter((r) => r[1]).forEach(([k, v]) => { T(x, yy, k, 8.5, false, MUTED); const lines = wrap(v, w - 92, 9.5); lines.forEach((ln, i) => T(x + 92, yy - i * 13, ln, 9.5, true, INK)); yy -= Math.max(1, lines.length) * 13 + 6; });
+      return yy; };
+    const cw = (W - 2 * M - 30) / 2;
+    const y1 = section('GUEST', [['Name', t.guest], ['Gender', t.gender], ['Grade', t.grade], ['Employee code', t.emp_code], ['Email', t.email], ['Mobile', t.phone], ['Base location', t.base]], M, cw);
+    const y2 = section('STAY', [['Guest house', t.property + (p.city ? ', ' + p.city : '')], ['Address', p.address], ['Room', t.room + (t.occupancy === 'Double' ? ' (shared)' : '')], ['Concur ID', t.concur_tr], ['WBS ID', t.wbs], ['Remarks', t.note]], M + cw + 30, cw);
+    y = Math.min(y1, y2) - 10;
+    // guest house contacts + map
+    const ct = (p.contacts || []).filter((c) => c.phone || c.email).slice(0, 3);
+    if (ct.length || p.map_url) { R(M, y - 14 - ct.length * 14 - (p.map_url ? 14 : 0), W - 2 * M, 22 + ct.length * 14 + (p.map_url ? 14 : 0), SOFT);
+      let yy = y - 4; T(M + 12, yy - 8, 'GUEST HOUSE CONTACT', 7.5, true, MUTED); yy -= 22;
+      ct.forEach((c) => { T(M + 12, yy, [c.name + (c.designation ? ' (' + c.designation + ')' : ''), c.phone, c.email].filter(Boolean).join('   -   '), 9, false, INK); yy -= 14; });
+      if (p.map_url) { T(M + 12, yy, 'Map: ' + String(p.map_url).slice(0, 95), 8, false, [0.004, 0.533, 0.361]); }
+      y -= 34 + ct.length * 14 + (p.map_url ? 14 : 0); }
+    // notes
+    y -= 6; T(M, y, 'PLEASE NOTE', 8, true, [0.004, 0.533, 0.361]); y -= 8; Ln(M, y, W - M, y, LINE); y -= 15;
+    ['Please carry a photo ID for check-in.', 'Changes and cancellations are made in the portal (Trips) or through the Zuna Hotel Desk.', 'Rooms are shared only between guests of the same gender.']
+      .forEach((n) => { R(M, y + 2.5, 3, 3, RED); T(M + 10, y, n, 9, false, INK); y -= 14; });
+    // cancelled watermark
+    if (cancelled) ops.unshift('q 0.992 0.925 0.925 rg BT /F2 86 Tf 0.819 0.574 -0.574 0.819 110 250 Tm ' + pdfStr('CANCELLED') + ' Tj ET Q');
+    // footer
+    Ln(M, 62, W - M, 62, LINE);
+    T(M, 46, 'Booked by ' + (t.booked_by || '-') + ' on ' + fmt(String(t.booked_at || '').slice(0, 10)) + (t.changed_at ? '   -   last changed ' + fmt(String(t.changed_at).slice(0, 10)) : ''), 7.5, false, MUTED);
+    T(M, 33, 'System-generated voucher. No signature needed.  Zuna Hotel Desk  -  Zuna Travel Solutions', 7.5, false, MUTED);
+    return pdfBlob([ops], imgs, W, H);
+  };
+  L.voucher = (t, p, client) => { try { dl({filename: 'Voucher-' + (t.code || 'booking') + '-' + slug(String(t.name || t.guest || '')).slice(0, 30) + '.pdf', data: voucherPdf(t, p || {}, client || {})}); } catch (e) { L.toast('Could not make the voucher. Try again.'); } };
   L.weeklyReport = weeklyReport;
   // hotel bookings: the filtered rows in the transaction report's own column layout
   L.txExcel = (cols, rows, filename, sheet = 'Hotel bookings') => { const cells = [];

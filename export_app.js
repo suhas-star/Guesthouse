@@ -385,7 +385,7 @@
     let y = H - 40;
     if (zj) img(0, M, y - 26, 26); else T(M, y - 18, 'Zuna', 18, true);
     if (cj) img(imgs.length - 1, W - M, y - 22, 22, true); else TR(W - M, y - 16, client.name || '', 13, true);
-    y -= 52; T(M, y, 'Guest house booking voucher', 15, true); TR(W - M, y, client.legal_name || client.name || '', 9, false, MUTED);
+    y -= 52; T(M, y, (t.kind === 'hotel' ? 'Hotel' : 'Guest house') + ' booking voucher', 15, true); TR(W - M, y, client.legal_name || client.name || '', 9, false, MUTED);
     y -= 14; T(M, y, 'Issued by Zuna Hotel Desk on behalf of ' + (client.name || 'the client') + '. Please show this voucher at check-in.', 8.8, false, MUTED);
     // ticket
     const CT = y - 18, CH = 218, CB = CT - CH, SW = 150, SX = W - M - SW;
@@ -394,7 +394,7 @@
     Ln(SX, CB + 10, SX, CT - 10, [0.255, 0.18, 0.553], 1.1, '3 3');   // perforation: a soft indigo dash on the stub circle(SX, CT, 8, BG); circle(SX, CB, 8, BG);
     // ticket · main part
     const X = M + 24, XR = SX - 22; let ty = CT - 30;
-    LBL(X, ty, 'Guest house stay');
+    LBL(X, ty, (t.kind === 'hotel' ? 'Hotel stay' : 'Guest house stay'));
     const links = [], mapUrl = p.map_url && /^https?:\/\//.test(p.map_url) ? p.map_url : 'https://www.google.com/maps/search/?api=1&query=' + encodeURIComponent([t.property, p.address, p.city && !String(p.address || '').toLowerCase().includes(String(p.city).toLowerCase()) ? p.city : ''].filter(Boolean).join(', '));
     if (!cancelled) { const mt = 'Open in Google Maps', pw = tw(mt, 8, true) + 26, py = ty - 5; RR(XR - pw, py, pw, 17, 8.5, [0.902, 0.976, 0.945]); circle(XR - pw + 10, py + 8.5, 2.6, MINT_D); TR(XR - 9, py + 5.4, mt, 8, true, MINT_D); links.push({x: XR - pw, y: py, w: pw, h: 17, url: mapUrl}); }
     ty -= 21; T(X, ty, t.property + (p.city ? ', ' + p.city : ''), 15, true);
@@ -403,10 +403,11 @@
     const t12 = (x) => { const m = String(x || '').match(/^(\d{1,2}):(\d{2})/); if (!m) return ''; const H = +m[1]; return ((H % 12) || 12) + ':' + m[2] + (H < 12 ? ' AM' : ' PM'); };
     LBL(X, ty, 'Check-in'); LBLR(XR, ty, 'Check-out'); ty -= 22; T(X, ty, a.day, 17, true); TR(XR, ty, b.day, 17, true); ty -= 13; T(X, ty, a.wd + (p.checkin_time ? ', from ' + t12(p.checkin_time) : ''), 8.6, false, MUTED); TR(XR, ty, b.wd + (p.checkout_time ? ', by ' + t12(p.checkout_time) : ''), 8.6, false, MUTED);
     const mx = (X + tw(a.day, 17, true) + XR - tw(b.day, 17, true)) / 2;
-    TC(mx, ty + 22, nights + (nights === 1 ? ' night' : ' nights'), 8.6, true, MINT_D); Ln(mx - 34, ty + 15, mx + 34, ty + 15, RED, 1.1, '3 2.5'); TC(mx, ty + 3, 'Room ' + t.room, 8.6, true, MINT_D);
+    TC(mx, ty + 22, nights + (nights === 1 ? ' night' : ' nights'), 8.6, true, MINT_D); Ln(mx - 34, ty + 15, mx + 34, ty + 15, RED, 1.1, '3 2.5'); if (t.room) TC(mx, ty + 3, 'Room ' + t.room, 8.6, true, MINT_D);
     ty -= 18; Ln(X, ty, XR, ty, LINE, 0.7); ty -= 17;
     const cols = [X, X + (XR - X) / 3, X + 2 * (XR - X) / 3], cw = (XR - X) / 3 - 8;
-    const cell = (i, yy, k, v) => { LBL(cols[i], yy, k); T(cols[i], yy - 13, fitLines(v || '-', cw, 9.8, true)[0], 9.8, true); };
+    const cell = (i, yy, k, v) => { LBL(cols[i], yy, k); const tx = v || '-'; let sz = 9.8; while (sz > 7.4 && tw(tx, sz, true) > cw) sz -= 0.2;   // long names shrink to fit before anything is cut
+      T(cols[i], yy - 13, fitLines(tx, cw, sz, true)[0], sz, true); };
     cell(0, ty, 'Guest', t.guest); cell(1, ty, 'Grade', t.grade); cell(2, ty, 'Employee code', t.emp_code);
     ty -= 32; cell(0, ty, t.plan ? 'Occupancy · plan' : 'Occupancy', (t.occupancy === 'Double' ? 'Double (shared)' : 'Single') + (t.plan ? ' · ' + t.plan : '')); cell(1, ty, 'Concur ID', t.concur_tr); cell(2, ty, 'WBS ID', t.wbs);
     // ticket · stub
@@ -425,7 +426,7 @@
     contact.forEach(([k, v], i) => { const cx = M + 24 + (i % 2) * (half + 24), ry = y - 44 - Math.floor(i / 2) * 24; T(cx, ry, k, 8.6, false, MUTED); const vv = fitLines(v, half - 90, 8.8, true)[0]; TR(cx + half, ry, vv, 8.8, true); Ln(cx, ry - 8, cx + half, ry - 8, [0.945, 0.937, 0.976], 0.6); });
     y -= CH2 + 14;
     // guest house helpdesk
-    const HH = 36 + Math.max(1, hd.length) * 22; RR(M, y - HH, W - 2 * M, HH, 10, WHITE); LBL(M + 24, y - 22, 'Guest house helpdesk', MINT_D); TR(W - M - 24, y - 22, t.property, 8, false, MUTED);
+    const HH = 36 + Math.max(1, hd.length) * 22; RR(M, y - HH, W - 2 * M, HH, 10, WHITE); LBL(M + 24, y - 22, (t.kind === 'hotel' ? 'Hotel helpdesk' : 'Guest house helpdesk'), MINT_D); TR(W - M - 24, y - 22, t.property, 8, false, MUTED);
     if (!hd.length) T(M + 24, y - 44, 'Helpdesk details are not listed yet. Please call Zuna customer support below.', 8.8, false, MUTED);
     hd.forEach((c, i) => { const ry = y - 44 - i * 22, x1 = M + 24, x2 = M + 24 + 215, x3 = W - M - 24;
       T(x1, ry, fitLines(c.name || '-', 140, 9.4, true)[0], 9.4, true); if (c.designation) T(x1 + Math.min(140, tw(c.name || '-', 9.4, true)) + 8, ry, fitLines(c.designation, 200 - Math.min(140, tw(c.name || '-', 9.4, true)), 8.6, false)[0], 8.6, false, MUTED);

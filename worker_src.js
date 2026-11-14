@@ -570,7 +570,7 @@ async function clientGuestHouses(env, client, forAdmin) {
     const types = rts.map((r) => ({id: r.id, name: r.name || "", rooms: r.rooms || 0, room_nos: r.room_nos || "", occupancy: r.occupancy || "Single", bed_type: r.bed_type || "", grades: list(r.grades), eligible: gradeText(list(r.grades), all)}));
     const contacts = cts.map((c) => ({id: c.id, name: c.name || "", designation: c.designation || "", email: c.email || "", phone: c.phone || ""}));
     const gh = {
-      id: g.id, property: g.name, city: g.city || "", state: g.state || "", country: g.country || "", address: g.address || "", map_url: g.map_url || "", operator: g.operator || "", status: g.status || "Coming soon", checkin_time: g.checkin_time || "", checkout_time: g.checkout_time || "",
+      id: g.id, property: g.name, city: g.city || "", state: g.state || "", country: g.country || "", address: g.address || "", map_url: g.map_url || "", operator: g.operator || "", status: g.status || "Coming soon", checkin_time: g.checkin_time || "12:00", checkout_time: g.checkout_time || "11:00",   // standard times unless the guest house has its own
       rooms: String(types.reduce((t, r) => t + (+r.rooms || 0), 0)),
       room_nos: types.map((r) => (multi && r.name ? r.name + " " : "") + r.room_nos).filter((x) => x.trim()).join(", "),
       rooms_list: types.flatMap((r) => expandRooms(r.room_nos)),

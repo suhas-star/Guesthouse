@@ -1167,7 +1167,7 @@ const BK_STEPS = ['Stay', 'Guest', 'Room', 'Confirm'];
 const BK_TL_DAYS = 14;
 const buildBook = () => {
   BK.built = true; const e = BK.edit, live = props.filter((p) => p.status === 'Live');
-  BK.step = 0; BK.done = null; BK.showAll = false; BK.rooms = null; BK.err = ''; BK.from = 'steps';
+  BK.step = 0; BK.done = null; BK.showAll = false; BK.gopen = e ? -1 : 0; BK.gskip = {}; BK.gdone = e ? {guest: true, contact: true, work: true, prefs: true} : {}; BK.rooms = null; BK.err = ''; BK.from = 'steps';
   BK.mode = 'steps';
   BK.prop = e ? e.property : (live.some((p) => p.property === BK.prop) ? BK.prop : ((live.find((p) => p.property === state.prop) || live[0] || {}).property || ''));
   BK.ci = e ? e.check_in : (BK.ci && BK.ci >= today ? BK.ci : addDays(today, 1)); BK.co = e ? e.check_out : (BK.co > BK.ci ? BK.co : addDays(BK.ci, 1));
@@ -1354,7 +1354,8 @@ const bkSuggest = (inp, wrap) => {
   const load = async () => { const q = inp.value.trim(), my = ++seq;
     try { const r = await fetch('/api/guests', {method: 'POST', headers: {'content-type': 'application/json'}, credentials: 'same-origin', body: JSON.stringify({client_id: DATA.client && DATA.client.id, q: q.length >= 3 ? q : ''})});
       const j = await r.json(); if (my !== seq || document.activeElement !== inp) return; items = j.guests || []; act = -1; head = q.length >= 3 ? 'Matching guests' : 'Recent guests'; paint(); } catch (e) { /* suggestions are optional */ } };
-  const choose = (g) => { const v = BK.v; ['title', 'name', 'gender', 'email', 'phone', 'grade', 'emp_code', 'base'].forEach((k) => { if (g[k]) v[k] = g[k]; }); close(); bkDraw(); toast('Filled in ' + full(g) + "'s details"); };
+  const choose = (g) => { const v = BK.v; ['title', 'name', 'gender', 'email', 'phone', 'grade', 'emp_code', 'base'].forEach((k) => { if (g[k]) v[k] = g[k]; }); close();
+    BK.gdone = Object.assign(BK.gdone || {}, {guest: true, contact: true}); BK.gopen = 2; bkDraw(); toast('Filled in ' + full(g) + "'s details"); };
   inp.addEventListener('focus', () => { if (inp.value.trim().length < 3) load(); });
   inp.addEventListener('input', () => { clearTimeout(timer); const q = inp.value.trim(); if (q.length > 0 && q.length < 3) { close(); return; } timer = setTimeout(load, 160); });
   inp.addEventListener('keydown', (e) => { if (pan.classList.contains('hidden') || !items.length) return;
@@ -1363,25 +1364,52 @@ const bkSuggest = (inp, wrap) => {
   inp.addEventListener('blur', () => setTimeout(close, 120));
 };
 
-// step 2 · guest
+// step 2 · guest: four short parts that open one after another; a finished part folds into a one-line summary
 const bkGuestStep = (pane) => { const v = BK.v; bkQuotes();   // charges are ready by the Room step
-  bkHead(pane, 'Who is staying?', BK.from === 'timeline' ? 'Room ' + BK.room + ' · ' + BK.prop + ' · ' + fShort(BK.ci) + ' → ' + fShort(BK.co) + ' · ' + bkNights() + (bkNights() === 1 ? ' night' : ' nights') : 'Fields marked * are needed. Grade and gender decide which rooms are offered next.');
-  const ttl = bkVal('title', bSelect(['Mr.', 'Ms.', 'Mrs.', 'Dr.']), 'change'), gen = bkVal('gender', bSelect(['Male', 'Female']), 'change');
-  const nm = bkVal('name', bInput('Type 3 letters to find a saved guest')); nm.required = true; const nmw = h('div', 'relative'); nmw.appendChild(nm); bkSuggest(nm, nmw);
-  const syncG = () => { if (v.title === 'Mr.') v.gender = 'Male'; else if (v.title === 'Ms.' || v.title === 'Mrs.') v.gender = 'Female'; gen.value = v.gender; }; ttl.addEventListener('change', syncG);
-  const em = bkVal('email', bInput('name@company.com', 'email')), ph = bkPhone();
-  const sec = h('div', 'divide-y divide-zuna-50');
-  sec.append(
-    bkSection('Guest', 'As on the guest\'s ID. Gender follows the title; change it if needed.', [
-      ['col-span-4 sm:col-span-3 lg:col-span-2', bkLabel('Title', ttl, true)], ['col-span-8 sm:col-span-9 lg:col-span-7', bkLabel('Full name', nmw, true)], ['col-span-12 sm:col-span-6 lg:col-span-3', bkLabel('Gender', gen, true)]]),
-    bkSection('Contact', 'The booking confirmation is emailed to this address.', [
-      ['sm:col-span-6', bkLabel('Email', em)], ['sm:col-span-6', bkLabel('Mobile', ph)]]),
-    bkSection('Employee & billing', 'Used for eligibility and in the reports.', [
-      ['col-span-6 sm:col-span-4', bkLabel('Grade', bkVal('grade', gradeSelect(), 'change'), true)], ['col-span-6 sm:col-span-4', bkLabel('Employee code', bkVal('emp_code', bInput('e.g. 104523')))], ['sm:col-span-4', bkLabel('Base location', bkVal('base', bInput('e.g. Mumbai')))],
-      ['sm:col-span-6', bkLabel('Concur ID', bkVal('concur_tr', bInput('Travel request ID')))], ['sm:col-span-6', bkLabel('WBS ID', bkVal('wbs', bInput('WBS / cost code')))]]),
-    bkSection('Stay preferences', null, [
-      ['sm:col-span-4', bkLabel('Occupancy', bkVal('occupancy', bSelect([['Single', 'Single'], ['Double', 'Double · shares the room']]), 'change'))], ['sm:col-span-8', bkLabel('Remarks', bkVal('note', bInput('e.g. late arrival, veg meals')))]]));
-  pane.appendChild(sec); };
+  bkHead(pane, 'Who is staying?', 'One part at a time. Pick a saved guest to fill everything in.');
+  if (BK.gopen == null) BK.gopen = 0; BK.gdone = BK.gdone || {};
+  const ph = (x) => x.trim() ? x : '';
+  const sum = {
+    guest: () => v.name.trim() ? [bkGuest(), v.gender, v.grade].filter(Boolean).join(' · ') : '',
+    contact: () => [ph(v.email), ph(v.phone)].filter(Boolean).join(' · ') || 'Not added',
+    work: () => [v.emp_code && 'Emp ' + v.emp_code, v.base, v.concur_tr && 'Concur ' + v.concur_tr, v.wbs && 'WBS ' + v.wbs].filter(Boolean).join(' · ') || 'Not added',
+    prefs: () => [v.occupancy === 'Double' ? 'Double · shares the room' : 'Single', v.note].filter(Boolean).join(' · ')};
+  const parts = [
+    {k: 'guest', title: 'Guest', ic: 'user-round', req: true, build: (g) => {
+      const ttl = bkVal('title', bSelect(['Mr.', 'Ms.', 'Mrs.', 'Dr.']), 'change'), gen = bkVal('gender', bSelect(['Male', 'Female']), 'change');
+      const nm = bkVal('name', bInput('Type 3 letters to find a saved guest')); nm.required = true; const nmw = h('div', 'relative'); nmw.appendChild(nm); bkSuggest(nm, nmw);
+      ttl.addEventListener('change', () => { if (v.title === 'Mr.') v.gender = 'Male'; else if (v.title === 'Ms.' || v.title === 'Mrs.') v.gender = 'Female'; gen.value = v.gender; paintElig(); });
+      const gr = bkVal('grade', gradeSelect(), 'change'); const el = h('p', 'text-xs font-semibold mt-1.5 min-h-[1rem]');
+      const paintElig = () => { const ok = bkGradeOk(); el.textContent = !v.grade ? '' : ok ? '✓ ' + v.grade + ' can book a guest house' : '✕ ' + v.grade + ' ' + bkGender().toLowerCase() + ' guests can’t book a guest house'; el.className = 'text-xs font-semibold mt-1.5 min-h-[1rem] ' + (ok ? 'text-mint-700' : 'text-rose-600'); };
+      gr.addEventListener('change', paintElig); gen.addEventListener('change', paintElig);
+      const gw = h('div'); gw.append(bkLabel('Grade', gr, true), el);
+      g.append(bkLabel('Title', ttl, true), bkLabel('Full name', nmw, true), bkLabel('Gender', gen, true), gw); g.className = 'grid gap-4 grid-cols-[96px_minmax(0,1fr)] lg:grid-cols-[96px_minmax(0,1fr)_150px_170px] items-start';
+      setTimeout(paintElig); return nm; },
+      check: () => !v.name.trim() ? "Enter the guest's name." : !v.grade ? "Choose the guest's grade." : !bkGradeOk() ? 'Grade ' + v.grade + ' is not eligible for a guest house stay.' : ''},
+    {k: 'contact', title: 'Contact', ic: 'mail', build: (g) => { const em = bkVal('email', bInput('name@company.com', 'email')); g.append(bkLabel('Email · the booking is sent here', em), bkLabel('Mobile', bkPhone())); g.className = 'grid gap-4 sm:grid-cols-2'; return em; },
+      check: () => v.email.trim() && !/^[^@\s]+@[^@\s]+\.[^@\s]+$/.test(v.email.trim()) ? "The guest's email address doesn't look right." : !phoneOk(v.phone) ? 'Check the mobile number.' : ''},
+    {k: 'work', title: 'Employee & billing', ic: 'receipt', build: (g) => { const ec = bkVal('emp_code', bInput('e.g. 104523'));
+      g.append(bkLabel('Employee code', ec), bkLabel('Base location', bkVal('base', bInput('e.g. Mumbai'))), bkLabel('Concur ID', bkVal('concur_tr', bInput('Travel request ID'))), bkLabel('WBS ID', bkVal('wbs', bInput('WBS / cost code')))); g.className = 'grid gap-4 sm:grid-cols-2 lg:grid-cols-4'; return ec; }, check: () => ''},
+    {k: 'prefs', title: 'Stay preferences', ic: 'bed', build: (g) => { const oc = bkVal('occupancy', bSelect([['Single', 'Single'], ['Double', 'Double · shares the room']]), 'change');
+      g.append(bkLabel('Occupancy', oc), bkLabel('Remarks', bkVal('note', bInput('e.g. late arrival, veg meals')))); g.className = 'grid gap-4 sm:grid-cols-[220px_minmax(0,1fr)]'; return oc; }, check: () => ''}];
+  const list = h('div', 'space-y-2.5'); pane.appendChild(list);
+  parts.forEach((p, i) => { const open = BK.gopen === i, done = !!BK.gdone[p.k] && !open;
+    const card = h('section', 'rounded-2xl ring-1 transition-shadow ' + (open ? 'ring-mint-500/60 bg-white shadow-[0_8px_24px_-16px_rgba(18,0,90,.35)]' : 'ring-zuna-100 bg-white'));
+    const hd = h(open ? 'div' : 'button', 'w-full flex items-center gap-3 px-4 py-3 text-left'); if (!open) { hd.type = 'button'; hd.onclick = () => { BK.gopen = i; bkDraw(); }; hd.setAttribute('aria-expanded', 'false'); }
+    const dot = h('span', 'grid place-items-center w-7 h-7 rounded-full shrink-0 ' + (done ? 'bg-mint-500 text-zuna-900' : open ? 'bg-zuna-900 text-white' : 'bg-zuna-50 text-zuna-400 ring-1 ring-zuna-100'));
+    dot.appendChild(icon(done ? 'check' : p.ic, 'w-3.5 h-3.5')); hd.appendChild(dot);
+    const tt = h('div', 'min-w-0 flex-1'); const tl = h('p', 'text-sm font-bold flex items-center gap-2'); tl.appendChild(document.createTextNode(p.title)); if (p.req) tl.appendChild(h('span', 'text-[10px] font-bold uppercase tracking-wider text-rose-500', 'Required')); else if (open) tl.appendChild(h('span', 'text-[10px] font-bold uppercase tracking-wider text-zuna-400', 'Optional')); tt.appendChild(tl);
+    if (!open) tt.appendChild(h('p', 'text-xs truncate ' + (done ? 'text-zuna-600' : 'text-zuna-400'), done ? sum[p.k]() : (BK.gskip || {})[p.k] ? 'Skipped · click to add' : 'Next'));
+    hd.appendChild(tt); if (!open && done) hd.appendChild(h('span', 'text-xs font-semibold text-mint-700 shrink-0', 'Edit')); card.appendChild(hd);
+    if (open) { const body = h('div', 'px-4 pb-4 gs-open'); const g = h('div'); const first = p.build(g); body.appendChild(g);
+      const ft = h('div', 'flex items-center justify-end gap-2 mt-4');
+      const nextIdx = parts.findIndex((q, j) => j > i && !BK.gdone[q.k]); const last = i === parts.length - 1;
+      if (!p.req && !last) { const sk = h('button', 'text-xs font-semibold text-zuna-500 hover:text-zuna-900 px-2', 'Skip'); sk.type = 'button'; sk.onclick = () => { BK.gskip = Object.assign(BK.gskip || {}, {[p.k]: true}); BK.gopen = i + 1; bkDraw(); }; ft.appendChild(sk); }
+      const go = h('button', 'btn !py-2 !px-3.5 !text-xs'); go.type = 'button'; go.appendChild(document.createTextNode(last ? 'Done' : 'Continue')); go.appendChild(icon(last ? 'check' : 'arrow-right', 'w-3.5 h-3.5'));
+      go.onclick = () => { const m = p.check(); if (m) { bkFail(m); return; } BK.gdone[p.k] = true; BK.gopen = last ? -1 : (nextIdx > -1 ? nextIdx : i + 1); bkDraw(); }; ft.appendChild(go); body.appendChild(ft); card.appendChild(body);
+      if (BK.gfocus) { BK.gfocus = false; setTimeout(() => { first && (first._zd || first).focus({preventScroll: true}); card.scrollIntoView({behavior: 'smooth', block: 'nearest'}); }, 60); } }
+    list.appendChild(card); });
+  BK.gfocus = true; };
 
 // step 3 · room (only rooms this guest can have)
 const bkRoom = (pane) => { const p = bkHouse(), v = BK.v;

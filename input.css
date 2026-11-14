@@ -414,3 +414,8 @@ html.dark .tl-ng { background: #1a1440 repeating-linear-gradient(45deg, #2a2160 
 .ok-tick svg path, .ok-tick svg polyline { stroke-dasharray: 30; stroke-dashoffset: 30; animation: okDraw .6s .15s ease forwards; }
 @keyframes okDraw { to { stroke-dashoffset: 0; } }
 @media (prefers-reduced-motion: reduce) { .ok-tick svg path, .ok-tick svg polyline { animation: none; stroke-dashoffset: 0; } }
+
+/* Book a room · Guest step: the open part slides in */
+.gs-open { animation: gsIn .28s cubic-bezier(.2,.8,.2,1); }
+@keyframes gsIn { from { opacity: 0; transform: translateY(-6px); } to { opacity: 1; transform: none; } }
+@media (prefers-reduced-motion: reduce) { .gs-open { animation: none; } }

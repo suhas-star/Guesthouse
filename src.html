@@ -1374,32 +1374,25 @@ const bkConfirm = (pane) => { const v = BK.v, p = bkHouse();
 
 // booking voucher: shown after confirming, downloadable as PDF here and from Trips
 const dlVoucher = (t) => window.__ltm && window.__ltm.voucher ? window.__ltm.voucher(t, props.find((p) => p.property === t.property) || {}, DATA.client || {}) : toast('Voucher download is not ready yet. Reload the page.', true);
-const voucherCard = (t) => { const p = props.find((x) => x.property === t.property) || {}, n = nightsOf(t.check_in, t.check_out), off = t.status === 'Cancelled';
-  const c = h('div', 'rounded-2xl overflow-hidden bg-white ring-1 ring-zuna-100 shadow-xl shadow-zuna-900/10 text-left');
-  const hd = h('div', 'bg-zuna-900 text-white px-5 sm:px-6 py-4 flex items-center gap-4 border-b-4 border-mint-500'); const ht = h('div', 'min-w-0 flex-1'); ht.appendChild(h('p', 'font-bold text-base sm:text-lg', 'Guest house booking voucher')); ht.appendChild(h('p', 'text-xs text-zuna-200 mt-0.5 truncate', ((DATA.client && (DATA.client.legal_name || DATA.client.name)) || '') + ' · issued by Zuna Hotel Desk')); hd.appendChild(ht);
-  const cd = h('div', 'text-right shrink-0'); cd.appendChild(h('p', 'text-[10px] font-bold uppercase tracking-wider text-zuna-300', 'Booking code')); cd.appendChild(h('p', 'text-xl sm:text-2xl font-black tracking-wide tabular-nums', t.code)); hd.appendChild(cd); c.appendChild(hd);
-  const bd = h('div', 'p-5 sm:p-6 space-y-5'); const st = h('div', 'flex flex-wrap items-center gap-2'); st.appendChild(h('span', 'zchip ' + (off ? 'zchip-bad' : 'zchip-live'), off ? 'Cancelled' : 'Confirmed')); st.appendChild(h('span', 'text-xs text-zuna-500', off ? 'This booking was cancelled.' : 'Show this voucher at check-in.')); bd.appendChild(st);
-  const tiles = h('div', 'grid grid-cols-3 gap-2'); [['Check-in', fFull(t.check_in).replace(/^(\w+), /, '$1 · '), ''], ['Check-out', fFull(t.check_out).replace(/^(\w+), /, '$1 · '), ''], ['Nights', String(n), t.occupancy === 'Double' ? 'Shared room' : 'Single occupancy']].forEach(([k, v, s2], i) => {
-    const x = h('div', 'rounded-xl bg-zuna-50 ring-1 ring-zuna-100 px-3 py-2.5 min-w-0'); x.appendChild(h('p', 'text-[10px] font-bold uppercase tracking-wider text-zuna-500', k)); x.appendChild(h('p', (i === 2 ? 'text-xl' : 'text-sm') + ' font-bold mt-0.5 leading-snug', v)); if (s2) x.appendChild(h('p', 'text-[11px] text-zuna-500 mt-0.5', s2)); tiles.appendChild(x); }); bd.appendChild(tiles);
-  const two = h('div', 'grid gap-5 sm:grid-cols-2'); const sec = (title, rows) => { const w = h('div', 'min-w-0'); w.appendChild(h('p', 'text-[10.5px] font-bold uppercase tracking-wider text-mint-700 pb-1.5 mb-2 border-b border-zuna-100', title)); const dl = h('dl', 'grid grid-cols-[96px_minmax(0,1fr)] gap-x-3 gap-y-1.5 text-[13px]');
-    rows.filter((r) => r[1]).forEach(([k, v]) => dl.append(h('dt', 'text-zuna-500', k), h('dd', 'font-semibold break-words', v))); w.appendChild(dl); return w; };
-  two.append(sec('Guest', [['Name', t.guest], ['Grade', t.grade], ['Employee code', t.emp_code], ['Email', t.email], ['Mobile', t.phone]]), sec('Stay', [['Guest house', t.property + (p.city ? ', ' + p.city : '')], ['Address', p.address], ['Room', t.room + (t.occupancy === 'Double' ? ' (shared)' : '')], ['Concur ID', t.concur_tr], ['WBS ID', t.wbs], ['Remarks', t.note]]));
-  bd.appendChild(two);
-  const hdl = (t.helpdesk && t.helpdesk.length ? t.helpdesk : (p.contacts || []).filter((x) => x.phone || x.email)).slice(0, 4);
-  const hs = h('div', 'rounded-xl bg-zuna-50 ring-1 ring-zuna-100 px-4 py-3'); hs.appendChild(h('p', 'text-[10.5px] font-bold uppercase tracking-wider text-mint-700 mb-1.5', 'Guest house helpdesk'));
-  if (!hdl.length) hs.appendChild(h('p', 'text-xs text-zuna-500', 'Not listed yet. Call Zuna customer support: +91 91009 90530 · hotel@zuna.ai'));
-  hdl.forEach((x) => { const r = h('div', 'flex flex-wrap items-baseline gap-x-3 gap-y-0.5 text-[13px] py-1'); const nm = h('span', 'font-semibold', x.name); r.appendChild(nm); if (x.designation) r.appendChild(h('span', 'text-xs text-zuna-500', x.designation)); if (x.phone) r.appendChild(h('span', 'font-semibold tabular-nums sm:ml-auto', x.phone)); if (x.email) r.appendChild(h('span', 'text-xs text-zuna-600', x.email)); hs.appendChild(r); });
-  bd.appendChild(hs);
-  const zs = h('p', 'text-xs text-zuna-500'); zs.append(h('b', 'text-zuna-900 font-semibold', 'Zuna customer support: '), document.createTextNode('+91 91009 90530 · hotel@zuna.ai')); bd.appendChild(zs);
-  c.appendChild(bd); return c; };
-const bkSuccess = (card) => { const t = BK.done.trip, w = h('div', 'p-6 sm:p-8');
-  const top = h('div', 'flex flex-wrap items-center gap-4 mb-6'); const tk = h('div', 'w-12 h-12 rounded-full bg-mint-500 text-zuna-900 grid place-items-center shrink-0'); tk.appendChild(icon('check', 'w-6 h-6')); top.appendChild(tk);
-  const tt = h('div', 'min-w-0 flex-1'); tt.appendChild(h('p', 'text-lg font-extrabold', BK.done.changed ? 'Booking changed' : 'Booking confirmed')); tt.appendChild(h('p', 'text-sm text-zuna-500', t.mail_status === 'sent' ? 'The voucher has been emailed to ' + (t.email || 'the guest') + '.' : 'Download the voucher below and share it with the guest.')); top.appendChild(tt);
-  const r = h('div', 'flex flex-wrap gap-2'); const v = h('button', 'btn-primary'); v.type = 'button'; v.appendChild(icon('download', 'w-4 h-4')); v.appendChild(document.createTextNode('Download voucher')); v.onclick = () => dlVoucher(t);
-  const a = h('button', 'btn'); a.type = 'button'; a.appendChild(icon('luggage', 'w-4 h-4')); a.appendChild(document.createTextNode('Open in Trips')); a.onclick = () => { TR.tab = tripState(t) === 'In stay' ? 'stay' : 'upcoming'; TR.open = t.id; BK.built = false; go('trips'); };
+const bkSuccess = (card) => { const t = BK.done.trip, n = nightsOf(t.check_in, t.check_out), w = h('div', 'relative overflow-hidden px-6 py-10 sm:py-12 text-center');
+  w.appendChild(h('div', 'ok-glow pointer-events-none absolute inset-x-0 -top-40 h-80'));
+  const tk = h('div', 'ok-tick relative mx-auto w-[72px] h-[72px] rounded-full bg-mint-500 text-zuna-900 grid place-items-center'); const sv = icon('check', 'w-9 h-9'); sv.setAttribute('stroke-width', '3'); tk.appendChild(sv); w.appendChild(tk);
+  w.appendChild(h('h2', 'relative text-2xl font-extrabold mt-5', BK.done.changed ? 'Booking changed' : 'Booking confirmed'));
+  w.appendChild(h('p', 'relative text-sm text-zuna-500 mt-1', t.guest + ' · ' + t.property + ((props.find((p) => p.property === t.property) || {}).city ? ', ' + props.find((p) => p.property === t.property).city : '')));
+  const cb = h('div', 'relative inline-flex items-center gap-3 mt-4 px-4 py-2.5 rounded-xl border-[1.5px] border-dashed border-zuna-300'); cb.appendChild(h('span', 'text-2xl font-black tracking-[.08em] tabular-nums', t.code));
+  const cp = h('button', 'rounded-lg bg-zuna-50 px-2 py-1 text-[11px] font-bold text-zuna-500 hover:text-zuna-900', 'Copy'); cp.type = 'button'; cp.setAttribute('aria-label', 'Copy booking code ' + t.code);
+  cp.onclick = async () => { try { await navigator.clipboard.writeText(t.code); toast('Copied ' + t.code); } catch (e) { toast('Booking code: ' + t.code); } }; cb.appendChild(cp); w.appendChild(cb);
+  const tl = h('div', 'relative grid grid-cols-1 sm:grid-cols-3 gap-2 max-w-xl mx-auto mt-6 text-left');
+  [['Check-in', fFull(t.check_in).replace(/^(\w{3})\w*, (\d+) (\w{3})\w* (\d+)$/, '$1, $2 $3 $4')], ['Check-out', fFull(t.check_out).replace(/^(\w{3})\w*, (\d+) (\w{3})\w* (\d+)$/, '$1, $2 $3 $4')], ['Room', t.room + ' · ' + n + (n === 1 ? ' night' : ' nights')]].forEach(([k, v]) => {
+    const x = h('div', 'rounded-xl bg-zuna-50 ring-1 ring-zuna-100 px-3.5 py-2.5'); x.appendChild(h('p', 'text-[10px] font-bold uppercase tracking-wider text-zuna-500', k)); x.appendChild(h('p', 'text-sm font-bold mt-0.5', v)); tl.appendChild(x); }); w.appendChild(tl);
+  const r = h('div', 'relative flex flex-wrap justify-center gap-2 mt-7');
+  const v = h('button', 'btn-primary'); v.type = 'button'; v.appendChild(icon('download', 'w-4 h-4')); v.appendChild(document.createTextNode('Download voucher')); v.onclick = () => dlVoucher(t);
+  const a = h('button', 'btn'); a.type = 'button'; a.appendChild(icon('luggage', 'w-4 h-4')); a.appendChild(document.createTextNode('View in Trips')); a.onclick = () => { TR.tab = tripState(t) === 'In stay' ? 'stay' : 'upcoming'; TR.open = t.id; BK.built = false; go('trips'); };
   const b = h('button', 'btn'); b.type = 'button'; b.appendChild(icon('calendar-plus', 'w-4 h-4')); b.appendChild(document.createTextNode('Book another')); b.onclick = () => { BK.built = false; buildBook(); };
-  r.append(v, a, b); top.appendChild(r); w.appendChild(top);
-  const vc = h('div', 'max-w-3xl'); vc.appendChild(voucherCard(t)); w.appendChild(vc); card.appendChild(w); };
+  r.append(v, a, b); w.appendChild(r);
+  const sent = t.mail_status === 'sent', ml = h('p', 'relative mt-4 text-[13px] font-semibold inline-flex items-center gap-1.5 ' + (sent ? 'text-mint-700' : 'text-zuna-500'));
+  if (sent) ml.appendChild(icon('check', 'w-3.5 h-3.5')); ml.appendChild(document.createTextNode(sent ? 'Voucher emailed to ' + (t.email || 'the guest') : mailTxt(t.mail_status) + ' · download the voucher to share it')); w.appendChild(ml);
+  card.appendChild(w); };
 
 // Zuna team: rooms by nights; click the first and the last night in a free room
 const bkTimeline = (body) => { const live = props.filter((p) => p.status === 'Live'), v = BK.v, T = BK.tl;

@@ -407,3 +407,10 @@ table.hx-c2 .hx-gr-in { display: inline-flex; }
 /* Book a room timeline: nights not open to the guest's grade */
 .tl-ng { background: #f4f2fb repeating-linear-gradient(45deg, #e6e2f6 0 3px, transparent 3px 7px); }
 html.dark .tl-ng { background: #1a1440 repeating-linear-gradient(45deg, #2a2160 0 3px, transparent 3px 7px); }
+
+/* Book a room · booking confirmed: soft glow and a tick that draws itself in */
+.ok-glow { background: radial-gradient(closest-side, rgba(2,201,136,.16), transparent); }
+.ok-tick { box-shadow: 0 0 0 10px rgba(2,201,136,.15); }
+.ok-tick svg path, .ok-tick svg polyline { stroke-dasharray: 30; stroke-dashoffset: 30; animation: okDraw .6s .15s ease forwards; }
+@keyframes okDraw { to { stroke-dashoffset: 0; } }
+@media (prefers-reduced-motion: reduce) { .ok-tick svg path, .ok-tick svg polyline { animation: none; stroke-dashoffset: 0; } }

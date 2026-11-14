@@ -1376,11 +1376,11 @@ const bkContactErr = () => { const v = BK.v, e = (v.email || '').trim(), n = spl
 const bkGuestStep = (pane) => { const v = BK.v; bkQuotes();   // charges are ready by the Room step
   if (BK.gopen == null || BK.gopen < 0) BK.gopen = 0; const i = BK.gopen, p = BK_GPARTS[i];
   // progress: a dark band with a pill per part (current = glowing green pill, done = green dot), then the part's title
-  const bd = h('div', 'gs-band'); const row = h('div', 'flex items-center gap-4 flex-wrap'); const pills = h('div', 'flex items-center gap-2');
+  const bd = h('div', 'gs-band'); const pills = h('div', 'flex items-center gap-2 shrink-0');
   BK_GPARTS.forEach((q, j) => { const d = h(j < i ? 'button' : 'span', 'gs-pill' + (j < i ? ' done' : j === i ? ' on' : '')); if (j < i) { d.type = 'button'; d.title = 'Back to ' + q.title; d.setAttribute('aria-label', 'Back to ' + q.title); d.onclick = () => { BK.gdir = -1; BK.gopen = j; bkDraw(); }; } pills.appendChild(d); });
-  row.append(pills, h('span', 'gs-band-lbl', 'Guest details · ' + (i + 1) + ' of ' + BK_GPARTS.length), h('span', 'gs-band-hint ml-auto', i === 0 ? 'Type 3 letters of a name to pick a saved guest' : 'Moves on by itself once filled · or press Next'));
   const tl = h('h3', 'gs-band-ttl'); tl.appendChild(document.createTextNode(p.title)); tl.appendChild(h('span', 'gs-band-tag' + (p.req ? ' req' : ''), p.req ? 'Required' : 'Optional'));
-  bd.append(row, tl, h('p', 'gs-band-sub', p.sub)); pane.appendChild(bd);
+  const tx = h('div', 'min-w-0 flex-1'); tx.append(tl, h('p', 'gs-band-sub', p.sub));
+  bd.append(pills, tx, h('span', 'gs-band-lbl shrink-0', (i + 1) + ' of ' + BK_GPARTS.length)); pane.appendChild(bd);
   // the slide
   const sl = h('section', 'gs-slide ' + (BK.gdir === -1 ? 'gs-from-left' : 'gs-from-right')); BK.gdir = 1;
   // fields: one narrow column, values on an underline, small spaced labels; title, gender and occupancy are tap chips
@@ -1400,11 +1400,11 @@ const bkGuestStep = (pane) => { const v = BK.v; bkQuotes();   // charges are rea
     ttl.addEventListener('change', () => { if (v.title === 'Mr.') v.gender = 'Male'; else if (v.title === 'Ms.' || v.title === 'Mrs.') v.gender = 'Female'; gen.value = v.gender; gc.paint(); paintElig(); });
     gr.addEventListener('change', paintElig); gen.addEventListener('change', paintElig); const gw = h('div'); gw.append(bkLabel('Grade', gr, true), el);
     const em = bkVal('email', bInput('name@company.com', 'email')); em.required = true;
-    g.append(bkLabel('Title', tc, true), bkLabel('Full name', nmw, true), row2(bkLabel('Gender', gc, true), gw), bkLabel('Email', em, true), bkLabel('Mobile', bkPhone(), true)); setTimeout(paintElig); }
+    g.append(row2(bkLabel('Title', tc, true), bkLabel('Gender', gc, true)), row2(bkLabel('Full name', nmw, true), gw), row2(bkLabel('Email', em, true), bkLabel('Mobile', bkPhone(), true))); setTimeout(paintElig); }
   if (p.k === 'work') { const ec = bkVal('emp_code', bInput('e.g. 104523')); first = ec;
-    g.append(row2(bkLabel('Employee code', ec), bkLabel('Base location', bkVal('base', bInput('e.g. Mumbai')))), bkLabel('Concur ID', bkVal('concur_tr', bInput('Travel request ID'))), bkLabel('WBS ID', bkVal('wbs', bInput('WBS / cost code')))); }
+    g.append(row2(bkLabel('Employee code', ec), bkLabel('Base location', bkVal('base', bInput('e.g. Mumbai')))), row2(bkLabel('Concur ID', bkVal('concur_tr', bInput('Travel request ID'))), bkLabel('WBS ID', bkVal('wbs', bInput('WBS / cost code'))))); }
   if (p.k === 'prefs') { const oc = bkVal('occupancy', bSelect(['Single', 'Double']), 'change'); const rm = bkVal('note', bInput('e.g. late arrival, veg meals')); first = rm;
-    g.append(bkLabel('Occupancy', chips(oc, [['Single', 'Single'], ['Double', 'Double · shares the room']], 'Occupancy')), bkLabel('Remarks', rm)); }
+    g.append(row2(bkLabel('Occupancy', chips(oc, [['Single', 'Single'], ['Double', 'Double · shares the room']], 'Occupancy')), bkLabel('Remarks', rm))); }
   sl.appendChild(g); pane.appendChild(sl);
   // fill it in and the next part slides in by itself: once the part is complete and the cursor leaves a field (or the mobile number is complete)
   const full = () => p.k === 'guest' ? !BK_GPARTS[0].check() : p.k === 'work' ? ['emp_code', 'base', 'concur_tr', 'wbs'].every((k) => String(v[k] || '').trim()) : false;

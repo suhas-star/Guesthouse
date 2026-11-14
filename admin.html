@@ -815,26 +815,74 @@ const renderUsers = (D, c) => {
   D.appendChild(dataTable({cols, rows: c.users, st: UF.st, noun: 'users', empty: 'No users yet.'}));
 };
 
+// ---------- Client settings: Profile · Grades & eligibility · Booking emails, one Save for all ----------
+const CS = {view: {}, draft: {}};
+const expandGrades = (txt) => { const out = []; String(txt || '').toUpperCase().split(/[,;\n]+/).map((x) => x.trim()).filter(Boolean).forEach((tok) => {
+  const m = tok.match(/^([A-Z]+)\s*(\d+)\s*(?:-|–|TO)\s*([A-Z]+)?\s*(\d+)$/); if (m && (!m[3] || m[3] === m[1])) { for (let n = Math.min(+m[2], +m[4]); n <= Math.max(+m[2], +m[4]); n++) out.push(m[1] + n); } else if (/^[A-Z]+\d*$/.test(tok.replace(/\s+/g, ''))) out.push(tok.replace(/\s+/g, '')); });
+  return [...new Set(out)]; };
+const gradeSeries = (list) => { const m = new Map(); list.forEach((g) => { const k = (g.match(/^[A-Z]+(?=\d)/i) || ['Other'])[0].toUpperCase(); if (!m.has(k)) m.set(k, []); m.get(k).push(g); }); return m; };
 const renderSettings = (D, c) => {
-  const card = h('div', 'card p-6 space-y-5 max-w-2xl');
-  const lg = h('div', 'flex items-center gap-4'); const pv = h('div', 'logo-box w-36 h-16 rounded-xl bg-white ring-1 ring-zuna-100 grid place-items-center overflow-hidden'); if (c.logo) { const i = h('img', 'max-h-12 max-w-32 object-contain'); i.src = c.logo; pv.appendChild(i); } else pv.appendChild(h('span', 'text-xs text-zuna-400', 'No logo'));
-  const up = ib('label', 'btn cursor-pointer focus-within:ring-mint-500', c.logo ? 'Replace logo' : 'Upload logo', 'upload'); const fi = h('input', 'sr-only'); fi.type = 'file'; fi.accept = 'image/png,image/jpeg,image/webp'; fi.setAttribute('aria-label', 'Client logo'); up.appendChild(fi);
-  const prog = h('div', 'w-56');
-  const send = async (F) => { if (!F || !/^image\//.test(F.type)) { toast('Use a PNG, JPG or WEBP image.', true); return; } const r = progressRow(F.name); prog.replaceChildren(r.el);
-    try { await apiUp('client/logo', {client_id: c.id, data_url: await toDataUrl(F, 600, true)}, (f) => r.set(f)); r.done(true); toast('Logo updated'); setTimeout(() => load(true), 400); } catch (er) { r.done(false); toast(er.message, true); } };
-  fi.onchange = () => send(fi.files[0]);
-  lg.classList.add('dz', 'rounded-2xl', 'border-2', 'border-dashed', 'border-transparent', 'p-2', '-m-2', 'transition-colors'); dropZone(lg, (fs) => send(fs[0]));
-  lg.append(pv, up, h('span', 'text-xs text-zuna-500', 'or drop an image here'), prog); card.appendChild(field('Client logo (shown in the client\'s dashboard)', lg));
-  const n = inp(c.name); card.appendChild(field('Client name', n));
-  const ln = inp(c.legal_name || '', 'e.g. LTM Limited'); card.appendChild(field('Company name in reports (Guest Circle Name in the weekly GH report)', ln));
-  const gr = h('textarea', 'inp'); gr.rows = 2; gr.value = c.grades.join(', '); card.appendChild(field('Grades used by this client (comma separated, in order)', gr));
-  const em = inp(c.elig_male || '', 'e.g. M6–M8, P6–P8, L6–L8, E1–E8'), ef = inp(c.elig_female || '', 'e.g. M5–M8, P5–P8, L5–L8, E1–E8');
-  const eg = h('div', 'grid sm:grid-cols-2 gap-3'); eg.append(field('Male guests', em), field('Female guests', ef)); card.appendChild(field('Guest house eligibility (grades that may book; ranges like M6–M8; leave both empty for no rule)', eg));
-  const mc = inp(c.mail_cc || '', 'e.g. travel.desk@zuna.ai, admin@client.com'); card.appendChild(field('Booking emails · default CC (every booking, change and cancellation; comma separated)', mc));
-  const mb = inp(c.mail_bcc || '', 'e.g. records@zuna.ai'); card.appendChild(field('Booking emails · default BCC', mb));
-  const act = switchEl('Client active (users can log in)', c.active); card.appendChild(act);
-  const save = h('button', 'btn-primary', 'Save settings'); save.onclick = async () => { try { await api('client', {id: c.id, name: n.value, legal_name: ln.value, elig_male: em.value, elig_female: ef.value, mail_cc: mc.value, mail_bcc: mb.value, grades: gr.value.split(/\s*[,\n]\s*/).map((g) => g.trim()).filter(Boolean), active: act.input.checked}); toast('Saved'); load(true); } catch (er) { toast(er.message, true); } };
-  card.appendChild(save); D.appendChild(card);
+  const d = CS.draft[c.id] = CS.draft[c.id] || {name: c.name, legal_name: c.legal_name || '', grades: c.grades.slice(), male: expandGrades(c.elig_male), female: expandGrades(c.elig_female), cc: c.mail_cc || '', bcc: c.mail_bcc || '', active: c.active};
+  const view = CS.view[c.id] || 'profile', dirty = () => JSON.stringify([d.name, d.legal_name, d.grades, d.male, d.female, d.cc, d.bcc, d.active]) !== JSON.stringify([c.name, c.legal_name || '', c.grades, expandGrades(c.elig_male), expandGrades(c.elig_female), c.mail_cc || '', c.mail_bcc || '', c.active]);
+  const shell = h('div', 'card overflow-hidden'); D.appendChild(shell);
+  // view switch
+  const sb = h('div', 'flex flex-wrap items-center gap-3 px-5 py-3 border-b border-zuna-100');
+  const seg = h('div', 'flex gap-1 rounded-xl bg-zuna-50 ring-1 ring-zuna-100 p-1'); seg.setAttribute('role', 'tablist');
+  [['profile', 'Profile', 'building-2'], ['grades', 'Grades & eligibility', 'users'], ['emails', 'Booking emails', 'mail']].forEach(([k, l, ic]) => { const b = ib('button', 'rounded-lg px-3 py-1.5 text-xs font-semibold transition-colors ' + (view === k ? 'bg-zuna-900 text-white' : 'text-zuna-600 hover:text-zuna-900'), l, ic);
+    b.type = 'button'; b.setAttribute('role', 'tab'); b.setAttribute('aria-selected', view === k ? 'true' : 'false'); b.onclick = () => { CS.view[c.id] = k; render(); }; seg.appendChild(b); });
+  sb.appendChild(seg); const st = h('span', 'ml-auto inline-flex items-center gap-1.5 text-xs font-semibold rounded-full px-2.5 py-1 ' + (c.active ? 'bg-mint-50 text-mint-700 ring-1 ring-mint-200' : 'bg-zuna-50 text-zuna-500 ring-1 ring-zuna-100'), c.active ? 'Active' : 'Inactive'); sb.appendChild(st); shell.appendChild(sb);
+  const body = h('div', 'p-6'); shell.appendChild(body);
+  // save bar
+  const bar = h('div', 'flex flex-wrap items-center gap-3 px-6 py-3 border-t border-zuna-100 bg-zuna-50/50'); const note = h('p', 'text-xs font-semibold'); const undo = h('button', 'btn !py-1.5', 'Discard changes'); undo.type = 'button';
+  const save = ib('button', 'btn-primary', 'Save settings', 'check'); const ref = () => { const x = dirty(); note.textContent = x ? 'Unsaved changes' : 'All changes saved'; note.className = 'text-xs font-semibold ' + (x ? 'text-amber-700' : 'text-zuna-500'); undo.classList.toggle('hidden', !x); save.disabled = !x; };
+  undo.onclick = () => { delete CS.draft[c.id]; render(); };
+  save.onclick = async () => { if (!d.name.trim()) { toast('Enter the client name.', true); return; } if (!d.grades.length) { toast('Add at least one grade.', true); return; } save.disabled = true;
+    try { await api('client', {id: c.id, name: d.name, legal_name: d.legal_name, grades: d.grades, elig_male: d.male.join(','), elig_female: d.female.join(','), mail_cc: d.cc, mail_bcc: d.bcc, active: d.active}); delete CS.draft[c.id]; toast('Settings saved'); load(true); }
+    catch (er) { toast(er.message, true); save.disabled = false; } };
+  const right = h('div', 'ml-auto flex gap-2'); right.append(undo, save); bar.append(note, right); shell.appendChild(bar);
+  const sec = (title, desc, el) => { const s = h('section', 'grid gap-3 lg:grid-cols-[220px_minmax(0,1fr)] lg:gap-8 py-5 first:pt-0 last:pb-0 border-b border-zuna-50 last:border-0'); const l = h('div'); l.appendChild(h('h4', 'text-sm font-bold', title)); if (desc) l.appendChild(h('p', 'text-xs text-zuna-500 mt-1 leading-relaxed', desc)); s.append(l, el); return s; };
+  const bind = (el, k) => { el.value = d[k]; el.addEventListener('input', () => { d[k] = el.value; ref(); }); return el; };
+
+  if (view === 'profile') {
+    const lg = h('div', 'flex flex-wrap items-center gap-4'); const pv = h('div', 'logo-box w-40 h-20 rounded-xl bg-white ring-1 ring-zuna-100 grid place-items-center overflow-hidden'); if (c.logo) { const i = h('img', 'max-h-14 max-w-36 object-contain'); i.src = c.logo; i.alt = c.name + ' logo'; pv.appendChild(i); } else pv.appendChild(h('span', 'text-xs text-zuna-400', 'No logo'));
+    const up = ib('label', 'btn cursor-pointer focus-within:ring-mint-500', c.logo ? 'Replace logo' : 'Upload logo', 'upload'); const fi = h('input', 'sr-only'); fi.type = 'file'; fi.accept = 'image/png,image/jpeg,image/webp'; fi.setAttribute('aria-label', 'Client logo'); up.appendChild(fi);
+    const prog = h('div', 'w-56'); const send = async (F) => { if (!F || !/^image\//.test(F.type)) { toast('Use a PNG, JPG or WEBP image.', true); return; } const r = progressRow(F.name); prog.replaceChildren(r.el);
+      try { await apiUp('client/logo', {client_id: c.id, data_url: await toDataUrl(F, 600, true)}, (f) => r.set(f)); r.done(true); toast('Logo updated'); setTimeout(() => load(true), 400); } catch (er) { r.done(false); toast(er.message, true); } };
+    fi.onchange = () => send(fi.files[0]); lg.classList.add('dz', 'rounded-2xl', 'border-2', 'border-dashed', 'border-transparent', 'p-2', '-m-2', 'transition-colors'); dropZone(lg, (fs) => send(fs[0]));
+    const lt = h('div', 'text-xs text-zuna-500'); lt.append(up, h('p', 'mt-1.5', 'PNG, JPG or WEBP · or drop an image here')); lg.append(pv, lt, prog);
+    body.appendChild(sec('Logo', "Shown in the client's dashboard, sign-in and vouchers.", lg));
+    const g = h('div', 'grid gap-4 sm:grid-cols-2'); g.append(field('Client name', bind(inp(''), 'name')), field('Company name in reports', bind(inp('', 'e.g. LTM Limited'), 'legal_name')));
+    body.appendChild(sec('Names', 'The company name appears as the Guest Circle Name in the weekly GH report.', g));
+    const act = switchEl('Client active · users can sign in', d.active); act.input.addEventListener('change', () => { d.active = act.input.checked; ref(); });
+    body.appendChild(sec('Status', 'Turning a client off signs its users out and stops new sign-ins.', act)); }
+
+  if (view === 'grades') {
+    // grades as chips by series; add a grade or a range like P1-P8
+    const gw = h('div', 'space-y-3'); const paintG = () => { gw.replaceChildren(); const by = gradeSeries(d.grades);
+      by.forEach((list, k) => { const row = h('div', 'flex flex-wrap items-center gap-1.5'); row.appendChild(h('span', 'w-12 shrink-0 text-xs font-bold text-zuna-500', k === 'OTHER' ? 'Other' : k));
+        list.forEach((x) => { const chip = h('span', 'inline-flex items-center gap-1 rounded-lg bg-white ring-1 ring-zuna-100 pl-2.5 pr-1 py-1 text-xs font-semibold'); chip.appendChild(document.createTextNode(x));
+          const rm = h('button', 'grid place-items-center w-5 h-5 rounded-md text-zuna-400 hover:bg-rose-50 hover:text-rose-600', '×'); rm.type = 'button'; rm.setAttribute('aria-label', 'Remove grade ' + x); rm.onclick = () => { d.grades = d.grades.filter((y) => y !== x); d.male = d.male.filter((y) => y !== x); d.female = d.female.filter((y) => y !== x); paintG(); paintE(); ref(); }; chip.appendChild(rm); row.appendChild(chip); });
+        gw.appendChild(row); });
+      const add = h('div', 'flex gap-2 pt-1 pl-[54px]'); const ai = inp('', 'Add a grade or a range, e.g. M9 or P1-P8'); ai.classList.add('!w-80'); const ab = ib('button', 'btn', 'Add', 'plus');
+      const go = () => { const nw = expandGrades(ai.value).filter((x) => !d.grades.includes(x)); if (!nw.length) { toast('Type a grade like M9 or a range like P1-P8.', true); return; } d.grades = d.grades.concat(nw); paintG(); paintE(); ref(); };
+      ab.onclick = go; ai.onkeydown = (e) => { if (e.key === 'Enter') { e.preventDefault(); go(); } }; add.append(ai, ab); gw.appendChild(add); };
+    body.appendChild(sec('Grades', 'The grades this client uses, in order. They appear in Book a room and in the reports.', gw));
+    // eligibility: click grades on or off for men and for women
+    const ew = h('div', 'space-y-5'); const paintE = () => { ew.replaceChildren();
+      [['male', 'Male guests'], ['female', 'Female guests']].forEach(([k, l]) => { const box = h('div'); const top = h('div', 'flex flex-wrap items-center gap-2 mb-2'); top.appendChild(h('p', 'text-sm font-bold', l)); top.appendChild(h('span', 'text-xs text-zuna-500', d[k].length ? d[k].length + ' of ' + d.grades.length + ' grades can book' : 'No rule · every grade can book'));
+        const qa = h('div', 'ml-auto flex gap-1.5'); [['All', () => d.grades.slice()], ['None', () => []]].forEach(([t, f]) => { const b = h('button', 'text-xs font-semibold text-mint-700 hover:underline', t); b.type = 'button'; b.onclick = () => { d[k] = f(); paintE(); ref(); }; qa.appendChild(b); }); top.appendChild(qa); box.appendChild(top);
+        gradeSeries(d.grades).forEach((list, sk) => { const row = h('div', 'flex flex-wrap items-center gap-1.5 mb-1.5'); row.appendChild(h('span', 'w-12 shrink-0 text-xs font-bold text-zuna-500', sk === 'OTHER' ? 'Other' : sk));
+          list.forEach((x) => { const on = d[k].includes(x); const b = h('button', 'min-w-[44px] rounded-lg px-2 py-1.5 text-xs font-bold transition-colors ' + (on ? 'bg-zuna-900 text-white shadow-[inset_0_-2px_0_#02C988]' : 'bg-white ring-1 ring-zuna-100 text-zuna-400 hover:ring-mint-500 hover:text-zuna-700'), x);
+            b.type = 'button'; b.setAttribute('aria-pressed', on ? 'true' : 'false'); b.setAttribute('aria-label', l + ': ' + x + (on ? ' can book' : ' cannot book')); b.onclick = () => { d[k] = on ? d[k].filter((y) => y !== x) : d.grades.filter((y) => d[k].includes(y) || y === x); paintE(); ref(); }; row.appendChild(b); });
+          box.appendChild(row); });
+        ew.appendChild(box); }); };
+    body.appendChild(sec('Guest house eligibility', 'Click a grade to switch it on or off. Dark = can book a guest house. Leave both empty for no rule.', ew));
+    paintG(); paintE(); }
+
+  if (view === 'emails') {
+    const g = h('div', 'grid gap-4'); g.append(field('Default CC', bind(inp('', 'e.g. travel.desk@zuna.ai, admin@client.com'), 'cc')), field('Default BCC', bind(inp('', 'e.g. records@zuna.ai'), 'bcc')));
+    body.appendChild(sec('Copies of every booking email', 'Sent on every booking, change and cancellation for this client. Separate several addresses with commas. Clients never see these.', g)); }
+  ref();
 };
 
 if ($('#newClient')) $('#newClient').onclick = () => { const f = h('div', 'space-y-3'); const n = inp('', 'e.g. LTM'); f.appendChild(field('Client name', n)); f.appendChild(h('p', 'text-xs text-zuna-500', 'You can add the logo, guest houses and users next.'));

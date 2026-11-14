@@ -834,7 +834,7 @@ async function placeTrip(env, user, cid, b, trip) {
   else { const r = await env.DB.prepare("INSERT INTO trips (client_id, " + cols.join(", ") + ", status, booked_by, booked_at, history) VALUES (?, " + cols.map(() => "?").join(", ") + ", 'Confirmed', ?, ?, ?)").bind(client.id, ...vals, user.email, now, JSON.stringify(hist)).run(); id = r.meta ? r.meta.last_row_id : r.lastInsertRowid; }
   await saveGuest(env, client.id, t);
   const saved = await env.DB.prepare("SELECT * FROM trips WHERE id = ?").bind(id).first();
-  const mail = b.send_mail === false ? "not sent" : await tripMail(env, client, saved, av.gh, trip ? "changed" : "confirmed");
+  const mail = b.send_mail === false ? "not sent" : b.mail_later ? "pending" : await tripMail(env, client, saved, av.gh, trip ? "changed" : "confirmed");
   await env.DB.prepare("UPDATE trips SET mail_status = ? WHERE id = ?").bind(mail, id).run();
   return json({ok: true, trip: Object.assign(tripOut(Object.assign(saved, {mail_status: mail}), user.admin), {helpdesk: helpdeskOf(av.gh)})});
 }
@@ -858,27 +858,52 @@ async function cancelTrip(env, user, cid, b) {
   return json({ok: true, trip: Object.assign(tripOut(Object.assign(saved, {mail_status: mail}), user.admin), {helpdesk: helpdeskOf(gh)})});
 }
 // confirmation / change / cancellation e-mail to the guest, copies to the CC and BCC addresses
-async function tripMail(env, client, trip, gh, kind) {
+async function tripMail(env, client, trip, gh, kind, pdf) {
   const to = emailList(trip.email), cc = emailList(trip.cc).concat(emailList(gh.team_emails)).filter((e, i, a) => !to.includes(e) && a.indexOf(e) === i), bcc = emailList(trip.bcc).filter((e) => !to.includes(e) && !cc.includes(e));
   if (!to.length && !cc.length) return "no email address";
   if (!env.RESEND_API_KEY) return "not sent (email not set up)";
-  const nights = Math.round((Date.parse(trip.check_out) - Date.parse(trip.check_in)) / 864e5), head = {confirmed: "Your stay is confirmed", changed: "Your booking has been changed", cancelled: "Your booking has been cancelled"}[kind];
-  const subject = {confirmed: "Booking confirmed", changed: "Booking changed", cancelled: "Booking cancelled"}[kind] + " · " + trip.property + " · " + fmtD(trip.check_in) + " – " + fmtD(trip.check_out) + " · " + (trip.code || "");
-  const rows = [["Booking code", trip.code], ["Guest", guestOf(trip)], ["Guest house", trip.property + (gh.city ? ", " + gh.city : "")], ["Address", gh.address || ""], ["Room", trip.room + (trip.occupancy === "Double" ? " · shared" : "")],
-    ["Check-in", fmtD(trip.check_in) + (gh.checkin_time ? ", from " + time12(gh.checkin_time) : "")], ["Check-out", fmtD(trip.check_out) + (gh.checkout_time ? ", by " + time12(gh.checkout_time) : "")], ["Nights", String(nights)], ["Remarks", trip.note || ""], kind === "cancelled" ? ["Reason", trip.cancel_reason || ""] : null].filter((r) => r && r[1]);
-  const contacts = (gh.contacts || []).filter((c) => c.phone || c.email).slice(0, 2).map((c) => c.name + (c.designation ? " (" + c.designation + ")" : "") + (c.phone ? " · " + c.phone : "") + (c.email ? " · " + c.email : ""));
-  const html = '<!doctype html><html><body style="margin:0;background:#f4f2fb;font-family:Segoe UI,Arial,sans-serif;color:#12005A"><table role="presentation" width="100%" cellpadding="0" cellspacing="0"><tr><td align="center" style="padding:28px 12px">'
-    + '<table role="presentation" width="560" cellpadding="0" cellspacing="0" style="max-width:560px;background:#fff;border-radius:16px;overflow:hidden;border:1px solid #e6e2f6">'
-    + '<tr><td style="background:#12005A;padding:20px 28px;color:#fff;font-size:18px;font-weight:700">' + esc(head) + '<div style="margin-top:4px;font-size:13px;font-weight:400;color:#c9c2ec">' + esc(client.name) + ' · guest house booking</div></td></tr>'
-    + '<tr><td style="padding:22px 28px"><table role="presentation" width="100%" cellpadding="0" cellspacing="0" style="font-size:14px">'
-    + rows.map(([k, v]) => '<tr><td style="padding:6px 0;color:#6a6390;width:130px;vertical-align:top">' + esc(k) + '</td><td style="padding:6px 0;font-weight:600">' + esc(v) + '</td></tr>').join('')
-    + '</table>' + (gh.map_url && kind !== "cancelled" ? '<p style="margin:16px 0 0"><a href="' + esc(gh.map_url) + '" style="color:#01885c;font-weight:600">Open in Google Maps</a></p>' : '')
-    + (contacts.length && kind !== "cancelled" ? '<p style="margin:16px 0 0;font-size:13px;color:#5d5887">Guest house contact: ' + contacts.map(esc).join('<br>') + '</p>' : '')
-    + '</td></tr><tr><td style="padding:16px 28px;border-top:1px solid #e6e2f6;font-size:12px;color:#7d68c6">Zuna Hotel Desk · Zuna Travel Solutions</td></tr></table></td></tr></table></body></html>';
-  const text = head + "\n\n" + rows.map(([k, v]) => k + ": " + v).join("\n") + (contacts.length && kind !== "cancelled" ? "\n\nGuest house contact: " + contacts.join("; ") : "") + "\n\nZuna Hotel Desk";
+  const nights = Math.round((Date.parse(trip.check_out) - Date.parse(trip.check_in)) / 864e5), dow = (d) => ["Sun", "Mon", "Tue", "Wed", "Thu", "Fri", "Sat"][new Date(d + "T00:00:00Z").getUTCDay()] + ", " + fmtD(d);
+  const K = {confirmed: {head: "Your stay is confirmed", tag: "CONFIRMED", bg: "#02C988", fg: "#0b0033", subj: "Booking confirmed"},
+    changed: {head: "Your booking has been changed", tag: "CHANGED", bg: "#F5B83D", fg: "#2b1a00", subj: "Booking changed"},
+    cancelled: {head: "Your booking has been cancelled", tag: "CANCELLED", bg: "#F06B7A", fg: "#ffffff", subj: "Booking cancelled"}}[kind];
+  const subject = K.subj + " · " + trip.property + " · " + fmtD(trip.check_in) + " – " + fmtD(trip.check_out) + " · " + (trip.code || "");
+  const att = pdf && pdf.content && kind !== "cancelled" ? [{filename: pdf.filename || "Voucher.pdf", content: pdf.content, content_type: "application/pdf"}] : [];
+  const live = kind !== "cancelled", L = "font-size:10.5px;letter-spacing:1.2px;font-weight:700;color:#6b6496";
+  const rows = [["Guest", guestOf(trip) + (trip.grade ? " · " + trip.grade : "")], ["Room", trip.room + " · " + (trip.occupancy === "Double" ? "Double occupancy (shared)" : "Single occupancy")],
+    ["Employee code", trip.emp_code || ""], ["Remarks", trip.note || ""], kind === "cancelled" ? ["Reason", trip.cancel_reason || ""] : null].filter((r) => r && r[1]);
+  const c0 = helpdeskOf(gh)[0];
+  const ln = (t, st) => t ? '<div style="' + (st || "color:#4a4475") + '">' + esc(t) + '</div>' : "";
+  const html = '<!doctype html><html><body style="margin:0;background:#f1effa;font-family:Inter,Segoe UI,Arial,sans-serif;color:#12005A">'
+    + '<table role="presentation" width="100%" cellpadding="0" cellspacing="0"><tr><td align="center" style="padding:28px 12px"><table role="presentation" width="600" cellpadding="0" cellspacing="0" style="max-width:600px;width:100%">'
+    + '<tr><td style="padding:0 4px 14px"><table role="presentation" width="100%" cellpadding="0" cellspacing="0"><tr><td style="font-size:22px;font-weight:800;letter-spacing:-.5px;color:#12005A">zuna<span style="color:#02C988">.</span></td>'
+    + '<td align="right" style="font-size:12px;color:#6b6496">' + esc(client.name || "") + ' · Guest house booking</td></tr></table></td></tr>'
+    + '<tr><td style="background:#ffffff;border-radius:18px;border:1px solid #e4e0f3;overflow:hidden"><table role="presentation" width="100%" cellpadding="0" cellspacing="0">'
+    + '<tr><td style="background:#12005A;padding:22px 28px;border-radius:18px 18px 0 0"><table role="presentation" width="100%" cellpadding="0" cellspacing="0"><tr><td>'
+    + '<div style="display:inline-block;background:' + K.bg + ';color:' + K.fg + ';font-size:11px;font-weight:800;letter-spacing:1.4px;padding:4px 10px;border-radius:99px">' + K.tag + '</div>'
+    + '<div style="color:#ffffff;font-size:22px;font-weight:800;margin-top:10px">' + esc(K.head) + '</div>'
+    + '<div style="color:#c9c2ec;font-size:13px;margin-top:3px">' + esc(guestOf(trip)) + (att.length ? ' · voucher attached as PDF' : '') + '</div></td>'
+    + '<td align="right" valign="top"><div style="color:#c9c2ec;' + L.replace("color:#6b6496", "") + '">BOOKING CODE</div><div style="color:#ffffff;font-size:20px;font-weight:800;letter-spacing:.5px;margin-top:4px">' + esc(trip.code || "—") + '</div></td></tr></table></td></tr>'
+    + '<tr><td style="padding:22px 28px 6px"><div style="font-size:19px;font-weight:800">' + esc(trip.property) + '</div>' + ln(gh.address || gh.city || "", "font-size:13px;color:#6b6496;margin-top:3px") + '</td></tr>'
+    + '<tr><td style="padding:14px 28px 4px"><table role="presentation" width="100%" cellpadding="0" cellspacing="0" style="background:#f6f5fc;border-radius:14px"><tr>'
+    + '<td style="padding:14px 18px" width="42%"><div style="' + L + '">CHECK-IN</div><div style="font-size:17px;font-weight:800;margin-top:4px">' + esc(dow(trip.check_in)) + '</div>' + ln(gh.checkin_time ? "from " + time12(gh.checkin_time) : "", "font-size:12.5px;color:#6b6496;margin-top:2px") + '</td>'
+    + '<td align="center" width="16%"><div style="display:inline-block;border:1px solid #d9d4ef;border-radius:99px;padding:5px 10px;font-size:12px;font-weight:700;color:#12005A;background:#fff;white-space:nowrap">' + nights + (nights === 1 ? " night" : " nights") + '</div></td>'
+    + '<td style="padding:14px 18px" align="right" width="42%"><div style="' + L + '">CHECK-OUT</div><div style="font-size:17px;font-weight:800;margin-top:4px">' + esc(dow(trip.check_out)) + '</div>' + ln(gh.checkout_time ? "by " + time12(gh.checkout_time) : "", "font-size:12.5px;color:#6b6496;margin-top:2px") + '</td></tr></table></td></tr>'
+    + '<tr><td style="padding:14px 28px 4px"><table role="presentation" width="100%" cellpadding="0" cellspacing="0" style="font-size:14px">'
+    + rows.map(([k, v], n) => { const bd = n < rows.length - 1 ? "border-bottom:1px solid #efedf7;" : ""; return '<tr><td style="padding:8px 0;color:#6b6496;width:140px;vertical-align:top;' + bd + '">' + esc(k) + '</td><td style="padding:8px 0;font-weight:700;' + bd + '">' + esc(v) + '</td></tr>'; }).join("")
+    + '</table></td></tr>'
+    + (live && gh.map_url ? '<tr><td style="padding:16px 28px 4px"><a href="' + esc(gh.map_url) + '" style="display:inline-block;background:#12005A;color:#ffffff;text-decoration:none;font-weight:700;font-size:14px;padding:11px 18px;border-radius:12px;border-bottom:3px solid #02C988">Open in Google Maps</a></td></tr>' : '')
+    + '<tr><td style="padding:18px 28px 24px"><table role="presentation" width="100%" cellpadding="0" cellspacing="0" style="border:1px solid #e4e0f3;border-radius:14px"><tr>'
+    + (live && c0 ? '<td style="padding:14px 16px;font-size:13px;vertical-align:top;border-right:1px solid #e4e0f3" width="50%"><div style="' + L + '">GUEST HOUSE HELPDESK</div>' + ln(c0.name + (c0.designation ? " · " + c0.designation : ""), "font-weight:700;margin-top:5px") + ln(c0.phone) + ln(c0.email) + '</td>' : '')
+    + '<td style="padding:14px 16px;font-size:13px;vertical-align:top"><div style="' + L + '">ZUNA SUPPORT</div><div style="font-weight:700;margin-top:5px">Zuna Hotel Desk</div><div style="color:#4a4475">+91 91009 90530</div><div style="color:#4a4475">hotel@zuna.ai</div></td></tr></table></td></tr>'
+    + '</table></td></tr>'
+    + '<tr><td style="padding:16px 6px;font-size:12px;color:#7d76a8;line-height:1.5">' + (live ? (att.length ? 'Please show the attached voucher or this email at check-in. ' : 'Please show this email at check-in. ') + 'To change or cancel the booking, contact Zuna support.' : 'If this is not expected, contact Zuna support.') + '<br>Zuna Travel Solutions</td></tr>'
+    + '</table></td></tr></table></body></html>';
+  const text = K.head + "\n\nBooking code: " + (trip.code || "") + "\nGuest house: " + trip.property + (gh.address ? ", " + gh.address : "") + "\nCheck-in: " + dow(trip.check_in) + (gh.checkin_time ? ", from " + time12(gh.checkin_time) : "")
+    + "\nCheck-out: " + dow(trip.check_out) + (gh.checkout_time ? ", by " + time12(gh.checkout_time) : "") + "\nNights: " + nights + "\n" + rows.map(([k, v]) => k + ": " + v).join("\n")
+    + (live && c0 ? "\n\nGuest house helpdesk: " + [c0.name, c0.phone, c0.email].filter(Boolean).join(" · ") : "") + "\nZuna support: +91 91009 90530 · hotel@zuna.ai\n\nZuna Travel Solutions";
   const main = to.length ? to : cc.slice(0, 1), copies = to.length ? cc : cc.slice(1);
   try { const r = await fetch("https://api.resend.com/emails", {method: "POST", headers: {authorization: "Bearer " + env.RESEND_API_KEY, "content-type": "application/json"},
-      body: JSON.stringify(Object.assign({from: env.MAIL_FROM || "Zuna Hotel Desk <noreply@zuna.ai>", to: main, subject, html, text}, copies.length ? {cc: copies} : {}, bcc.length ? {bcc} : {}))});
+      body: JSON.stringify(Object.assign({from: env.MAIL_FROM || "Zuna Hotel Desk <noreply@zuna.ai>", to: main, subject, html, text}, copies.length ? {cc: copies} : {}, bcc.length ? {bcc} : {}, att.length ? {attachments: att} : {}))});
     return r.ok ? "sent" : "failed"; } catch (e) { return "failed"; }
 }
 // guest list: one row per person (employee code, else name + email), newest details win
@@ -940,7 +965,8 @@ async function bookApi(req, env, user, path) {
   if (path === "/api/book/cancel") return cancelTrip(env, user, cid, b);
   if (path === "/api/book/resend") { const tr = await tripFor(env, user, cid, b.id); if (!tr) return json({error: "Booking not found."}, 404); const client = await bookClient(env, cid);
     const gh = (await clientGuestHouses(env, client, true)).find((g) => g.property === tr.property) || {property: tr.property};
-    const mail = await tripMail(env, client, tr, gh, tr.status === "Cancelled" ? "cancelled" : tr.changed_at ? "changed" : "confirmed");
+    const pdf = typeof b.pdf === "string" && b.pdf.length < 4e6 && /^[A-Za-z0-9+/=]+$/.test(b.pdf) ? {content: b.pdf, filename: clean(b.pdf_name, 120).replace(/[^\w.\- ]/g, "") || "Voucher.pdf"} : null;
+    const mail = await tripMail(env, client, tr, gh, tr.status === "Cancelled" ? "cancelled" : tr.changed_at ? "changed" : "confirmed", pdf);
     await env.DB.prepare("UPDATE trips SET mail_status = ? WHERE id = ?").bind(mail, tr.id).run(); return json({ok: true, mail_status: mail}); }
   return json({error: "Not found."}, 404);
 }

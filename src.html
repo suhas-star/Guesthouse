@@ -1142,7 +1142,7 @@ $('#hxXlsxName').textContent = txName();
 const bApi = async (p, body) => { let r; try { r = await ZUI.busy(fetch('/api/' + p, {method: 'POST', headers: {'content-type': 'application/json'}, body: JSON.stringify(Object.assign({client_id: DATA.client && DATA.client.id}, body || {})), credentials: 'same-origin'})); } catch (e) { throw new Error('Network error. Check your connection and try again.'); }
   const j = await r.json().catch(() => ({})); if (r.status === 403 && /expired/i.test(j.error || '')) { location.reload(); throw new Error(j.error); } if (!r.ok) throw new Error(j.error || 'Something went wrong.'); return j; };
 const refreshStays = async () => { try { const j = await bApi('bookings'); bookings.splice(0, bookings.length, ...j.bookings); enrich(); } catch (e) { /* the page keeps the list it has */ } };
-const MAIL_TXT = {sent: 'Email sent', failed: 'Email could not be sent', 'not sent': 'No email sent', 'no email address': 'No email address', 'not sent (email not set up)': 'Email not set up yet'};
+const MAIL_TXT = {sent: 'Email sent', pending: 'Email not sent yet · use Resend email', failed: 'Email could not be sent', 'not sent': 'No email sent', 'no email address': 'No email address', 'not sent (email not set up)': 'Email not set up yet'};
 const mailTxt = (s) => MAIL_TXT[s] || (s ? s : '—');
 const BK = {built: false, edit: null, prop: '', ci: '', co: '', rooms: null, room: '', seq: 0, mode: '', step: 0, v: {}};
 const TR = {list: null, loading: false, tab: 'upcoming', q: ''};
@@ -1224,10 +1224,11 @@ const bkNext = async (btn) => {
   // confirm
   if (!v.name.trim()) return bkFail("Enter the guest's name.");
   { const m = bkContactErr(); if (m) { BK.step = 1; BK.gopen = 0; BK.gdir = -1; bkDraw(); return bkFail(m); } }
-  const body = Object.assign({}, v, {property: BK.prop, check_in: BK.ci, check_out: BK.co, room: BK.room, send_mail: v.send, gender: bkGender()}); if (BK.edit) body.id = BK.edit.id;
+  const body = Object.assign({}, v, {property: BK.prop, check_in: BK.ci, check_out: BK.co, room: BK.room, send_mail: v.send, mail_later: !!v.send, gender: bkGender()}); if (BK.edit) body.id = BK.edit.id;
   btn.disabled = true;
   try { const j = await bApi(BK.edit ? 'book/update' : 'book', body), t = j.trip;
-    if (v.send) toast(t.mail_status === 'sent' ? 'Email sent to ' + (t.email || 'the CC list') : mailTxt(t.mail_status) + ' · the booking is saved', t.mail_status !== 'sent');
+    if (v.send) { try { await mailWithVoucher(t); } catch (er) { /* the booking is saved; Resend email is on the trip */ }
+      toast(t.mail_status === 'sent' ? 'Email and voucher sent to ' + (t.email || 'the CC list') : mailTxt(t.mail_status) + ' · the booking is saved', t.mail_status !== 'sent'); }
     await refreshStays(); TR.list = null; BK.done = {trip: t, changed: !!BK.edit}; BK.edit = null; bkDraw(); }
   catch (x) { bkFail(x.message); btn.disabled = false; if (/taken|shared|free|room/i.test(x.message)) { BK.rooms = null; } } };
 
@@ -1460,6 +1461,11 @@ const bkConfirm = (pane) => { const v = BK.v, p = bkHouse();
   wrap.append(left, rightC); pane.appendChild(wrap); bkCharges(rightC, BK.room); };
 
 // booking voucher: shown after confirming, downloadable as PDF here and from Trips
+// the voucher PDF as base64, for the booking email (null if it can't be made here)
+const voucherB64 = async (t) => { try { if (!window.__ltm || !window.__ltm.voucherFile) return null; const f = window.__ltm.voucherFile(t, props.find((p) => p.property === t.property) || {}, DATA.client || {});
+  const buf = new Uint8Array(await f.data.arrayBuffer()); let bin = ''; for (let i = 0; i < buf.length; i += 0x8000) bin += String.fromCharCode.apply(null, buf.subarray(i, i + 0x8000)); return {pdf: btoa(bin), pdf_name: f.filename}; } catch (e) { return null; } };
+// send (or resend) the booking email with the voucher attached
+const mailWithVoucher = async (t) => { const v = t.status === 'Cancelled' ? null : await voucherB64(t); const j = await bApi('book/resend', Object.assign({id: t.id}, v || {})); t.mail_status = j.mail_status; return j.mail_status; };
 const dlVoucher = (t) => window.__ltm && window.__ltm.voucher ? window.__ltm.voucher(t, props.find((p) => p.property === t.property) || {}, DATA.client || {}) : toast('Voucher download is not ready yet. Reload the page.', true);
 const bkSuccess = (card) => { const t = BK.done.trip, n = nightsOf(t.check_in, t.check_out), w = h('div', 'relative overflow-hidden px-6 py-10 sm:py-12 text-center');
   w.appendChild(h('div', 'ok-glow pointer-events-none absolute inset-x-0 -top-40 h-80'));
@@ -1518,7 +1524,7 @@ const tripDrawer = (t) => {
     if (canAct && USER.book) { mk('Change', 'pencil').onclick = () => { closeDrawer(); BK.edit = t; BK.built = false; go('book'); };
       mk('Cancel', 'calendar-x', 'text-rose-600').onclick = () => cancelPanel(t, box); }
     mk('Download voucher', 'download').onclick = () => dlVoucher(t);
-    if (USER.book) mk('Resend email', 'send').onclick = async (ev) => { const b = ev.currentTarget; b.disabled = true; try { const j = await bApi('book/resend', {id: t.id}); t.mail_status = j.mail_status; toast(j.mail_status === 'sent' ? 'Email sent again' : mailTxt(j.mail_status)); paintTrips(); } catch (x) { toast(x.message, true); } b.disabled = false; };
+    if (USER.book) mk('Resend email', 'send').onclick = async (ev) => { const b = ev.currentTarget; b.disabled = true; try { const ms = await mailWithVoucher(t); toast(ms === 'sent' ? 'Email sent again' : mailTxt(ms)); paintTrips(); } catch (x) { toast(x.message, true); } b.disabled = false; };
     box.appendChild(acts); }
   box.appendChild(kv([['Guest', t.guest], ['Gender', t.gender], ['Grade', t.grade], ['Employee code', t.emp_code], ['Email', t.email], ['Mobile', t.phone], ['Base location', t.base], ['Concur ID', t.concur_tr], ['WBS ID', t.wbs], ['Occupancy', t.occupancy === 'Double' ? 'Double · shares the room' : 'Single'], ['Remarks', t.note],
     ...(USER.admin ? [['Email copies', [t.cc && 'CC ' + t.cc, t.bcc && 'BCC ' + t.bcc].filter(Boolean).join(' · ')]] : []), ['Email status', mailTxt(t.mail_status)], ['Booked by', t.booked_by + ' · ' + fLong(String(t.booked_at).slice(0, 10))]]));

@@ -442,6 +442,7 @@
     Ln(M, 46, W - M, 46, LINE, 0.7); T(M, 32, 'System-generated voucher. No signature required.', 7.5, false, MUTED); TR(W - M, 32, 'Zuna Hotel Desk  -  Zuna Travel Solutions  -  hotel@zuna.ai', 7.5, false, MUTED);
     return pdfBlob([ops], imgs, W, H, typeof PDF_FONT !== 'undefined' ? PDF_FONT : null);
   };
+  L.voucherFile = (t, p, client) => ({filename: 'Voucher-' + (t.code || 'booking') + '-' + slug(String(t.name || t.guest || '')).slice(0, 30) + '.pdf', data: voucherPdf(t, p || {}, client || {})});
   L.voucher = (t, p, client) => { try { dl({filename: 'Voucher-' + (t.code || 'booking') + '-' + slug(String(t.name || t.guest || '')).slice(0, 30) + '.pdf', data: voucherPdf(t, p || {}, client || {})}); } catch (e) { L.toast('Could not make the voucher. Try again.'); } };
   L.weeklyReport = weeklyReport;
   // hotel bookings: the filtered rows in the transaction report's own column layout

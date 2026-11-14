@@ -363,6 +363,8 @@ check('old host redirects to PRIMARY_HOST', r.status === 301 && r.headers.get('l
       check('Nil fare: only the service charge and its GST', q.fare === 0 && q.fare_tax === 0 && q.svc === 200 && q.svc_gst === 36 && q.total === 236);
       x = await B(asha, 'book/quote', {property: 'Acme House', room: 'A1', check_in: D(321), check_out: D(323)});
       check('booker sees the charges while booking', x.status === 200 && x.j.cost.fare === 0 && x.j.cost.svc === 200 && x.j.cost.total === 236);
+      x = await B(asha, 'book/quote', {property: 'Acme House', all: true, check_in: D(305), check_out: D(307)});
+      check('charges for every room type in one request', x.j.costs[0].total === 12836 && x.j.costs[suite].total === 19116 && x.j.costs[deluxe].total === 12836);
       q = (await A('quote', {gh_id: g0.id, room_type_id: deluxe, check_in: D(329), check_out: D(333)})).j.cost;
       check('nights without a rate are counted as missing', q.nights === 4 && q.missing === 2);
       await A('block', {gh_id: g0.id, rooms: ['A1'], from: D(340), to: D(342), reason: 'Painting'});

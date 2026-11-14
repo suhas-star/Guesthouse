@@ -924,8 +924,12 @@ async function bookApi(req, env, user, path) {
     if (!isoD.test(b.check_in || "") || !isoD.test(b.check_out || "") || b.check_out <= b.check_in) return json({error: "Check-out must be after check-in."}, 400);
     const gh = (await clientGuestHouses(env, client, true)).find((g) => g.property === clean(b.property, 120)); if (!gh) return json({error: "Pick one of " + client.name + "'s guest houses."}, 400);
     const rt = b.room ? ((gh.room_types || []).find((t) => expandRooms(t.room_nos).includes(String(b.room))) || {}).id || 0 : 0;
-    const fee = await env.DB.prepare("SELECT svc_fee FROM clients WHERE id = ?").bind(client.id).first();
-    return json({cost: await ghCost(env, gh.id, rt, b.check_in, b.check_out, fee ? fee.svc_fee : 0)}); }
+    const fee = await env.DB.prepare("SELECT svc_fee FROM clients WHERE id = ?").bind(client.id).first(), svc = fee ? fee.svc_fee : 0;
+    if (b.all) {   // every room type at once, so the page can show charges the moment a room is picked
+      const ids = [0].concat((gh.room_types || []).map((t) => t.id)), costs = {};
+      (await Promise.all(ids.map((id) => ghCost(env, gh.id, id, b.check_in, b.check_out, svc)))).forEach((c, i) => { costs[ids[i]] = c; });
+      return json({costs}); }
+    return json({cost: await ghCost(env, gh.id, rt, b.check_in, b.check_out, svc)}); }
   if (path === "/api/book") return placeTrip(env, user, cid, b, null);
   if (path === "/api/book/update") { const tr = await tripFor(env, user, cid, b.id); if (!tr) return json({error: "Booking not found."}, 404);
     if (tr.status === "Cancelled") return json({error: "A cancelled booking can't be changed. Make a new booking instead."}, 409);

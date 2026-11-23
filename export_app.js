@@ -304,7 +304,7 @@
     const cells = [], merges = [], put = (r, c, v, s) => cells.push({r, c, v, s});
     const C0 = 2, totalCol = C0 + totalBeds, bedOcc = totalCol + 3, roomOcc = bedOcc + 3, master = roomOcc + 5;
     put(1, C0, title, 1); merges.push(colName(C0) + '1:' + colName(totalCol + 1) + '1');
-    put(3, 0, 'Stay for the night of', 3); put(3, 1, 'Day of the week', 3);
+    put(3, 0, 'Day of the week', 3); put(3, 1, 'Stay for the night of', 3);   // day first, then the date (as LTM asked)
     let c = C0; roomNames.forEach((rn, ri) => { put(2, c, 'Room - ' + short(rn), 2); if (beds[ri] > 1) merges.push(colName(c) + '2:' + colName(c + beds[ri] - 1) + '2'); for (let k = 0; k < beds[ri]; k++) put(3, c + k, 'Bed-' + (k + 1), 3); c += beds[ri]; });
     put(3, totalCol, 'Total Occupancy', 3);
     put(2, bedOcc, 'Total Bed Occupancy', 2); merges.push(colName(bedOcc) + '2:' + colName(bedOcc + 2) + '2');
@@ -315,7 +315,7 @@
     ['Guest Name', 'Guest Circle Name', 'Band', 'Consolidated Room Nights'].forEach((t, k) => put(3, master + k, t, 3));
     const bedNights = new Array(totalBeds).fill(0); let sumBeds = 0, sumRooms = 0; const guests = new Map();
     nights.forEach((n, i) => { const r = 4 + i, d = new Date(n + 'T00:00:00Z');
-      put(r, 0, DMY(n)); put(r, 1, WD[d.getUTCDay()]);
+      put(r, 0, WD[d.getUTCDay()]); put(r, 1, DMY(n));
       let col = C0, bOcc = 0, rOcc = 0;
       roomNames.forEach((_, ri) => { const g = who(ri, n); if (g.length) rOcc++;
         for (let k = 0; k < beds[ri]; k++) { const b = g[k]; put(r, col + k, b ? name(b) : ''); if (b) { bOcc++; bedNights[col + k - C0]++;
@@ -336,7 +336,7 @@
     const star = placed.size && [...placed].some((b) => keep(b) && b.check_in <= to && b.check_out > from);
     if (star) put(tr + 4, 0, '* Room not yet confirmed by the guest house; shown in the first free room.');
     if (co) put(tr + (star ? 5 : 4), 0, 'Only stays checking out ' + (co[0] === co[1] ? 'on ' + DMY(co[0]) : 'between ' + DMY(co[0]) + ' and ' + DMY(co[1])) + '; one row for each date in that range.');
-    const widths = []; for (let k = 0; k <= master + 3; k++) widths.push(k === 0 ? 21 : k === 1 ? 18 : (k >= C0 && k < totalCol) ? 20 : k === totalCol ? 16 : k === bedOcc || k === roomOcc ? 20 : k === master ? 20 : k === master + 1 ? 20 : k === master + 3 ? 25 : 13);
+    const widths = []; for (let k = 0; k <= master + 3; k++) widths.push(k === 0 ? 18 : k === 1 ? 21 : (k >= C0 && k < totalCol) ? 20 : k === totalCol ? 16 : k === bedOcc || k === roomOcc ? 20 : k === master ? 20 : k === master + 1 ? 20 : k === master + 3 ? 25 : 13);
     const fileTitle = title.replace(/\//g, '_').replace(/[^A-Za-z0-9_-]+/g, '_').replace(/_+/g, '_');
     return {filename: fileTitle + '.xlsx', data: sheetZip('Sheet', cells, merges, widths)};
   };

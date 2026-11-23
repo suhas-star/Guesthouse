@@ -1778,7 +1778,7 @@ const openWeekly = (onGo) => {
     checkout: () => { const g = h('div', 'grid grid-cols-2 gap-3'), co = coOn() ? [state.cofrom, state.coto] : null;
       const [w1, i1] = field('Check-out from', 'date', co ? co[0] : lw), [w2, i2] = field('Check-out to', 'date', co ? co[1] : addDays(lw, 6)); g.append(w1, w2);
       body.replaceChildren(g, chips([['Last week', [lw, addDays(lw, 6)]], ['This week', [monday(today), addDays(monday(today), 6)]], ['Yesterday', [yday, yday]]].concat(co ? [['Dates on Bookings', co]] : []), ([a, b]) => { i1.value = a; i2.value = b; show(); }),
-        h('p', 'text-xs text-zuna-500', 'Includes only stays that check out on these dates. Each report starts from the earliest check-in among them.'));
+        h('p', 'text-xs text-zuna-500', 'Includes only stays that check out on these dates, with one row for each date chosen.'));
       i1.oninput = i2.oninput = show; i1.onchange = i2.onchange = show; range = () => [i1.value, i2.value]; } };
   const LBL = {daily: 'Daily', weekly: 'Weekly', monthly: 'Monthly', custom: 'Custom dates', checkout: 'Check-out'};
   const TAB = {custom: 'Custom'};

@@ -290,12 +290,8 @@
   };
   const weeklyReport = (from, to, p = L.P(), opt = {}) => {
     const {roomNames, grid, placed} = L.rackGrid(p);
-    // check-out basis: only stays that check out between from and to; the nights run from the earliest of their check-ins
+    // check-out basis: only stays that check out between from and to; one row for each date chosen (as the client asked)
     const co = opt.checkout ? [from, to] : null, keep = (b) => !co || (b.check_out >= co[0] && b.check_out <= co[1]);
-    if (co) { const mine = [...new Set(grid.flatMap((g) => Object.values(g).flat()))].filter(keep);
-      from = mine.length ? mine.reduce((m, b) => b.check_in < m ? b.check_in : m, mine[0].check_in) : co[0];
-      to = mine.length ? L.addDays(mine.reduce((m, b) => b.check_out > m ? b.check_out : m, mine[0].check_out), -1) : co[1];
-      if (L.addDays(from, 92) <= to) from = L.addDays(to, -91); }
     const nights = []; for (let n = from; n <= to; n = L.addDays(n, 1)) nights.push(n);
     const who = (ri, n) => ((grid[ri] && grid[ri][n]) || []).filter(keep);
     // beds per room: one, or as many guests as ever shared that room in these nights
@@ -339,7 +335,7 @@
     [...guests.values()].sort((a, b) => a.name.localeCompare(b.name)).forEach((g, k) => { put(4 + k, master, g.name); put(4 + k, master + 1, circle); put(4 + k, master + 2, g.band); put(4 + k, master + 3, g.nights, 5); });
     const star = placed.size && [...placed].some((b) => keep(b) && b.check_in <= to && b.check_out > from);
     if (star) put(tr + 4, 0, '* Room not yet confirmed by the guest house; shown in the first free room.');
-    if (co) put(tr + (star ? 5 : 4), 0, 'Only stays checking out ' + (co[0] === co[1] ? 'on ' + DMY(co[0]) : 'between ' + DMY(co[0]) + ' and ' + DMY(co[1])) + '; nights shown from the earliest check-in.');
+    if (co) put(tr + (star ? 5 : 4), 0, 'Only stays checking out ' + (co[0] === co[1] ? 'on ' + DMY(co[0]) : 'between ' + DMY(co[0]) + ' and ' + DMY(co[1])) + '; one row for each date in that range.');
     const widths = []; for (let k = 0; k <= master + 3; k++) widths.push(k === 0 ? 21 : k === 1 ? 18 : (k >= C0 && k < totalCol) ? 20 : k === totalCol ? 16 : k === bedOcc || k === roomOcc ? 20 : k === master ? 20 : k === master + 1 ? 20 : k === master + 3 ? 25 : 13);
     const fileTitle = title.replace(/\//g, '_').replace(/[^A-Za-z0-9_-]+/g, '_').replace(/_+/g, '_');
     return {filename: fileTitle + '.xlsx', data: sheetZip('Sheet', cells, merges, widths)};
@@ -467,5 +463,6 @@
     const name = (L.ghReportName() + (kind && kind !== 'Custom dates' ? ' - ' + kind : '') + ' - ' + (from === to ? DMY(from) : DMY(from) + ' to ' + DMY(to))).replace(/\//g, '_').replace(/[^A-Za-z0-9_-]+/g, '_').replace(/_+/g, '_');
     return {filename: name + '.zip', data: zip(files)};
   };
+  L.ghReport = ghReport;
   document.querySelectorAll('[data-weekly]').forEach((btn) => btn.addEventListener('click', () => L.openWeekly(async (from, to, which, kind) => { try { dl(await ghReport(from, to, which, kind)); } catch (e) { console.error(e); L.toast('Could not create the report'); } })));
 })();

@@ -1352,7 +1352,7 @@ const istDate = (s) => { if (!s) return ""; const v = String(s), t = Date.parse(
 const fyTag = (d) => { const y = +d.slice(0, 4), m = +d.slice(5, 7); return String((m >= 4 ? y : y - 1) % 100).padStart(2, "0"); };   // HB26 = April 2026 to March 2027
 const apiInvoice = (x) => { const n = x.invoiceNumber ?? x.bookingId, d = istDate(x.bookingDate); return n != null && n !== "" && d ? "HB" + fyTag(d) + "/" + n : ""; };
 const nz = (v) => v == null ? "" : v;
-// the partner's totalAmountINR = room amount (incl. hotel GST) + Zuna's service charge + GST on it; split it the way the reports do
+// the partner's totalAmountINR = room amount (incl. hotel GST) + the transaction fee + GST on it; split it the way the reports do
 function apiAmounts(x, c) {
   const total = +(x.totalAmountINR ?? x.totalAmount); if (!(total > 0)) return {};
   const fee = +c.fee || 0, feeGst = r2(fee * (+c.fee_gst || 0) / 100), room = Math.max(total - fee - feeGst, 0), base = r2(room / (1 + (+c.hotel_gst || 0) / 100)), cxl = /cancel/i.test(x.status || "");
@@ -1435,7 +1435,7 @@ async function syncApi(env, user, path, b) {
     if (b.token) { token = clean(b.token, 4000).replace(/^bearer\s+/i, ""); if (!jwtInfo(token)) return json({error: "That doesn't look like an API token. Paste the full token you received from the partner."}, 400); }
     const num = (v, d, max) => { if (v === undefined || v === null || v === "") return d; const n = +v; return isFinite(n) && n >= 0 && n <= max ? r2(n) : NaN; };
     const fee = num(b.fee, +c.fee, 100000), feeGst = num(b.fee_gst, +c.fee_gst, 100), hGst = num(b.hotel_gst, +c.hotel_gst, 100);
-    if ([fee, feeGst, hGst].some((v) => isNaN(v))) return json({error: "Check the service charge and GST figures."}, 400);
+    if ([fee, feeGst, hGst].some((v) => isNaN(v))) return json({error: "Check the transaction fee and GST figures."}, 400);
     const months = Math.min(Math.max(parseInt(b.months ?? c.months, 10) || 0, 0), 12), skip = b.skip_free_cxl !== undefined ? (b.skip_free_cxl ? 1 : 0) : c.skip_free_cxl, on = b.enabled !== undefined ? (b.enabled ? 1 : 0) : c.enabled;
     if (on && (!key || !token)) return json({error: "Save the relay key and the API token before turning the sync on."}, 400);
     await env.DB.prepare("INSERT INTO tx_sync (client_id, api_url, relay_url, relay_key, token, months, skip_free_cxl, enabled, fee, fee_gst, hotel_gst) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?) ON CONFLICT(client_id) DO UPDATE SET api_url = excluded.api_url, relay_url = excluded.relay_url, relay_key = excluded.relay_key, token = excluded.token, months = excluded.months, skip_free_cxl = excluded.skip_free_cxl, enabled = excluded.enabled, fee = excluded.fee, fee_gst = excluded.fee_gst, hotel_gst = excluded.hotel_gst")

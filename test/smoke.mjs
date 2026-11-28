@@ -453,6 +453,73 @@ check('old host redirects to PRIMARY_HOST', r.status === 301 && r.headers.get('l
       check('selected rates can be deleted together', xb.j.done === 4 && !(await A('state', {})).j.clients.find((c) => c.id === acme).rates.some((r) => r.from === D(400)));
       check('bulk updates are in the audit log', (await A('audit', {kind: 'changes'})).j.rows.some((r) => r.action === 'Bulk update' && r.detail.op === 'delete'));
     }
+    { // live hotel sync through the relay (relay and booking system simulated in-process)
+      x = await A('client', {name: 'Sync Co'}); const sco = x.j.id;
+      const now = new Date(), y0 = now.getUTCFullYear(), m0 = now.getUTCMonth(), fy = String((m0 + 1 >= 4 ? y0 : y0 - 1) % 100).padStart(2, '0');
+      const day = (d) => new Date(Date.UTC(y0, m0, d)).toISOString().slice(0, 10);
+      const RKEY = 'k'.repeat(48), b64u = (o) => Buffer.from(JSON.stringify(o)).toString('base64url');
+      const TOKEN = b64u({alg: 'HS256'}) + '.' + b64u({clientId: 7, corporateId: 9, exp: Math.floor(Date.now() / 1000) + 30 * 86400}) + '.sig';
+      const bk = (id, status, extra = {}) => ({bookingId: id, billingEntity: 'Sync Co Ltd', hotelConfirmationNumber: 'HC-' + id, supplierConfirmationNumber: 'SUP-' + id, invoiceNumber: id, bookingCreator: 'Desk', travellerName: 'Guest ' + id, status,
+        bookingDate: day(2) + 'T09:30:00Z', checkIn: day(20) + 'T00:00:00Z', checkOut: day(22) + 'T00:00:00Z', totalNumberOfNights: 2, propertyName: 'Hotel ' + id, category: 'Business', city: 'Pune', ratePerNight: 6500, totalAmount: 13000, totalAmountINR: 13000, currency: 'INR',
+        totalCancellationCharges: null, employeeId: 'E' + id, wbs: 'WBS-1', travelRequestId: 'TR-' + id, ltiBaseLocation: 'Mumbai', grade: 'G5', ...extra});
+      let MOCK = [bk(900001, 'Confirmed'), bk(900002, 'Cancelled', {totalCancellationCharges: 0}), bk(900003, 'Cancelled', {totalCancellationCharges: 1200}), bk(900004, 'Cancelled', {totalCancellationCharges: 0}), bk(900005, 'Planned')];
+      let partnerDown = false; const seen = [];
+      const ok = (o, status = 200) => new Response(JSON.stringify({status, headers: {}, body_b64: Buffer.from(JSON.stringify(o)).toString('base64')}), {status: 200, headers: {'content-type': 'application/json'}});
+      const prevFetch = globalThis.fetch;
+      globalThis.fetch = async (u, o = {}) => { const s = String(u); if (!s.startsWith('https://relay.test/')) return prevFetch(u, o);
+        const p = s.slice('https://relay.test'.length), key = (o.headers || {})['x-relay-key'];
+        if (p === '/health') return new Response('{"ok":true}');
+        if (key !== RKEY) return new Response('{"error":"Not allowed."}', {status: 401});
+        if (p === '/ip') return new Response('{"ip":"174.138.123.123"}');
+        const q = JSON.parse(o.body); seen.push(q); const url = new URL(q.url), body = q.body ? JSON.parse(q.body) : null;
+        if (url.host !== 'api.partner.test') return new Response('{"error":"Host not allowed"}', {status: 403});
+        if (partnerDown) return ok({status: 'failure', message: 'Access denied.'}, 403);
+        if (q.headers.authorization !== 'Bearer ' + TOKEN) return ok({status: 'failure', message: 'Invalid token.'}, 403);
+        if (url.pathname === '/api/LtmReport/ltm_bookings') { const {startDate, endDate} = body.bookingDateRange, all = MOCK.filter((b) => b.bookingDate >= startDate && b.bookingDate <= endDate);
+          return ok({status: 'success', totalCount: all.length, bookings: all.slice(body.pagination.offset, body.pagination.offset + 2)}); }   // two per page, to exercise paging
+        if (url.pathname === '/api/LtmReport/ltm_bookings-transaction-report') return ok({status: 'success', totalBookings: MOCK.length, totalCancelledBookings: 3, currency: 'INR'});
+        const vm = /ltm_booking-voucher-links\/(\d+)$/.exec(url.pathname);
+        if (vm) return +vm[1] === 900001 ? ok({confirmationVoucherUrl: 'https://files.partner.test/V900001.pdf', reconfirmationVoucherUrl: null, reconfirmationVoucherUrls: []}) : ok({status: 'failure', errorCode: '1313', message: 'No hotel details found for booking id.'}, 404);
+        return ok({status: 'failure'}, 500); };
+      x = await A('sync/state', {client_id: sco}); check('live sync: starts unset', x.status === 200 && !x.j.sync.has_token && !x.j.sync.has_key && !x.j.sync.enabled);
+      x = await A('sync/save', {client_id: sco, token: 'not-a-token'}); check('live sync: a non-token is refused', x.status === 400);
+      x = await A('sync/save', {client_id: sco, enabled: true}); check('live sync: cannot turn on without key and token', x.status === 400);
+      x = await A('sync/save', {client_id: sco, api_url: 'http://evil.test'}); check('live sync: plain-http partner address refused', x.status === 400);
+      x = await A('sync/save', {client_id: sco, token: 'Bearer ' + TOKEN, relay_key: RKEY, api_url: 'https://api.partner.test/', relay_url: 'https://relay.test', months: 1});
+      check('live sync: settings saved; secrets never sent back', x.status === 200 && x.j.sync.has_token && x.j.sync.has_key && x.j.sync.token.client === 7 && !!x.j.sync.token.exp && !JSON.stringify(x.j).includes(RKEY) && !JSON.stringify(x.j).includes('.sig'));
+      const au = DB.raw.prepare("SELECT detail FROM audit WHERE action = 'Changed the live hotel sync settings' ORDER BY id DESC LIMIT 1").get();
+      check('live sync: audit log keeps neither token nor key', !!au && !String(au.detail).includes(RKEY) && !String(au.detail).includes('.sig'));
+      x = await A('sync/test', {client_id: sco}); check('live sync: connection check passes all steps', x.status === 200 && x.j.steps.length === 3 && x.j.steps.every((s) => s.ok) && x.j.steps[1].detail === '174.138.123.123', JSON.stringify(x.j));
+      // one booking already uploaded from a report: its billing figures must survive the sync
+      const H2 = ['Invoice No', 'Booking Code', 'Guest Name', 'Booked Date', 'Check-In Date', 'Check-Out Date', 'Status', 'Net Amount Charged', 'Transaction Fee'];
+      x = await A('tx/import', {client_id: sco, header: H2, rows: [['HB' + fy + '/900002', 'OLD-1', 'Guest 900002', day(2), day(20), day(22), 'Billed', 15340, 100]], filename: 'report.xlsx'});
+      check('live sync: report upload before the sync', x.status === 200);
+      x = await A('sync/run', {client_id: sco}); const rs = x.j.result || {};
+      check('live sync: run pages through and imports', x.status === 200 && rs.fetched === 5 && rs.added === 2 && rs.changed === 1 && rs.skipped_cancelled === 1 && rs.skipped_other === 1, JSON.stringify(x.j));
+      check('live sync: partner gets the token and a one-month booking range', seen.some((q) => q.headers.authorization === 'Bearer ' + TOKEN && /T23:59:59Z$/.test(JSON.parse(q.body || '{}').bookingDateRange?.endDate || '')));
+      const row = (inv) => { const t = DB.raw.prepare('SELECT row, status FROM transactions WHERE client_id = ? AND code = ?').get(sco, inv); return t ? JSON.parse(t.row) : null; };
+      const r1 = row('HB' + fy + '/900001'), r2 = row('HB' + fy + '/900002'), r3 = row('HB' + fy + '/900003');
+      check('live sync: new booking stored under the HB invoice with mapped fields', !!r1 && r1['Guest Name'] === 'Guest 900001' && r1['Booking Code'] === 'HC-900001' && r1['Check-In Date'] === day(20) && r1['Stay Days'] === 2 && r1['Emp Code'] === 'E900001' && r1['Booked Date'] === day(2));
+      check('live sync: uploaded booking keeps its billing, gets the cancellation', !!r2 && r2.Status === 'Cancelled' && r2['Net Amount Charged'] === 15340 && r2['Booking Code'] === 'OLD-1' && r2['Property Name'] === 'Hotel 900002');
+      check('live sync: cancellation with a charge is kept; free one and planned left out', !!r3 && r3['Cancellation Charges Total'] === 1200 && !row('HB' + fy + '/900004') && !row('HB' + fy + '/900005'));
+      check('live sync: shows in upload history as Live sync', !!DB.raw.prepare("SELECT 1 FROM tx_uploads WHERE client_id = ? AND filename LIKE 'Live sync%' AND by_email = 'boss@zuna.example'").get(sco));
+      x = await A('sync/run', {client_id: sco}); check('live sync: second run changes nothing', x.status === 200 && x.j.result.added === 0 && x.j.result.changed === 0 && x.j.sync.last_ok && !x.j.sync.last_error);
+      x = await A('tx/remove', {client_id: sco, code: 'HB' + fy + '/900001'}); x = await A('sync/run', {client_id: sco});
+      check('live sync: a booking removed by the team is not brought back', x.j.result.skipped_removed === 1 && !row('HB' + fy + '/900001'));
+      x = await A('tx/restore', {client_id: sco, id: DB.raw.prepare("SELECT id FROM tx_removed WHERE client_id = ? ORDER BY id DESC LIMIT 1").get(sco).id});
+      const V = async (code) => { const y = await call('/api/tx/voucher', {method: 'POST', body: {client_id: sco, code}, cookie: admin}); return {status: y.status, j: await y.json()}; };
+      x = await call('/api/tx', {method: 'POST', body: {client_id: sco}, cookie: admin}); check('live sync: hotel bookings page knows vouchers are available', (await x.json()).live === true);
+      x = await V('HB' + fy + '/900001'); check('live sync: voucher link fetched for a booking', x.status === 200 && x.j.confirmation === 'https://files.partner.test/V900001.pdf');
+      x = await V('HB' + fy + '/900003'); check('live sync: partner 404 for a voucher is explained', x.status === 404);
+      x = await V('HB' + fy + '/123'); check('live sync: voucher only for bookings in the portal', x.status === 404);
+      x = await call('/api/tx/voucher', {method: 'POST', body: {client_id: sco, code: 'HB' + fy + '/900001'}, cookie: asha}); check('live sync: other client cannot fetch the voucher', x.status === 404 || x.status === 403);
+      MOCK.push(bk(900006, 'Confirmed')); x = await A('sync/save', {client_id: sco, enabled: true}); check('live sync: turned on', x.status === 200 && x.j.sync.enabled === 1);
+      await worker.scheduled({cron: '15 */3 * * *'}, env, {waitUntil: (p) => p}); await new Promise((r) => setTimeout(r, 50));
+      check('live sync: the 3-hourly trigger picks up a new booking', !!row('HB' + fy + '/900006'));
+      partnerDown = true; x = await A('sync/run', {client_id: sco});
+      check('live sync: an IP refusal is reported plainly and kept as last error', x.status === 502 && /allow-list/.test(x.j.error) && /allow-list/.test(x.j.sync.last_error) && !!x.j.sync.last_ok);
+      globalThis.fetch = prevFetch;
+    }
     { // audit log + backups (Zuna admin only)
       let x = await call('/api/login', {method: 'POST', body: {email: 'asha@acme.example', password: 'wrong-password-1'}});
       x = await A('audit', {kind: 'signin'});

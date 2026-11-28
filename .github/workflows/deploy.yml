@@ -61,7 +61,7 @@ jobs:
           routes = [{ pattern = "$DOMAIN", custom_domain = true }]
 
           [triggers]
-          crons = ["30 2 * * *"]
+          crons = ["30 2 * * *", "15 */3 * * *"]
 
           [[d1_databases]]
           binding = "DB"

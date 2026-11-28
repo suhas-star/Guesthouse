@@ -413,6 +413,8 @@ const SCHEMA = [
   "CREATE TABLE IF NOT EXISTS gh_cancel (id INTEGER PRIMARY KEY AUTOINCREMENT, gh_id INTEGER NOT NULL, room_type_id INTEGER DEFAULT 0, free_hours REAL DEFAULT 24, charge_type TEXT DEFAULT 'nights', charge_value REAL DEFAULT 1, note TEXT, by_email TEXT, at TEXT)",
   "CREATE TABLE IF NOT EXISTS guests (id INTEGER PRIMARY KEY AUTOINCREMENT, client_id INTEGER NOT NULL, gkey TEXT NOT NULL, title TEXT, name TEXT, gender TEXT, email TEXT, phone TEXT, grade TEXT, emp_code TEXT, base TEXT, uses INTEGER DEFAULT 0, last_used TEXT, UNIQUE (client_id, gkey))",
   // hotel bookings removed by the Zuna team (kept so they can be restored)
+  // live sync settings per client: partner API address, relay, secrets (never sent back to the browser) and the last run
+  "CREATE TABLE IF NOT EXISTS tx_sync (client_id INTEGER PRIMARY KEY, api_url TEXT, relay_url TEXT, relay_key TEXT, token TEXT, months INTEGER DEFAULT 2, skip_free_cxl INTEGER DEFAULT 1, enabled INTEGER DEFAULT 0, last_run TEXT, last_ok TEXT, last_error TEXT, last_result TEXT)",
   "CREATE TABLE IF NOT EXISTS tx_removed (id INTEGER PRIMARY KEY AUTOINCREMENT, client_id INTEGER NOT NULL, code TEXT NOT NULL, row TEXT NOT NULL, upload_id INTEGER, by_email TEXT, at TEXT, restored TEXT)",
 ];
 let schemaReady = false;
@@ -845,17 +847,18 @@ async function backupList(env) {
    One row for every change made through the portal (and every sign-in): who, when, what, on which client, from which IP.
    Written after the request has been handled; reads (lists, quotes, previews) are not logged. Secrets and files are never stored. */
 const AUDIT_READS = new Set(["/api/admin/state", "/api/admin/quote", "/api/admin/tx/preview", "/api/admin/tx/stored", "/api/admin/tx/uploads", "/api/admin/tx/file", "/api/admin/backups", "/api/admin/backup/download", "/api/admin/audit",
-  "/api/manage/state", "/api/book/avail", "/api/book/quote", "/api/book/cancel/preview", "/api/trips", "/api/bookings", "/api/guests", "/api/tx"]);
+  "/api/manage/state", "/api/admin/sync/state", "/api/admin/sync/test", "/api/tx/voucher", "/api/book/avail", "/api/book/quote", "/api/book/cancel/preview", "/api/trips", "/api/bookings", "/api/guests", "/api/tx"]);
 const AUDIT_LABEL = {"/api/login": "Signed in", "/api/forgot": "Asked for a password reset code", "/api/reset": "Reset own password", "/api/vouchers": "Hotel Desk update",
   "/api/book": "Booked a stay", "/api/book/update": "Changed a booking", "/api/book/cancel": "Cancelled a booking", "/api/book/resend": "Sent the booking email",
   "/api/admin/rate": "Saved a rate", "/api/admin/block": "Saved blackout dates", "/api/admin/svc": "Changed the service charge", "/api/admin/cancel": "Saved a cancellation policy", "/api/admin/bulk": "Bulk update",
   "/api/admin/gh": "Saved a guest house", "/api/admin/gh/delete": "Deleted a guest house", "/api/admin/client": "Saved client settings", "/api/admin/client/logo": "Changed the client logo",
   "/api/admin/doc": "Saved a document", "/api/admin/doc/delete": "Deleted a document", "/api/admin/photo": "Added a photo", "/api/admin/photo/delete": "Deleted a photo",
   "/api/admin/booking": "Saved a stay", "/api/admin/booking/delete": "Removed a stay", "/api/admin/booking/restore": "Restored a stay",
+  "/api/admin/sync/save": "Changed the live hotel sync settings", "/api/admin/sync/run": "Ran the live hotel sync",
   "/api/admin/tx/import": "Uploaded a hotel report", "/api/admin/tx/undo": "Undid a hotel report upload", "/api/admin/tx/keep": "Kept a possible duplicate", "/api/admin/tx/remove": "Removed a hotel booking", "/api/admin/tx/restore": "Restored a hotel booking",
   "/api/admin/user": "Saved a user", "/api/admin/user/access": "Changed a user's access", "/api/admin/user/reset": "Reset a user's password", "/api/admin/reminders": "Sent document reminders", "/api/admin/backup": "Backed up the data now",
   "/api/manage/user": "Saved a user", "/api/manage/user/access": "Changed a user's access", "/api/manage/user/reset": "Reset a user's password"};
-const AUDIT_DROP = /^(password|pw|new_password|new_pw|old_password|current|code|token|pdf|data|file|content|logo|image|photo|csv|rows|xlsx|b64)$/i;
+const AUDIT_DROP = /^(password|pw|new_password|new_pw|old_password|current|code|token|relay_key|pdf|data|file|content|logo|image|photo|csv|rows|xlsx|b64)$/i;
 const auditClean = (v, d) => { if (v == null) return v; if (typeof v === "string") return v.length > 160 ? v.slice(0, 160) + "…" : v; if (typeof v !== "object") return v; if (d > 2) return "…";
   if (Array.isArray(v)) return v.length > 12 ? v.slice(0, 12).map((x) => auditClean(x, d + 1)).concat(["… " + (v.length - 12) + " more"]) : v.map((x) => auditClean(x, d + 1));
   const o = {}; for (const [k, x] of Object.entries(v)) { if (AUDIT_DROP.test(k)) { if (x) o[k] = "(not stored)"; continue; } o[k] = auditClean(x, d + 1); } return o; };
@@ -1303,7 +1306,156 @@ async function txList(env, cid, b) {
   w.push("(held IS NULL OR held = 0)");   // possible duplicates stay hidden until an admin keeps them
   const {results} = await env.DB.prepare("SELECT row FROM transactions WHERE " + w.join(" AND ") + " ORDER BY booked DESC, code LIMIT 10001").bind(...args).all();
   const last = await env.DB.prepare("SELECT at FROM tx_uploads WHERE client_id = ? AND undone IS NULL ORDER BY id DESC LIMIT 1").bind(cid).first();
-  return json({rows: results.slice(0, 10000).map((x) => JSON.parse(x.row)), more: results.length > 10000, updated: last ? last.at : null, cols: TX_COLS});
+  const live = await env.DB.prepare("SELECT 1 FROM tx_sync WHERE client_id = ? AND token IS NOT NULL AND token != '' AND relay_key IS NOT NULL AND relay_key != ''").bind(cid).first();
+  return json({rows: results.slice(0, 10000).map((x) => JSON.parse(x.row)), more: results.length > 10000, updated: last ? last.at : null, cols: TX_COLS, live: !!live});
+}
+
+// ---------- live hotel sync: the partner's bookings API, called through Zuna's fixed-IP relay ----------
+// The partner allow-lists one IP, so every call goes worker -> relay (DigitalOcean reserved IP) -> partner.
+// Bookings come in under the same Invoice No as the uploaded reports (HB<financial year>/<booking id>) and go
+// through the normal import, so matching, possible-duplicate holds, history and undo all work as for uploads.
+const SYNC_DEF = {api_url: "https://bff.prod.cbtsuite.com", relay_url: "https://174-138-123-123.sslip.io", relay_key: "", token: "", months: 2, skip_free_cxl: 1, enabled: 0};
+const SYNC_PATH = {report: "/api/LtmReport/ltm_bookings", totals: "/api/LtmReport/ltm_bookings-transaction-report", voucher: "/api/LtmReport/ltm_booking-voucher-links/"};
+async function syncCfg(env, cid) { const r = await env.DB.prepare("SELECT * FROM tx_sync WHERE client_id = ?").bind(cid).first(); const c = {...SYNC_DEF, client_id: cid}; if (r) for (const k in r) if (r[k] != null) c[k] = r[k]; return c; }
+const jwtInfo = (t) => { try { let s = String(t).split(".")[1].replace(/-/g, "+").replace(/_/g, "/"); s += "===".slice((s.length + 3) % 4); const p = JSON.parse(atob(s));
+  return {exp: p.exp ? new Date(p.exp * 1000).toISOString() : null, client: p.clientId ?? null, corporate: p.corporateId ?? null}; } catch (e) { return null; } };
+const syncView = (c) => ({api_url: c.api_url, relay_url: c.relay_url, months: +c.months, skip_free_cxl: c.skip_free_cxl ? 1 : 0, enabled: c.enabled ? 1 : 0, has_key: !!c.relay_key, has_token: !!c.token,
+  token: c.token ? jwtInfo(c.token) : null, last_run: c.last_run || null, last_ok: c.last_ok || null, last_error: c.last_error || null, last_result: jparse(c.last_result, null)});
+const b64text = (b) => new TextDecoder().decode(Uint8Array.from(atob(b || ""), (ch) => ch.charCodeAt(0)));
+// one call to the partner API through the relay; 5xx and network errors are retried twice, 401/403 are not
+async function partnerCall(c, method, path, body) {
+  if (!c.relay_url || !c.relay_key) throw new Error("The relay address and key are not saved yet.");
+  if (!c.token) throw new Error("The API token is not saved yet.");
+  const req = {url: String(c.api_url).replace(/\/+$/, "") + path, method, headers: {authorization: "Bearer " + c.token, "content-type": "application/json", accept: "application/json"}};
+  if (body) req.body = JSON.stringify(body);
+  let last;
+  for (let i = 0; i < 3; i++) {
+    if (i) await new Promise((ok) => setTimeout(ok, 1500 * i * i));
+    let r, o;
+    try { r = await fetch(String(c.relay_url).replace(/\/+$/, "") + "/forward", {method: "POST", headers: {"content-type": "application/json", "x-relay-key": c.relay_key}, body: JSON.stringify(req), signal: AbortSignal.timeout(70000)}); o = await r.json().catch(() => ({})); }
+    catch (e) { last = new Error("The relay did not answer (" + (e.message || "network error") + ")."); continue; }
+    if (r.status === 401) throw new Error("The relay refused the key. Check the relay key.");
+    if (!r.ok) { last = new Error("Relay: " + (o.error || "HTTP " + r.status)); if (r.status === 403 || r.status === 400) throw last; continue; }
+    const txt = b64text(o.body_b64); let data = null; try { data = JSON.parse(txt); } catch (e) { /* not JSON */ }
+    if (o.status === 403) throw new Error(/token/i.test(txt) ? "The API token was rejected or has expired. Save a new token." : "Access denied by the partner: our IP is not on their allow-list.");
+    if (o.status === 401) throw new Error("The partner says the API token is missing or malformed.");
+    if (o.status === 404) return {status: 404, data};
+    if (o.status >= 500) { last = new Error("Partner API error " + o.status + ((data && data.errorDetails) ? ": " + data.errorDetails : "")); continue; }
+    if (o.status >= 400 || !data) throw new Error("Partner API " + o.status + ": " + ((data && data.message) || txt.slice(0, 160) || "no answer"));
+    if (data.status === "failure") throw new Error("Partner API: " + (data.message || "failure"));
+    return {status: o.status, data};
+  }
+  throw last;
+}
+// partner timestamps are UTC; the portal works in IST dates
+const istDate = (s) => { if (!s) return ""; const v = String(s), t = Date.parse(/Z$|[+-]\d\d:?\d\d$/.test(v) ? v : v + "Z"); return isNaN(t) ? "" : new Date(t + 19800000).toISOString().slice(0, 10); };
+const fyTag = (d) => { const y = +d.slice(0, 4), m = +d.slice(5, 7); return String((m >= 4 ? y : y - 1) % 100).padStart(2, "0"); };   // HB26 = April 2026 to March 2027
+const apiInvoice = (x) => { const n = x.invoiceNumber ?? x.bookingId, d = istDate(x.bookingDate); return n != null && n !== "" && d ? "HB" + fyTag(d) + "/" + n : ""; };
+const nz = (v) => v == null ? "" : v;
+function apiRow(x) {
+  const r = {}; TX_COLS.forEach((k) => { r[k] = ""; });
+  Object.assign(r, {"Booking Code": String(nz(x.hotelConfirmationNumber) || nz(x.supplierConfirmationNumber)), "Entity Name": nz(x.billingEntity), "Property Name": nz(x.propertyName), "Property Category": nz(x.category), City: nz(x.city),
+    "Emp Code": String(nz(x.employeeId)), "Guest Name": nz(x.travellerName), "Booked Date": istDate(x.bookingDate), "Check-In Date": istDate(x.checkIn), "Check-Out Date": istDate(x.checkOut), Grade: nz(x.grade),
+    "Tariff Per Day": nz(x.ratePerNight), "Stay Days": nz(x.totalNumberOfNights), "Total Tariff": nz(x.totalAmountINR ?? x.totalAmount), Status: nz(x.status), "Cancellation Charges Total": nz(x.totalCancellationCharges),
+    "Invoice No": apiInvoice(x), "WBS/ID or Cost Code": String(nz(x.wbs) || nz(x.costCentre)), "Travel Req ID": String(nz(x.travelRequestId)), "Base Location": nz(x.ltiBaseLocation)});
+  return r;
+}
+// a booking already in the portal (from a report upload) keeps its billing figures; the API only brings
+// cancellations, changed dates and anything the upload left blank
+const SYNC_LIVE = ["Check-In Date", "Check-Out Date", "Stay Days", "Cancellation Charges Total"];
+function apiMerge(old, a) {
+  const r = {...old};
+  for (const k of TX_COLS) if ((r[k] == null || r[k] === "") && a[k] !== "") r[k] = a[k];
+  for (const k of SYNC_LIVE) if (a[k] !== "" && a[k] != null) r[k] = a[k];
+  if (/cancel/i.test(a.Status) && !/cancel/i.test(r.Status || "")) r.Status = a.Status;
+  return r;
+}
+const monthRanges = (n, now = new Date()) => { const out = [], y = now.getUTCFullYear(), m = now.getUTCMonth();
+  for (let i = n; i >= 0; i--) { const s = new Date(Date.UTC(y, m - i, 1)), e = new Date(Date.UTC(y, m - i + 1, 1) - 1000); out.push({startDate: s.toISOString().slice(0, 19) + "Z", endDate: e.toISOString().slice(0, 19) + "Z"}); } return out; };
+async function syncRun(env, cid, by) {
+  await ensureSchema(env);
+  const c = await syncCfg(env, cid), at = new Date().toISOString(), res = {fetched: 0, months: 0, added: 0, changed: 0, skipped_cancelled: 0, skipped_removed: 0, skipped_other: 0, held: 0};
+  const save = (ok, err) => env.DB.prepare("INSERT INTO tx_sync (client_id, last_run, last_ok, last_error, last_result) VALUES (?, ?, ?, ?, ?) ON CONFLICT(client_id) DO UPDATE SET last_run = excluded.last_run, last_ok = COALESCE(excluded.last_ok, tx_sync.last_ok), last_error = excluded.last_error, last_result = excluded.last_result")
+    .bind(cid, at, ok ? at : null, err || null, JSON.stringify(res)).run();
+  try {
+    const got = new Map();
+    for (const range of monthRanges(Math.min(Math.max(+c.months || 0, 0), 12))) {
+      for (let off = 0, total = Infinity; off < total && off < 50000;) {
+        const {data} = await partnerCall(c, "POST", SYNC_PATH.report, {bookingDateRange: range, pagination: {offset: off, limit: 1000}});
+        const list = Array.isArray(data.bookings) ? data.bookings : []; total = +data.totalCount || 0;
+        list.forEach((x) => { const r = apiRow(x); if (r["Invoice No"]) got.set(r["Invoice No"], r); else res.skipped_other++; });
+        res.fetched += list.length; if (!list.length) break; off += list.length;
+      }
+      res.months++;
+    }
+    const codes = [...got.keys()], old = new Map(), removed = new Set();
+    for (let i = 0; i < codes.length; i += 90) { const part = codes.slice(i, i + 90), q = part.map(() => "?").join(",");
+      (await env.DB.prepare("SELECT code, row FROM transactions WHERE client_id = ? AND code IN (" + q + ")").bind(cid, ...part).all()).results.forEach((x) => old.set(x.code, JSON.parse(x.row)));
+      (await env.DB.prepare("SELECT code FROM tx_removed WHERE client_id = ? AND restored IS NULL AND code IN (" + q + ")").bind(cid, ...part).all()).results.forEach((x) => removed.add(x.code)); }
+    const rows = [];
+    for (const [code, a] of got) {
+      if (old.has(code)) { rows.push(apiMerge(old.get(code), a)); continue; }
+      if (removed.has(code)) { res.skipped_removed++; continue; }   // the Zuna team removed it on purpose
+      if (/planned/i.test(a.Status)) { res.skipped_other++; continue; }
+      if (c.skip_free_cxl && /cancel/i.test(a.Status) && !(+a["Cancellation Charges Total"] > 0)) { res.skipped_cancelled++; continue; }   // cancelled free of charge: nothing to bill
+      rows.push(a);
+    }
+    if (rows.length) {
+      const r = await txImport(env, cid, {header: TX_COLS, rows: rows.map((o) => TX_COLS.map((k) => o[k])), filename: "Live sync · " + istStamp(new Date())}, {email: by || "Zuna Hotel Desk"}, false);
+      const o = await r.json();
+      if (r.status === 200 && o.result) { res.added = o.result.added; res.changed = o.result.changed; res.held = o.result.held || 0; res.upload_id = o.upload_id; }
+      else if (r.status !== 409) throw new Error(o.error || "Could not save the bookings.");
+    }
+    await save(true, null); return {ok: true, result: res};
+  } catch (e) { await save(false, e.message || String(e)); return {ok: false, error: e.message || String(e), result: res}; }
+}
+async function syncAll(env) {
+  await ensureSchema(env);
+  const {results} = await env.DB.prepare("SELECT client_id FROM tx_sync WHERE enabled = 1").all();
+  for (const x of results) await syncRun(env, x.client_id, "Zuna Hotel Desk").catch(() => null);
+}
+async function syncApi(env, user, path, b) {
+  const cid = +b.client_id; if (!cid || !(await env.DB.prepare("SELECT 1 FROM clients WHERE id = ?").bind(cid).first())) return json({error: "Client not found."}, 404);
+  if (path === "/api/admin/sync/state") return json({sync: syncView(await syncCfg(env, cid))});
+  if (path === "/api/admin/sync/save") {
+    const c = await syncCfg(env, cid), url = (v, d) => { const s = clean(v, 200).replace(/\/+$/, ""); return /^https:\/\/[a-z0-9.-]+(:\d+)?$/i.test(s) || /^http:\/\/(127\.0\.0\.1|localhost)(:\d+)?$/.test(s) ? s : d; };
+    const api = b.api_url !== undefined ? url(b.api_url, null) : c.api_url, relay = b.relay_url !== undefined ? url(b.relay_url, null) : c.relay_url;
+    if (!api || !relay) return json({error: "Addresses must start with https:// and be just the host, like https://example.com."}, 400);
+    let key = c.relay_key, token = c.token;
+    if (b.relay_key) { key = clean(b.relay_key, 200); if (!/^[A-Za-z0-9_-]{32,200}$/.test(key)) return json({error: "That relay key doesn't look right: it should be the long code printed by the relay setup."}, 400); }
+    if (b.token) { token = clean(b.token, 4000).replace(/^bearer\s+/i, ""); if (!jwtInfo(token)) return json({error: "That doesn't look like an API token. Paste the full token you received from the partner."}, 400); }
+    const months = Math.min(Math.max(parseInt(b.months ?? c.months, 10) || 0, 0), 12), skip = b.skip_free_cxl !== undefined ? (b.skip_free_cxl ? 1 : 0) : c.skip_free_cxl, on = b.enabled !== undefined ? (b.enabled ? 1 : 0) : c.enabled;
+    if (on && (!key || !token)) return json({error: "Save the relay key and the API token before turning the sync on."}, 400);
+    await env.DB.prepare("INSERT INTO tx_sync (client_id, api_url, relay_url, relay_key, token, months, skip_free_cxl, enabled) VALUES (?, ?, ?, ?, ?, ?, ?, ?) ON CONFLICT(client_id) DO UPDATE SET api_url = excluded.api_url, relay_url = excluded.relay_url, relay_key = excluded.relay_key, token = excluded.token, months = excluded.months, skip_free_cxl = excluded.skip_free_cxl, enabled = excluded.enabled")
+      .bind(cid, api, relay, key, token, months, skip, on).run();
+    return json({ok: true, sync: syncView(await syncCfg(env, cid))});
+  }
+  if (path === "/api/admin/sync/run") { const r = await syncRun(env, cid, user.email); return json({...r, sync: syncView(await syncCfg(env, cid))}, r.ok ? 200 : 502); }
+  if (path === "/api/admin/sync/test") {   // relay up? which IP do partners see? does the partner accept us? (this month's totals)
+    const c = await syncCfg(env, cid), steps = [];
+    try { const r = await fetch(String(c.relay_url).replace(/\/+$/, "") + "/health", {signal: AbortSignal.timeout(15000)}); steps.push({step: "Relay reachable", ok: r.ok, detail: r.ok ? c.relay_url : "HTTP " + r.status}); }
+    catch (e) { steps.push({step: "Relay reachable", ok: false, detail: e.message || "no answer"}); return json({steps}); }
+    if (!c.relay_key) { steps.push({step: "Relay key", ok: false, detail: "Not saved yet"}); return json({steps}); }
+    try { const r = await fetch(String(c.relay_url).replace(/\/+$/, "") + "/ip", {headers: {"x-relay-key": c.relay_key}, signal: AbortSignal.timeout(15000)}); const o = await r.json().catch(() => ({}));
+      steps.push(r.ok ? {step: "Outgoing IP", ok: true, detail: o.ip || "?"} : {step: "Relay key", ok: false, detail: r.status === 401 ? "The relay refused the key" : (o.error || "HTTP " + r.status)}); if (!r.ok) return json({steps}); }
+    catch (e) { steps.push({step: "Outgoing IP", ok: false, detail: e.message}); return json({steps}); }
+    try { const {data} = await partnerCall(c, "POST", SYNC_PATH.totals, {bookingDateRange: monthRanges(0)[0]});
+      steps.push({step: "Partner API", ok: true, detail: "This month: " + (data.totalBookings || 0) + " bookings, " + (data.totalCancelledBookings || 0) + " cancelled", totals: data}); }
+    catch (e) { steps.push({step: "Partner API", ok: false, detail: e.message}); }
+    return json({steps});
+  }
+  return json({error: "Not found."}, 404);
+}
+// confirmation / reconfirmation voucher links of one hotel booking (made fresh by the partner on each call)
+async function txVoucher(env, cid, code) {
+  const m = /^HB\d{2}\/(\d{1,12})$/.exec(String(code || "").trim()); if (!m) return json({error: "This booking has no partner booking number."}, 400);
+  if (!(await env.DB.prepare("SELECT 1 FROM transactions WHERE client_id = ? AND code = ?").bind(cid, String(code).trim()).first())) return json({error: "Booking not found."}, 404);
+  const c = await syncCfg(env, cid); if (!c.token || !c.relay_key) return json({error: "Vouchers aren't available yet: the live connection is not set up."}, 503);
+  try { const {status, data} = await partnerCall(c, "GET", SYNC_PATH.voucher + m[1]);
+    if (status === 404) return json({error: "The partner has no voucher for this booking."}, 404);
+    const ok = (u) => typeof u === "string" && /^https:\/\//i.test(u);
+    return json({confirmation: ok(data.confirmationVoucherUrl) ? data.confirmationVoucherUrl : null, reconfirmations: (Array.isArray(data.reconfirmationVoucherUrls) ? data.reconfirmationVoucherUrls : [data.reconfirmationVoucherUrl]).filter(ok)}); }
+  catch (e) { return json({error: e.message}, 502); }
 }
 
 async function adminApi(req, env, user, path) {
@@ -1451,6 +1603,10 @@ async function adminApi(req, env, user, path) {
       case "/api/admin/tx/remove": return txRemove(env, +b.client_id, b.code, user);
       case "/api/admin/tx/keep": return txKeep(env, +b.client_id, b.code);
       case "/api/admin/tx/restore": return txRestore(env, +b.client_id, b.id);
+      case "/api/admin/sync/state":
+      case "/api/admin/sync/save":
+      case "/api/admin/sync/run":
+      case "/api/admin/sync/test": return syncApi(env, user, path, b);
       case "/api/admin/booking":
       case "/api/admin/booking/delete":
       case "/api/admin/booking/restore": {
@@ -1513,7 +1669,9 @@ const signIn = (request) => {
 
 const WORKER = {
   // daily (Cloudflare cron trigger): e-mail reminders for guest house documents nearing expiry
-  async scheduled(event, env, ctx) { ctx.waitUntil(docReminders(env)); ctx.waitUntil(backupNow(env, "nightly").catch(() => null));
+  async scheduled(event, env, ctx) { ctx.waitUntil(syncAll(env).catch(() => null));   // live hotel sync on every trigger (every 3 hours)
+    if (event && event.cron && event.cron !== "30 2 * * *") return;
+    ctx.waitUntil(docReminders(env)); ctx.waitUntil(backupNow(env, "nightly").catch(() => null));
     ctx.waitUntil(env.DB.prepare("DELETE FROM audit WHERE at < ?").bind(new Date(Date.now() - 3 * 365 * 864e5).toISOString()).run().catch(() => null)); },
   async fetch(request, env, ctx) {
     const path0 = new URL(request.url).pathname, body0 = await auditBody(request, path0);
@@ -1574,6 +1732,17 @@ async function handle(request, env) {
       const cid = u.admin ? +b.client_id : u.client_id;
       if (!cid) return json({error: "No client."}, 400);
       return txList(env, cid, b);
+    }
+    if (path === "/api/tx/voucher" && request.method === "POST") {   // partner voucher links of one hotel booking
+      const origin = request.headers.get("origin");
+      if (origin && origin !== url.origin) return json({error: "Bad origin."}, 403);
+      const u = await currentUser(request, env);
+      if (!u) return json({error: "Your session has expired."}, 403);
+      if (!u.tx) return json({error: "You don't have access to hotel bookings. Ask your admin."}, 403);
+      let b; try { b = await request.json(); } catch (e) { return json({error: "Bad request."}, 400); }
+      const cid = u.admin ? +b.client_id : u.client_id;
+      if (!cid) return json({error: "No client."}, 400);
+      return txVoucher(env, cid, b.code);
     }
     if (path.startsWith("/api/manage/") && request.method === "POST") {
       const origin = request.headers.get("origin");

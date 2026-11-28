@@ -907,7 +907,7 @@ const hxLoad = async () => {
   if (HX.checkout) { body.checkout_from = HX.checkout[0]; body.checkout_to = HX.checkout[1]; }
   try { const r = await ZUI.busy(fetch('/api/tx', {method: 'POST', headers: {'content-type': 'application/json'}, body: JSON.stringify(body), credentials: 'same-origin'}));
     const j = await r.json().catch(() => ({})); if (r.status === 403 && /session/i.test(j.error || '')) { location.reload(); return; } if (!r.ok) throw new Error(j.error || 'Could not load hotel bookings.');
-    HX.rows = j.rows; HX.cols = j.cols; HX.updated = j.updated; HX.more = j.more; }
+    HX.rows = j.rows; HX.cols = j.cols; HX.updated = j.updated; HX.more = j.more; HX.live = !!j.live; }
   catch (e) { HX.err = e.message === 'Failed to fetch' ? 'Network error. Check your connection and try again.' : e.message; HX.rows = HX.rows || []; }
   HX.loading = false; HX.show = 50; if (state.view === 'hotels') render(); };
 const hxFiltered = () => { const q = HX.q.trim().toLowerCase();
@@ -966,6 +966,17 @@ const hxDrawer = (r) => {
   tiles.append(tile('Tariff / night', money(r['Tariff Per Day'] || 0), num(r['Eligibility Criteria']) ? (hxOver(r) ? 'Above cap of ' : 'Within cap of ') + inr(r['Eligibility Criteria']) : 'No cap on file', hxOver(r)),
     tile('Net amount', money(r['Net Amount Charged'] || 0), 'incl. GST ' + money(r['GST Charges'] || 0)));
   w.appendChild(tiles);
+  // hotel voucher, fetched fresh from the booking system (its links expire, so they are never stored)
+  if (HX.live && /^HB\d{2}\/\d+$/.test(String(r['Invoice No'] || ''))) { const vb = h('div', 'flex flex-wrap items-center gap-2');
+    const get = h('button', 'btn'); get.type = 'button'; get.append(icon('file-text', 'w-4 h-4'), document.createTextNode('Hotel voucher')); vb.appendChild(get);
+    get.onclick = async () => { get.disabled = true; get.lastChild.textContent = 'Getting voucher…';
+      try { const x = await ZUI.busy(fetch('/api/tx/voucher', {method: 'POST', headers: {'content-type': 'application/json'}, credentials: 'same-origin', body: JSON.stringify({client_id: DATA.client ? DATA.client.id : null, code: r['Invoice No']})}));
+        const j = await x.json().catch(() => ({})); if (!x.ok) throw new Error(j.error || 'Could not get the voucher.');
+        const links = [[j.confirmation, 'Confirmation voucher']].concat((j.reconfirmations || []).map((u, i, a) => [u, 'Reconfirmation' + (a.length > 1 ? ' ' + (i + 1) : '')])).filter((l) => l[0]);
+        if (!links.length) throw new Error(hxCancelled(r) ? 'Cancelled bookings have no voucher.' : 'The voucher is not ready yet. Try again later.');
+        vb.replaceChildren(...links.map(([u, l]) => { const a = h('a', 'btn btn-primary'); a.href = u; a.target = '_blank'; a.rel = 'noopener noreferrer'; a.append(icon('external-link', 'w-4 h-4'), document.createTextNode(l)); return a; })); }
+      catch (e) { get.disabled = false; get.lastChild.textContent = 'Hotel voucher'; toast(e.message === 'Failed to fetch' ? 'Network error. Check your connection and try again.' : e.message); } };
+    w.appendChild(vb); }
   // sections
   const SECT = [['Guest', 'user-round', ['Grade', 'Emp Code', 'Designation', 'Employee Email ID', 'Contact Number', 'Base Location']],
     ['Stay', 'bed-double', ['Room Type', 'Occupancy', 'Booking Level', 'Booking Code']],

@@ -852,7 +852,7 @@ const renderTx = (D, c) => {
     const key = inp('', y.has_key ? 'Leave empty to keep the saved key' : 'Paste the relay key', 'password'); key.autocomplete = 'off';
     const api0 = inp(y.api_url, 'https://…'), relay = inp(y.relay_url, 'https://…');
     const months = sel(String(y.months), [['0', 'This month only'], ['1', 'This and last month'], ['2', 'Last 3 months'], ['5', 'Last 6 months'], ['11', 'Last 12 months']]);
-    const skip = switchEl('Leave out bookings cancelled free of charge', !!y.skip_free_cxl), on = switchEl('Sync automatically every 3 hours', !!y.enabled);
+    const skip = switchEl('Leave out bookings cancelled free of charge', !!y.skip_free_cxl);
     const fee = inp(y.fee, '100', 'number'), feeG = inp(y.fee_gst, '18', 'number'), hG = inp(y.hotel_gst, '18', 'number'); [fee, feeG, hG].forEach((i) => { i.min = '0'; i.step = '0.01'; });
     const amt = h('div', 'rounded-xl bg-zuna-50/60 ring-1 ring-zuna-100 p-4 space-y-3'); const ag = h('div', 'grid sm:grid-cols-3 gap-3');
     ag.append(field('Transaction fee per booking (₹)', fee), field('GST on transaction fee (%)', feeG), field('Hotel GST (%)', hG));
@@ -862,10 +862,11 @@ const renderTx = (D, c) => {
     g.append(field('API token · ' + tokInfo, tok, 'sm:col-span-2'), field('Relay key · ' + (y.has_key ? 'Saved' : 'Not saved yet'), key), field('Bookings to check', months), field('Booking system address', api0), field('Relay address', relay));
     const err = h('p', 'text-sm text-rose-600 hidden'); err.setAttribute('role', 'alert');
     const row = h('div', 'flex flex-wrap items-center justify-end gap-2 pt-2'); const save = ib('button', 'btn btn-primary', 'Save', 'check'); save.type = 'submit'; row.appendChild(save);
-    f.append(h('p', 'text-xs text-zuna-500', 'The token and key are stored securely and never shown again. Paste a new one only to replace it.'), g, amt, skip, on, err, row);
+    f.append(h('p', 'text-xs text-zuna-500', 'Bookings start flowing in as soon as the token and the relay key are saved, and update every 15 minutes. Both are stored securely and never shown again: paste a new one only to replace it.'), g, amt, skip, err, row);
     f.onsubmit = async (e) => { e.preventDefault(); err.classList.add('hidden');
-      try { const r = await api('sync/save', {client_id: c.id, token: tok.value.trim(), relay_key: key.value.trim(), api_url: api0.value.trim(), relay_url: relay.value.trim(), months: +months.value, skip_free_cxl: skip.input.checked, enabled: on.input.checked, fee: fee.value, fee_gst: feeG.value, hotel_gst: hG.value, gst_slab: slab.input.checked});
-        closeModal(); toast('Live sync settings saved'); paintSync(r.sync); }
+      try { const r = await api('sync/save', {client_id: c.id, token: tok.value.trim(), relay_key: key.value.trim(), api_url: api0.value.trim(), relay_url: relay.value.trim(), months: +months.value, skip_free_cxl: skip.input.checked, fee: fee.value, fee_gst: feeG.value, hotel_gst: hG.value, gst_slab: slab.input.checked});
+        closeModal(); const x = r.synced; toast(!x ? 'Settings saved' : x.ok ? 'Saved · live data connected' + (x.result.added ? ': ' + x.result.added + ' new bookings' : '') : 'Saved, but the booking system did not answer: ' + x.error); paintSync(r.sync);
+        if (x && x.ok) { st.hist = null; loadHist(); loadStored(); } }
       catch (er) { err.textContent = er.message; err.classList.remove('hidden'); } };
     modal('Live sync settings · ' + c.name, f); };
   const syncTest = async () => { const w = h('div', 'space-y-2'); w.appendChild(h('p', 'text-sm text-zuna-500', 'Checking the relay and the booking system…')); modal('Connection check · ' + c.name, w);
@@ -874,24 +875,18 @@ const renderTx = (D, c) => {
         it.append(icon(s.ok ? 'circle-check' : 'circle-x', 'w-5 h-5 shrink-0 ' + (s.ok ? 'text-mint-700' : 'text-rose-600'))); const tx = h('div', 'min-w-0'); tx.append(h('p', 'text-sm font-bold', s.step), h('p', 'text-xs text-zuna-600 break-words', s.detail)); it.appendChild(tx); w.appendChild(it); });
       if (r.steps.every((s) => s.ok) && r.steps.length >= 3) w.appendChild(h('p', 'text-sm font-semibold text-mint-700 pt-1', 'Everything works. You can run a sync now.')); }
     catch (er) { w.replaceChildren(h('p', 'text-sm text-rose-600', er.message)); } };
-  const syncNow = async (btn) => { btn.disabled = true; const t0 = btn.lastChild.textContent; btn.lastChild.textContent = 'Syncing…';
-    try { const r = await api('sync/run', {client_id: c.id}); const x = r.result || {};
-      toast(x.added || x.changed ? 'Synced: ' + x.added + ' new, ' + x.changed + ' updated' : 'Synced: everything was already up to date'); paintSync(r.sync); st.hist = null; loadHist(); loadStored(); }
-    catch (er) { toast(er.message); loadSync(); }
-    finally { btn.disabled = false; btn.lastChild.textContent = t0; } };
   const paintSync = (y) => { ls.replaceChildren(); const ready = y.has_key && y.has_token;
     const top = h('div', 'flex flex-wrap items-center gap-3');
     const ic2 = h('span', 'grid place-items-center w-10 h-10 rounded-xl shrink-0 ' + (y.enabled ? 'bg-zuna-900 text-mint-400' : 'bg-zuna-50 text-zuna-400')); ic2.appendChild(icon('history', 'w-5 h-5'));
     const tt = h('div', 'min-w-0 flex-1'); tt.append(h('p', 'text-sm font-bold', 'Live sync with the booking system'),
-      h('p', 'text-xs text-zuna-500', !ready ? 'Not set up yet: save the API token and the relay key in Sync settings.' : y.enabled ? 'On · every 3 hours · checks bookings made in the last ' + (y.months + 1) + (y.months ? ' months' : ' month') : 'Off · bookings come in only when you click Sync now'));
+      h('p', 'text-xs text-zuna-500', !ready ? 'Not connected yet: save the API token and the relay key in Sync settings.' : 'Live · new and changed bookings come in every 15 minutes (bookings made in the last ' + (y.months + 1) + (y.months ? ' months' : ' month') + ')'));
     const acts = h('div', 'flex flex-wrap gap-2');
     const bS = ib('button', 'btn', 'Sync settings', 'sliders-horizontal'); bS.onclick = () => syncSettings(y);
     const bT = ib('button', 'btn', 'Check connection', 'shield-check'); bT.onclick = syncTest;
-    const bR = ib('button', 'btn btn-primary', 'Sync now', 'history'); bR.onclick = () => syncNow(bR); bR.disabled = !ready;
-    acts.append(bS, bT, bR); top.append(ic2, tt, acts); ls.appendChild(top);
+    acts.append(bS, bT); top.append(ic2, tt, acts); ls.appendChild(top);
     const info = h('div', 'mt-3 flex flex-wrap items-center gap-2 text-xs');
-    if (y.enabled) info.appendChild(h('span', 'zchip zchip-live', 'Live'));
-    if (y.last_ok) info.appendChild(h('span', 'zchip', 'Last synced ' + fDT(y.last_ok)));
+    if (y.enabled && !y.last_error) info.appendChild(h('span', 'zchip zchip-live', 'Live'));
+    if (y.last_ok) info.appendChild(h('span', 'zchip', 'Last updated ' + fDT(y.last_ok)));
     const lr = y.last_result; if (lr && y.last_run && !y.last_error) info.appendChild(h('span', 'text-zuna-500', lr.fetched + ' bookings checked · ' + lr.added + ' new · ' + lr.changed + ' updated' + (lr.skipped_cancelled ? ' · ' + lr.skipped_cancelled + ' free cancellations left out' : '') + (lr.held ? ' · ' + lr.held + ' held as possible duplicates' : '')));
     if (y.token && y.token.exp) { const days = Math.floor((Date.parse(y.token.exp) - Date.now()) / 864e5);
       if (days < 0) info.appendChild(h('span', 'zchip zchip-bad', 'API token expired · paste a new one in Sync settings'));
@@ -899,7 +894,7 @@ const renderTx = (D, c) => {
     if (lr && lr.amt_checked && !y.last_error) { const all = lr.amt_match === lr.amt_checked;
       info.appendChild(h('span', 'zchip ' + (all ? 'zchip-live' : 'zchip-warn'), all ? 'Amounts match the uploaded reports (' + lr.amt_checked + ' checked)' : 'Amounts differ from the uploaded reports for ' + (lr.amt_checked - lr.amt_match) + ' of ' + lr.amt_checked + ' bookings · check the GST figures in Sync settings')); }
     if (info.childNodes.length) ls.appendChild(info);
-    if (y.last_error) { const e = h('div', 'mt-3 flex gap-2 rounded-xl bg-rose-50 ring-1 ring-rose-200 p-3 text-sm text-rose-700'); e.append(icon('triangle-alert', 'w-4 h-4 shrink-0 mt-0.5'), h('span', null, 'Last sync on ' + fDT(y.last_run) + ' failed: ' + y.last_error)); ls.appendChild(e); } };
+    if (y.last_error) { const e = h('div', 'mt-3 flex gap-2 rounded-xl bg-rose-50 ring-1 ring-rose-200 p-3 text-sm text-rose-700'); e.append(icon('triangle-alert', 'w-4 h-4 shrink-0 mt-0.5'), h('span', null, 'Live data paused: the update on ' + fDT(y.last_run) + ' failed: ' + y.last_error + ' It retries every 15 minutes.')); ls.appendChild(e); } };
   const loadSync = () => api('sync/state', {client_id: c.id}).then((r) => { st.sync = r.sync; if (ls.isConnected) paintSync(r.sync); }).catch(() => ls.replaceChildren(h('p', 'text-sm text-zuna-500', 'Live sync status is not available right now.')));
   if (st.sync) paintSync(st.sync); else { ls.appendChild(h('p', 'text-sm text-zuna-500', 'Loading live sync…')); loadSync(); }
   const grid = h('div', 'grid xl:grid-cols-[minmax(0,1fr)_340px] gap-4 items-start'); D.appendChild(grid);

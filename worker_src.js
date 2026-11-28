@@ -1440,11 +1440,12 @@ async function syncApi(env, user, path, b) {
     const num = (v, d, max) => { if (v === undefined || v === null || v === "") return d; const n = +v; return isFinite(n) && n >= 0 && n <= max ? r2(n) : NaN; };
     const fee = num(b.fee, +c.fee, 100000), feeGst = num(b.fee_gst, +c.fee_gst, 100), hGst = num(b.hotel_gst, +c.hotel_gst, 100);
     if ([fee, feeGst, hGst].some((v) => isNaN(v))) return json({error: "Check the transaction fee and GST figures."}, 400);
-    const slab = b.gst_slab !== undefined ? (b.gst_slab ? 1 : 0) : (c.gst_slab ? 1 : 0), months = Math.min(Math.max(parseInt(b.months ?? c.months, 10) || 0, 0), 12), skip = b.skip_free_cxl !== undefined ? (b.skip_free_cxl ? 1 : 0) : c.skip_free_cxl, on = b.enabled !== undefined ? (b.enabled ? 1 : 0) : c.enabled;
-    if (on && (!key || !token)) return json({error: "Save the relay key and the API token before turning the sync on."}, 400);
+    // live as soon as both secrets are saved: no switch, no manual sync
+    const slab = b.gst_slab !== undefined ? (b.gst_slab ? 1 : 0) : (c.gst_slab ? 1 : 0), months = Math.min(Math.max(parseInt(b.months ?? c.months, 10) || 0, 0), 12), skip = b.skip_free_cxl !== undefined ? (b.skip_free_cxl ? 1 : 0) : c.skip_free_cxl, on = key && token ? 1 : 0;
     await env.DB.prepare("INSERT INTO tx_sync (client_id, api_url, relay_url, relay_key, token, months, skip_free_cxl, enabled, fee, fee_gst, hotel_gst, gst_slab) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?) ON CONFLICT(client_id) DO UPDATE SET api_url = excluded.api_url, relay_url = excluded.relay_url, relay_key = excluded.relay_key, token = excluded.token, months = excluded.months, skip_free_cxl = excluded.skip_free_cxl, enabled = excluded.enabled, fee = excluded.fee, fee_gst = excluded.fee_gst, hotel_gst = excluded.hotel_gst, gst_slab = excluded.gst_slab")
       .bind(cid, api, relay, key, token, months, skip, on, fee, feeGst, hGst, slab).run();
-    return json({ok: true, sync: syncView(await syncCfg(env, cid))});
+    const first = on ? await syncRun(env, cid, user.email) : null;   // bring the data in straight away
+    return json({ok: true, synced: first, sync: syncView(await syncCfg(env, cid))});
   }
   if (path === "/api/admin/sync/run") { const r = await syncRun(env, cid, user.email); return json({...r, sync: syncView(await syncCfg(env, cid))}, r.ok ? 200 : 502); }
   if (path === "/api/admin/sync/test") {   // relay up? which IP do partners see? does the partner accept us? (this month's totals)
@@ -1685,7 +1686,7 @@ const signIn = (request) => {
 
 const WORKER = {
   // daily (Cloudflare cron trigger): e-mail reminders for guest house documents nearing expiry
-  async scheduled(event, env, ctx) { ctx.waitUntil(syncAll(env).catch(() => null));   // live hotel sync on every trigger (every 3 hours)
+  async scheduled(event, env, ctx) { ctx.waitUntil(syncAll(env).catch(() => null));   // live hotel sync on every trigger (every 15 minutes)
     if (event && event.cron && event.cron !== "30 2 * * *") return;
     ctx.waitUntil(docReminders(env)); ctx.waitUntil(backupNow(env, "nightly").catch(() => null));
     ctx.waitUntil(env.DB.prepare("DELETE FROM audit WHERE at < ?").bind(new Date(Date.now() - 3 * 365 * 864e5).toISOString()).run().catch(() => null)); },

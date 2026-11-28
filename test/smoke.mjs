@@ -483,9 +483,13 @@ check('old host redirects to PRIMARY_HOST', r.status === 301 && r.headers.get('l
         return ok({status: 'failure'}, 500); };
       x = await A('sync/state', {client_id: sco}); check('live sync: starts unset', x.status === 200 && !x.j.sync.has_token && !x.j.sync.has_key && !x.j.sync.enabled);
       x = await A('sync/save', {client_id: sco, token: 'not-a-token'}); check('live sync: a non-token is refused', x.status === 400);
-      x = await A('sync/save', {client_id: sco, enabled: true}); check('live sync: cannot turn on without key and token', x.status === 400);
       x = await A('sync/save', {client_id: sco, api_url: 'http://evil.test'}); check('live sync: plain-http partner address refused', x.status === 400);
-      x = await A('sync/save', {client_id: sco, token: 'Bearer ' + TOKEN, relay_key: RKEY, api_url: 'https://api.partner.test/', relay_url: 'https://relay.test', months: 1});
+      x = await A('sync/save', {client_id: sco, relay_key: RKEY, api_url: 'https://api.partner.test/', relay_url: 'https://relay.test', months: 1});
+      check('live sync: not live with only the key', x.status === 200 && x.j.sync.enabled === 0 && !x.j.synced);
+      x = await A('sync/save', {client_id: sco, token: 'Bearer ' + TOKEN, skip_free_cxl: false});
+      check('live sync: goes live as soon as key and token are saved', x.status === 200 && x.j.sync.enabled === 1 && x.j.synced && x.j.synced.ok, JSON.stringify(x.j.synced));
+      x = await A('sync/save', {client_id: sco, skip_free_cxl: true});
+      DB.raw.prepare("DELETE FROM transactions WHERE client_id = ?").run(sco); DB.raw.prepare("DELETE FROM tx_uploads WHERE client_id = ?").run(sco);
       check('live sync: settings saved; secrets never sent back', x.status === 200 && x.j.sync.has_token && x.j.sync.has_key && x.j.sync.token.client === 7 && !!x.j.sync.token.exp && !JSON.stringify(x.j).includes(RKEY) && !JSON.stringify(x.j).includes('.sig'));
       const au = DB.raw.prepare("SELECT detail FROM audit WHERE action = 'Changed the live hotel sync settings' ORDER BY id DESC LIMIT 1").get();
       check('live sync: audit log keeps neither token nor key', !!au && !String(au.detail).includes(RKEY) && !String(au.detail).includes('.sig'));
@@ -516,9 +520,9 @@ check('old host redirects to PRIMARY_HOST', r.status === 301 && r.headers.get('l
       x = await V('HB' + fy + '/900003'); check('live sync: partner 404 for a voucher is explained', x.status === 404);
       x = await V('HB' + fy + '/123'); check('live sync: voucher only for bookings in the portal', x.status === 404);
       x = await call('/api/tx/voucher', {method: 'POST', body: {client_id: sco, code: 'HB' + fy + '/900001'}, cookie: asha}); check('live sync: other client cannot fetch the voucher', x.status === 404 || x.status === 403);
-      MOCK.push(bk(900006, 'Confirmed'), bk(900007, 'Confirmed', {totalNumberOfNights: 1, totalAmountINR: 10148})); x = await A('sync/save', {client_id: sco, enabled: true}); check('live sync: turned on', x.status === 200 && x.j.sync.enabled === 1);
-      await worker.scheduled({cron: '15 */3 * * *'}, env, {waitUntil: (p) => p}); await new Promise((r) => setTimeout(r, 50));
-      check('live sync: the 3-hourly trigger picks up a new booking', !!row('HB' + fy + '/900006'));
+      MOCK.push(bk(900006, 'Confirmed'), bk(900007, 'Confirmed', {totalNumberOfNights: 1, totalAmountINR: 10148}));
+      await worker.scheduled({cron: '*/15 * * * *'}, env, {waitUntil: (p) => p}); await new Promise((r) => setTimeout(r, 50));
+      check('live sync: the 15-minute trigger picks up a new booking', !!row('HB' + fy + '/900006'));
       { const r7 = row('HB' + fy + '/900007'); check('live sync: room above Rs 7,500 a night gets 18% GST', !!r7 && r7['Total Tariff'] === 8500 && r7['GST Charges'] === 1530, JSON.stringify(r7)); }
       x = await A('sync/save', {client_id: sco, gst_slab: false}); check('live sync: GST slab can be switched off', x.status === 200 && x.j.sync.gst_slab === 0);
       partnerDown = true; x = await A('sync/run', {client_id: sco});

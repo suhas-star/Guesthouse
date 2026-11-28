@@ -414,14 +414,14 @@ const SCHEMA = [
   "CREATE TABLE IF NOT EXISTS guests (id INTEGER PRIMARY KEY AUTOINCREMENT, client_id INTEGER NOT NULL, gkey TEXT NOT NULL, title TEXT, name TEXT, gender TEXT, email TEXT, phone TEXT, grade TEXT, emp_code TEXT, base TEXT, uses INTEGER DEFAULT 0, last_used TEXT, UNIQUE (client_id, gkey))",
   // hotel bookings removed by the Zuna team (kept so they can be restored)
   // live sync settings per client: partner API address, relay, secrets (never sent back to the browser) and the last run
-  "CREATE TABLE IF NOT EXISTS tx_sync (client_id INTEGER PRIMARY KEY, api_url TEXT, relay_url TEXT, relay_key TEXT, token TEXT, months INTEGER DEFAULT 2, skip_free_cxl INTEGER DEFAULT 1, enabled INTEGER DEFAULT 0, last_run TEXT, last_ok TEXT, last_error TEXT, last_result TEXT)",
+  "CREATE TABLE IF NOT EXISTS tx_sync (client_id INTEGER PRIMARY KEY, api_url TEXT, relay_url TEXT, relay_key TEXT, token TEXT, months INTEGER DEFAULT 2, skip_free_cxl INTEGER DEFAULT 1, enabled INTEGER DEFAULT 0, fee REAL, fee_gst REAL, hotel_gst REAL, last_run TEXT, last_ok TEXT, last_error TEXT, last_result TEXT)",
   "CREATE TABLE IF NOT EXISTS tx_removed (id INTEGER PRIMARY KEY AUTOINCREMENT, client_id INTEGER NOT NULL, code TEXT NOT NULL, row TEXT NOT NULL, upload_id INTEGER, by_email TEXT, at TEXT, restored TEXT)",
 ];
 let schemaReady = false;
 async function ensureSchema(env) {
   if (schemaReady) return;
   for (const q of SCHEMA) await env.DB.prepare(q).run();
-  for (const c of ["users ADD COLUMN role TEXT", "users ADD COLUMN client_id INTEGER", "guesthouses ADD COLUMN state TEXT", "guesthouses ADD COLUMN country TEXT", "room_types ADD COLUMN bed_type TEXT", "clients ADD COLUMN legal_name TEXT", "users ADD COLUMN tx_access INTEGER", "tx_uploads ADD COLUMN hash TEXT", "tx_uploads ADD COLUMN file_id INTEGER", "transactions ADD COLUMN held INTEGER", "users ADD COLUMN book_access INTEGER", "clients ADD COLUMN mail_cc TEXT", "clients ADD COLUMN mail_bcc TEXT", "trips ADD COLUMN wbs TEXT", "clients ADD COLUMN elig TEXT", "clients ADD COLUMN svc_fee REAL", "guesthouses ADD COLUMN checkin_time TEXT", "guesthouses ADD COLUMN checkout_time TEXT", "guesthouses ADD COLUMN team_emails TEXT", "gh_rates ADD COLUMN plan TEXT", "gh_rates ADD COLUMN fare_double REAL", "gh_rates ADD COLUMN extra_bed REAL", "trips ADD COLUMN plan TEXT", "trips ADD COLUMN cancel_charge REAL", "trips ADD COLUMN cancel_basis TEXT"]) { try { await env.DB.prepare("ALTER TABLE " + c).run(); } catch (e) { /* exists */ } }
+  for (const c of ["users ADD COLUMN role TEXT", "users ADD COLUMN client_id INTEGER", "guesthouses ADD COLUMN state TEXT", "guesthouses ADD COLUMN country TEXT", "room_types ADD COLUMN bed_type TEXT", "clients ADD COLUMN legal_name TEXT", "users ADD COLUMN tx_access INTEGER", "tx_uploads ADD COLUMN hash TEXT", "tx_uploads ADD COLUMN file_id INTEGER", "transactions ADD COLUMN held INTEGER", "users ADD COLUMN book_access INTEGER", "clients ADD COLUMN mail_cc TEXT", "clients ADD COLUMN mail_bcc TEXT", "trips ADD COLUMN wbs TEXT", "clients ADD COLUMN elig TEXT", "clients ADD COLUMN svc_fee REAL", "guesthouses ADD COLUMN checkin_time TEXT", "guesthouses ADD COLUMN checkout_time TEXT", "guesthouses ADD COLUMN team_emails TEXT", "gh_rates ADD COLUMN plan TEXT", "gh_rates ADD COLUMN fare_double REAL", "gh_rates ADD COLUMN extra_bed REAL", "trips ADD COLUMN plan TEXT", "trips ADD COLUMN cancel_charge REAL", "trips ADD COLUMN cancel_basis TEXT", "tx_sync ADD COLUMN fee REAL", "tx_sync ADD COLUMN fee_gst REAL", "tx_sync ADD COLUMN hotel_gst REAL"]) { try { await env.DB.prepare("ALTER TABLE " + c).run(); } catch (e) { /* exists */ } }
   schemaReady = true;
 }
 const DEFAULT_GRADES = "M1,M2,M3,M4,M5,M6,M7,M8,P1,P2,P3,E1,E2,E3,E4,E5,E6,E7";
@@ -1314,12 +1314,12 @@ async function txList(env, cid, b) {
 // The partner allow-lists one IP, so every call goes worker -> relay (DigitalOcean reserved IP) -> partner.
 // Bookings come in under the same Invoice No as the uploaded reports (HB<financial year>/<booking id>) and go
 // through the normal import, so matching, possible-duplicate holds, history and undo all work as for uploads.
-const SYNC_DEF = {api_url: "https://bff.prod.cbtsuite.com", relay_url: "https://174-138-123-123.sslip.io", relay_key: "", token: "", months: 2, skip_free_cxl: 1, enabled: 0};
+const SYNC_DEF = {api_url: "https://bff.prod.cbtsuite.com", relay_url: "https://174-138-123-123.sslip.io", relay_key: "", token: "", months: 2, skip_free_cxl: 1, enabled: 0, fee: 100, fee_gst: 18, hotel_gst: 18};
 const SYNC_PATH = {report: "/api/LtmReport/ltm_bookings", totals: "/api/LtmReport/ltm_bookings-transaction-report", voucher: "/api/LtmReport/ltm_booking-voucher-links/"};
 async function syncCfg(env, cid) { const r = await env.DB.prepare("SELECT * FROM tx_sync WHERE client_id = ?").bind(cid).first(); const c = {...SYNC_DEF, client_id: cid}; if (r) for (const k in r) if (r[k] != null) c[k] = r[k]; return c; }
 const jwtInfo = (t) => { try { let s = String(t).split(".")[1].replace(/-/g, "+").replace(/_/g, "/"); s += "===".slice((s.length + 3) % 4); const p = JSON.parse(atob(s));
   return {exp: p.exp ? new Date(p.exp * 1000).toISOString() : null, client: p.clientId ?? null, corporate: p.corporateId ?? null}; } catch (e) { return null; } };
-const syncView = (c) => ({api_url: c.api_url, relay_url: c.relay_url, months: +c.months, skip_free_cxl: c.skip_free_cxl ? 1 : 0, enabled: c.enabled ? 1 : 0, has_key: !!c.relay_key, has_token: !!c.token,
+const syncView = (c) => ({api_url: c.api_url, relay_url: c.relay_url, months: +c.months, fee: +c.fee, fee_gst: +c.fee_gst, hotel_gst: +c.hotel_gst, skip_free_cxl: c.skip_free_cxl ? 1 : 0, enabled: c.enabled ? 1 : 0, has_key: !!c.relay_key, has_token: !!c.token,
   token: c.token ? jwtInfo(c.token) : null, last_run: c.last_run || null, last_ok: c.last_ok || null, last_error: c.last_error || null, last_result: jparse(c.last_result, null)});
 const b64text = (b) => new TextDecoder().decode(Uint8Array.from(atob(b || ""), (ch) => ch.charCodeAt(0)));
 // one call to the partner API through the relay; 5xx and network errors are retried twice, 401/403 are not
@@ -1352,12 +1352,18 @@ const istDate = (s) => { if (!s) return ""; const v = String(s), t = Date.parse(
 const fyTag = (d) => { const y = +d.slice(0, 4), m = +d.slice(5, 7); return String((m >= 4 ? y : y - 1) % 100).padStart(2, "0"); };   // HB26 = April 2026 to March 2027
 const apiInvoice = (x) => { const n = x.invoiceNumber ?? x.bookingId, d = istDate(x.bookingDate); return n != null && n !== "" && d ? "HB" + fyTag(d) + "/" + n : ""; };
 const nz = (v) => v == null ? "" : v;
-function apiRow(x) {
+// the partner's totalAmountINR = room amount (incl. hotel GST) + Zuna's service charge + GST on it; split it the way the reports do
+function apiAmounts(x, c) {
+  const total = +(x.totalAmountINR ?? x.totalAmount); if (!(total > 0)) return {};
+  const fee = +c.fee || 0, feeGst = r2(fee * (+c.fee_gst || 0) / 100), room = Math.max(total - fee - feeGst, 0), base = r2(room / (1 + (+c.hotel_gst || 0) / 100)), cxl = /cancel/i.test(x.status || "");
+  return {"Total Tariff": base, "GST Charges": cxl ? 0 : r2(room - base), "Net Amount Charged": cxl ? (+x.totalCancellationCharges || 0) : r2(room), "Transaction Fee": fee, "Transaction Fee GST Charged": feeGst};
+}
+function apiRow(x, c = SYNC_DEF) {
   const r = {}; TX_COLS.forEach((k) => { r[k] = ""; });
   Object.assign(r, {"Booking Code": String(nz(x.hotelConfirmationNumber) || nz(x.supplierConfirmationNumber)), "Entity Name": nz(x.billingEntity), "Property Name": nz(x.propertyName), "Property Category": nz(x.category), City: nz(x.city),
     "Emp Code": String(nz(x.employeeId)), "Guest Name": nz(x.travellerName), "Booked Date": istDate(x.bookingDate), "Check-In Date": istDate(x.checkIn), "Check-Out Date": istDate(x.checkOut), Grade: nz(x.grade),
     "Tariff Per Day": nz(x.ratePerNight), "Stay Days": nz(x.totalNumberOfNights), "Total Tariff": nz(x.totalAmountINR ?? x.totalAmount), Status: nz(x.status), "Cancellation Charges Total": nz(x.totalCancellationCharges),
-    "Invoice No": apiInvoice(x), "WBS/ID or Cost Code": String(nz(x.wbs) || nz(x.costCentre)), "Travel Req ID": String(nz(x.travelRequestId)), "Base Location": nz(x.ltiBaseLocation)});
+    "Invoice No": apiInvoice(x), "WBS/ID or Cost Code": String(nz(x.wbs) || nz(x.costCentre)), "Travel Req ID": String(nz(x.travelRequestId)), "Base Location": nz(x.ltiBaseLocation)}, apiAmounts(x, c));
   return r;
 }
 // a booking already in the portal (from a report upload) keeps its billing figures; the API only brings
@@ -1374,7 +1380,7 @@ const monthRanges = (n, now = new Date()) => { const out = [], y = now.getUTCFul
   for (let i = n; i >= 0; i--) { const s = new Date(Date.UTC(y, m - i, 1)), e = new Date(Date.UTC(y, m - i + 1, 1) - 1000); out.push({startDate: s.toISOString().slice(0, 19) + "Z", endDate: e.toISOString().slice(0, 19) + "Z"}); } return out; };
 async function syncRun(env, cid, by) {
   await ensureSchema(env);
-  const c = await syncCfg(env, cid), at = new Date().toISOString(), res = {fetched: 0, months: 0, added: 0, changed: 0, skipped_cancelled: 0, skipped_removed: 0, skipped_other: 0, held: 0};
+  const c = await syncCfg(env, cid), at = new Date().toISOString(), res = {fetched: 0, months: 0, added: 0, changed: 0, skipped_cancelled: 0, skipped_removed: 0, skipped_other: 0, held: 0, amt_checked: 0, amt_match: 0};
   const save = (ok, err) => env.DB.prepare("INSERT INTO tx_sync (client_id, last_run, last_ok, last_error, last_result) VALUES (?, ?, ?, ?, ?) ON CONFLICT(client_id) DO UPDATE SET last_run = excluded.last_run, last_ok = COALESCE(excluded.last_ok, tx_sync.last_ok), last_error = excluded.last_error, last_result = excluded.last_result")
     .bind(cid, at, ok ? at : null, err || null, JSON.stringify(res)).run();
   try {
@@ -1383,7 +1389,7 @@ async function syncRun(env, cid, by) {
       for (let off = 0, total = Infinity; off < total && off < 50000;) {
         const {data} = await partnerCall(c, "POST", SYNC_PATH.report, {bookingDateRange: range, pagination: {offset: off, limit: 1000}});
         const list = Array.isArray(data.bookings) ? data.bookings : []; total = +data.totalCount || 0;
-        list.forEach((x) => { const r = apiRow(x); if (r["Invoice No"]) got.set(r["Invoice No"], r); else res.skipped_other++; });
+        list.forEach((x) => { const r = apiRow(x, c); if (r["Invoice No"]) got.set(r["Invoice No"], r); else res.skipped_other++; });
         res.fetched += list.length; if (!list.length) break; off += list.length;
       }
       res.months++;
@@ -1394,7 +1400,10 @@ async function syncRun(env, cid, by) {
       (await env.DB.prepare("SELECT code FROM tx_removed WHERE client_id = ? AND restored IS NULL AND code IN (" + q + ")").bind(cid, ...part).all()).results.forEach((x) => removed.add(x.code)); }
     const rows = [];
     for (const [code, a] of got) {
-      if (old.has(code)) { rows.push(apiMerge(old.get(code), a)); continue; }
+      if (old.has(code)) { const o = old.get(code);
+        // check the amount split against the uploaded report (same booking, both confirmed): proves the settings are right
+        if (a["Net Amount Charged"] !== "" && +o["Net Amount Charged"] > 0 && !/cancel/i.test(a.Status + " " + o.Status)) { res.amt_checked++; if (Math.abs(+o["Net Amount Charged"] - a["Net Amount Charged"]) <= 1) res.amt_match++; }
+        rows.push(apiMerge(o, a)); continue; }
       if (removed.has(code)) { res.skipped_removed++; continue; }   // the Zuna team removed it on purpose
       if (/planned/i.test(a.Status)) { res.skipped_other++; continue; }
       if (c.skip_free_cxl && /cancel/i.test(a.Status) && !(+a["Cancellation Charges Total"] > 0)) { res.skipped_cancelled++; continue; }   // cancelled free of charge: nothing to bill
@@ -1424,10 +1433,13 @@ async function syncApi(env, user, path, b) {
     let key = c.relay_key, token = c.token;
     if (b.relay_key) { key = clean(b.relay_key, 200); if (!/^[A-Za-z0-9_-]{32,200}$/.test(key)) return json({error: "That relay key doesn't look right: it should be the long code printed by the relay setup."}, 400); }
     if (b.token) { token = clean(b.token, 4000).replace(/^bearer\s+/i, ""); if (!jwtInfo(token)) return json({error: "That doesn't look like an API token. Paste the full token you received from the partner."}, 400); }
+    const num = (v, d, max) => { if (v === undefined || v === null || v === "") return d; const n = +v; return isFinite(n) && n >= 0 && n <= max ? r2(n) : NaN; };
+    const fee = num(b.fee, +c.fee, 100000), feeGst = num(b.fee_gst, +c.fee_gst, 100), hGst = num(b.hotel_gst, +c.hotel_gst, 100);
+    if ([fee, feeGst, hGst].some((v) => isNaN(v))) return json({error: "Check the service charge and GST figures."}, 400);
     const months = Math.min(Math.max(parseInt(b.months ?? c.months, 10) || 0, 0), 12), skip = b.skip_free_cxl !== undefined ? (b.skip_free_cxl ? 1 : 0) : c.skip_free_cxl, on = b.enabled !== undefined ? (b.enabled ? 1 : 0) : c.enabled;
     if (on && (!key || !token)) return json({error: "Save the relay key and the API token before turning the sync on."}, 400);
-    await env.DB.prepare("INSERT INTO tx_sync (client_id, api_url, relay_url, relay_key, token, months, skip_free_cxl, enabled) VALUES (?, ?, ?, ?, ?, ?, ?, ?) ON CONFLICT(client_id) DO UPDATE SET api_url = excluded.api_url, relay_url = excluded.relay_url, relay_key = excluded.relay_key, token = excluded.token, months = excluded.months, skip_free_cxl = excluded.skip_free_cxl, enabled = excluded.enabled")
-      .bind(cid, api, relay, key, token, months, skip, on).run();
+    await env.DB.prepare("INSERT INTO tx_sync (client_id, api_url, relay_url, relay_key, token, months, skip_free_cxl, enabled, fee, fee_gst, hotel_gst) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?) ON CONFLICT(client_id) DO UPDATE SET api_url = excluded.api_url, relay_url = excluded.relay_url, relay_key = excluded.relay_key, token = excluded.token, months = excluded.months, skip_free_cxl = excluded.skip_free_cxl, enabled = excluded.enabled, fee = excluded.fee, fee_gst = excluded.fee_gst, hotel_gst = excluded.hotel_gst")
+      .bind(cid, api, relay, key, token, months, skip, on, fee, feeGst, hGst).run();
     return json({ok: true, sync: syncView(await syncCfg(env, cid))});
   }
   if (path === "/api/admin/sync/run") { const r = await syncRun(env, cid, user.email); return json({...r, sync: syncView(await syncCfg(env, cid))}, r.ok ? 200 : 502); }

@@ -853,13 +853,17 @@ const renderTx = (D, c) => {
     const api0 = inp(y.api_url, 'https://…'), relay = inp(y.relay_url, 'https://…');
     const months = sel(String(y.months), [['0', 'This month only'], ['1', 'This and last month'], ['2', 'Last 3 months'], ['5', 'Last 6 months'], ['11', 'Last 12 months']]);
     const skip = switchEl('Leave out bookings cancelled free of charge', !!y.skip_free_cxl), on = switchEl('Sync automatically every 3 hours', !!y.enabled);
+    const fee = inp(y.fee, '100', 'number'), feeG = inp(y.fee_gst, '18', 'number'), hG = inp(y.hotel_gst, '18', 'number'); [fee, feeG, hG].forEach((i) => { i.min = '0'; i.step = '0.01'; });
+    const amt = h('div', 'rounded-xl bg-zuna-50/60 ring-1 ring-zuna-100 p-4 space-y-3'); const ag = h('div', 'grid sm:grid-cols-3 gap-3');
+    ag.append(field('Service charge per booking (₹)', fee), field('GST on service charge (%)', feeG), field('Hotel GST in the room amount (%)', hG));
+    amt.append(h('p', 'text-xs text-zuna-600', "The booking system's total includes the room amount with hotel GST, Zuna's service charge and GST on it. These figures split the total into the report columns (Total Tariff, GST, Net Amount, Transaction Fee)."), ag);
     const g = h('div', 'grid sm:grid-cols-2 gap-4');
     g.append(field('API token · ' + tokInfo, tok, 'sm:col-span-2'), field('Relay key · ' + (y.has_key ? 'Saved' : 'Not saved yet'), key), field('Bookings to check', months), field('Booking system address', api0), field('Relay address', relay));
     const err = h('p', 'text-sm text-rose-600 hidden'); err.setAttribute('role', 'alert');
     const row = h('div', 'flex flex-wrap items-center justify-end gap-2 pt-2'); const save = ib('button', 'btn btn-primary', 'Save', 'check'); save.type = 'submit'; row.appendChild(save);
-    f.append(h('p', 'text-xs text-zuna-500', 'The token and key are stored securely and never shown again. Paste a new one only to replace it.'), g, skip, on, err, row);
+    f.append(h('p', 'text-xs text-zuna-500', 'The token and key are stored securely and never shown again. Paste a new one only to replace it.'), g, amt, skip, on, err, row);
     f.onsubmit = async (e) => { e.preventDefault(); err.classList.add('hidden');
-      try { const r = await api('sync/save', {client_id: c.id, token: tok.value.trim(), relay_key: key.value.trim(), api_url: api0.value.trim(), relay_url: relay.value.trim(), months: +months.value, skip_free_cxl: skip.input.checked, enabled: on.input.checked});
+      try { const r = await api('sync/save', {client_id: c.id, token: tok.value.trim(), relay_key: key.value.trim(), api_url: api0.value.trim(), relay_url: relay.value.trim(), months: +months.value, skip_free_cxl: skip.input.checked, enabled: on.input.checked, fee: fee.value, fee_gst: feeG.value, hotel_gst: hG.value});
         closeModal(); toast('Live sync settings saved'); paintSync(r.sync); }
       catch (er) { err.textContent = er.message; err.classList.remove('hidden'); } };
     modal('Live sync settings · ' + c.name, f); };
@@ -891,6 +895,8 @@ const renderTx = (D, c) => {
     if (y.token && y.token.exp) { const days = Math.floor((Date.parse(y.token.exp) - Date.now()) / 864e5);
       if (days < 0) info.appendChild(h('span', 'zchip zchip-bad', 'API token expired · paste a new one in Sync settings'));
       else if (days <= 7) info.appendChild(h('span', 'zchip zchip-warn', 'API token expires in ' + (days ? days + (days > 1 ? ' days' : ' day') : 'less than a day'))); }
+    if (lr && lr.amt_checked && !y.last_error) { const all = lr.amt_match === lr.amt_checked;
+      info.appendChild(h('span', 'zchip ' + (all ? 'zchip-live' : 'zchip-warn'), all ? 'Amounts match the uploaded reports (' + lr.amt_checked + ' checked)' : 'Amounts differ from the uploaded reports for ' + (lr.amt_checked - lr.amt_match) + ' of ' + lr.amt_checked + ' bookings · check the GST figures in Sync settings')); }
     if (info.childNodes.length) ls.appendChild(info);
     if (y.last_error) { const e = h('div', 'mt-3 flex gap-2 rounded-xl bg-rose-50 ring-1 ring-rose-200 p-3 text-sm text-rose-700'); e.append(icon('triangle-alert', 'w-4 h-4 shrink-0 mt-0.5'), h('span', null, 'Last sync on ' + fDT(y.last_run) + ' failed: ' + y.last_error)); ls.appendChild(e); } };
   const loadSync = () => api('sync/state', {client_id: c.id}).then((r) => { st.sync = r.sync; if (ls.isConnected) paintSync(r.sync); }).catch(() => ls.replaceChildren(h('p', 'text-sm text-zuna-500', 'Live sync status is not available right now.')));

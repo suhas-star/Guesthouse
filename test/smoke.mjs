@@ -499,6 +499,9 @@ check('old host redirects to PRIMARY_HOST', r.status === 301 && r.headers.get('l
       check('live sync: partner gets the token and a one-month booking range', seen.some((q) => q.headers.authorization === 'Bearer ' + TOKEN && /T23:59:59Z$/.test(JSON.parse(q.body || '{}').bookingDateRange?.endDate || '')));
       const row = (inv) => { const t = DB.raw.prepare('SELECT row, status FROM transactions WHERE client_id = ? AND code = ?').get(sco, inv); return t ? JSON.parse(t.row) : null; };
       const r1 = row('HB' + fy + '/900001'), r2 = row('HB' + fy + '/900002'), r3 = row('HB' + fy + '/900003');
+      check('live sync: total split into tariff, hotel GST, net and service charge', !!r1 && r1['Net Amount Charged'] === 12882 && r1['Total Tariff'] === 10916.95 && r1['GST Charges'] === 1965.05 && r1['Transaction Fee'] === 100 && r1['Transaction Fee GST Charged'] === 18, JSON.stringify(r1));
+      check('live sync: cancelled booking nets only its charge', !!r3 && r3['Net Amount Charged'] === 1200 && r3['GST Charges'] === 0);
+      check('live sync: amounts checked against the uploaded report', rs.amt_checked === 0);
       check('live sync: new booking stored under the HB invoice with mapped fields', !!r1 && r1['Guest Name'] === 'Guest 900001' && r1['Booking Code'] === 'HC-900001' && r1['Check-In Date'] === day(20) && r1['Stay Days'] === 2 && r1['Emp Code'] === 'E900001' && r1['Booked Date'] === day(2));
       check('live sync: uploaded booking keeps its billing, gets the cancellation', !!r2 && r2.Status === 'Cancelled' && r2['Net Amount Charged'] === 15340 && r2['Booking Code'] === 'OLD-1' && r2['Property Name'] === 'Hotel 900002');
       check('live sync: cancellation with a charge is kept; free one and planned left out', !!r3 && r3['Cancellation Charges Total'] === 1200 && !row('HB' + fy + '/900004') && !row('HB' + fy + '/900005'));

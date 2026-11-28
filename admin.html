@@ -853,11 +853,10 @@ const renderTx = (D, c) => {
     const api0 = inp(y.api_url, 'https://…'), relay = inp(y.relay_url, 'https://…');
     const months = sel(String(y.months), [['0', 'This month only'], ['1', 'This and last month'], ['2', 'Last 3 months'], ['5', 'Last 6 months'], ['11', 'Last 12 months']]);
     const skip = switchEl('Leave out bookings cancelled free of charge', !!y.skip_free_cxl);
-    const fee = inp(y.fee, '100', 'number'), feeG = inp(y.fee_gst, '18', 'number'), hG = inp(y.hotel_gst, '18', 'number'); [fee, feeG, hG].forEach((i) => { i.min = '0'; i.step = '0.01'; });
-    const amt = h('div', 'rounded-xl bg-zuna-50/60 ring-1 ring-zuna-100 p-4 space-y-3'); const ag = h('div', 'grid sm:grid-cols-3 gap-3');
-    ag.append(field('Transaction fee per booking (₹)', fee), field('GST on transaction fee (%)', feeG), field('Hotel GST (%)', hG));
-    const slab = switchEl('Hotel GST by room rate: 5% up to ₹7,500 a night (before tax), the rate above for higher rooms', !!y.gst_slab);
-    amt.append(h('p', 'text-xs text-zuna-600', "The booking system's total includes the room amount with hotel GST, the transaction fee and GST on it. These figures split the total into the report columns (Total Tariff, GST, Net Amount, Transaction Fee). With the slab off, the hotel GST rate applies to every room."), ag, slab);
+    const fee = inp(y.fee, '100', 'number'), feeG = inp(y.fee_gst, '18', 'number'); [fee, feeG].forEach((i) => { i.min = '0'; i.step = '0.01'; });
+    const amt = h('div', 'rounded-xl bg-zuna-50/60 ring-1 ring-zuna-100 p-4 space-y-3'); const ag = h('div', 'grid sm:grid-cols-2 gap-3');
+    ag.append(field('Transaction fee per booking (₹)', fee), field('GST on transaction fee (%)', feeG));
+    amt.append(h('p', 'text-xs text-zuna-600', "The booking system's total includes the room amount with hotel taxes, the transaction fee and GST on it. The transaction fee and its GST are taken out; the rest is the Net Amount (hotel taxes included)."), ag);
     const g = h('div', 'grid sm:grid-cols-2 gap-4');
     g.append(field('Signing secret · ' + (sg.has_secret ? 'Saved' : 'Not saved yet'), sec), field('Relay key · ' + (y.has_key ? 'Saved' : 'Not saved yet'), key), field('Client ID', jcl), field('Corporate ID', jco),
       field('Issuer', iss), field('Audience', aud), field('Booking system address', api0), field('Relay address', relay), field('Bookings to check', months));
@@ -865,7 +864,7 @@ const renderTx = (D, c) => {
     const row = h('div', 'flex flex-wrap items-center justify-end gap-2 pt-2'); const save = ib('button', 'btn btn-primary', 'Save', 'check'); save.type = 'submit'; row.appendChild(save);
     f.append(h('p', 'text-xs text-zuna-500', 'Bookings start flowing in as soon as the signing secret, client ID, corporate ID and relay key are saved: new bookings within a minute, changes within 15 minutes. The portal makes a fresh token for every call, so nothing expires. The secret and key are stored securely and never shown again.'), g, amt, skip, err, row);
     f.onsubmit = async (e) => { e.preventDefault(); err.classList.add('hidden');
-      try { const r = await api('sync/save', {client_id: c.id, jwt_secret: sec.value.trim(), jwt_client: jcl.value.trim(), jwt_corporate: jco.value.trim(), jwt_iss: iss.value.trim(), jwt_aud: aud.value.trim(), relay_key: key.value.trim(), api_url: api0.value.trim(), relay_url: relay.value.trim(), months: +months.value, skip_free_cxl: skip.input.checked, fee: fee.value, fee_gst: feeG.value, hotel_gst: hG.value, gst_slab: slab.input.checked});
+      try { const r = await api('sync/save', {client_id: c.id, jwt_secret: sec.value.trim(), jwt_client: jcl.value.trim(), jwt_corporate: jco.value.trim(), jwt_iss: iss.value.trim(), jwt_aud: aud.value.trim(), relay_key: key.value.trim(), api_url: api0.value.trim(), relay_url: relay.value.trim(), months: +months.value, skip_free_cxl: skip.input.checked, fee: fee.value, fee_gst: feeG.value});
         closeModal(); const x = r.synced; toast(!x ? 'Settings saved' : x.ok ? 'Saved · live data connected' + (x.result.added ? ': ' + x.result.added + ' new bookings' : '') : 'Saved, but the booking system did not answer: ' + x.error); paintSync(r.sync);
         if (x && x.ok) { st.hist = null; loadHist(); loadStored(); } }
       catch (er) { err.textContent = er.message; err.classList.remove('hidden'); } };

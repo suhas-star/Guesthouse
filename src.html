@@ -964,7 +964,7 @@ const hxDrawer = (r) => {
   // money
   const tiles = h('div', 'grid grid-cols-2 gap-2'); const tile = (l, v, sub, warn) => { const t = h('div', 'rounded-xl ring-1 px-3 py-2.5 ' + (warn ? 'bg-amber-50 ring-amber-200' : 'bg-white ring-zuna-100')); t.append(h('p', 'text-[11px] font-semibold text-zuna-500', l), h('p', 'text-lg font-bold tabular-nums leading-tight ' + (warn ? 'text-amber-800' : ''), v)); if (sub) t.appendChild(h('p', 'text-[11px] ' + (warn ? 'text-amber-700 font-semibold' : 'text-zuna-400'), sub)); return t; };
   tiles.append(tile('Tariff / night', money(r['Tariff Per Day'] || 0), num(r['Eligibility Criteria']) ? (hxOver(r) ? 'Above cap of ' : 'Within cap of ') + inr(r['Eligibility Criteria']) : 'No cap on file', hxOver(r)),
-    tile('Net amount', money(r['Net Amount Charged'] || 0), 'incl. GST ' + money(r['GST Charges'] || 0)));
+    tile('Net amount', money(r['Net Amount Charged'] || 0), r['GST Charges'] === '' || r['GST Charges'] == null ? 'incl. hotel taxes' : 'incl. GST ' + money(r['GST Charges'] || 0)));
   w.appendChild(tiles);
   // hotel voucher, fetched fresh from the booking system (its links expire, so they are never stored)
   if (HX.live && /^HB\d{2}\/\d+$/.test(String(r['Invoice No'] || ''))) { const vb = h('div', 'flex flex-wrap items-center gap-2');

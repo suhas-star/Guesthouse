@@ -506,8 +506,8 @@ check('old host redirects to PRIMARY_HOST', r.status === 301 && r.headers.get('l
       check('live sync: partner gets the token and a one-month booking range', seen.some((q) => q.headers.authorization === 'Bearer ' + TOKEN && /T23:59:59Z$/.test(JSON.parse(q.body || '{}').bookingDateRange?.endDate || '')));
       const row = (inv) => { const t = DB.raw.prepare('SELECT row, status FROM transactions WHERE client_id = ? AND code = ?').get(sco, inv); return t ? JSON.parse(t.row) : null; };
       const r1 = row('HB' + fy + '/900001'), r2 = row('HB' + fy + '/900002'), r3 = row('HB' + fy + '/900003');
-      check('live sync: total split into tariff, hotel GST (5% slab), net and transaction fee', !!r1 && r1['Net Amount Charged'] === 12882 && r1['Total Tariff'] === 12268.57 && r1['GST Charges'] === 613.43 && r1['Transaction Fee'] === 100 && r1['Transaction Fee GST Charged'] === 18, JSON.stringify(r1));
-      check('live sync: cancelled booking nets only its charge', !!r3 && r3['Net Amount Charged'] === 1200 && r3['GST Charges'] === 0);
+      check('live sync: total less transaction fee is the net amount, hotel taxes not split', !!r1 && r1['Net Amount Charged'] === 12882 && r1['Total Tariff'] === '' && r1['GST Charges'] === '' && r1['Transaction Fee'] === 100 && r1['Transaction Fee GST Charged'] === 18, JSON.stringify(r1));
+      check('live sync: cancelled booking nets only its charge', !!r3 && r3['Net Amount Charged'] === 1200);
       check('live sync: amounts checked against the uploaded report', rs.amt_checked === 0);
       check('live sync: new booking stored under the HB invoice with mapped fields', !!r1 && r1['Guest Name'] === 'Guest 900001' && r1['Booking Code'] === 'HC-900001' && r1['Check-In Date'] === day(20) && r1['Stay Days'] === 2 && r1['Emp Code'] === 'E900001' && r1['Booked Date'] === day(2));
       check('live sync: uploaded booking keeps its billing, gets the cancellation', !!r2 && r2.Status === 'Cancelled' && r2['Net Amount Charged'] === 15340 && r2['Booking Code'] === 'OLD-1' && r2['Property Name'] === 'Hotel 900002');
@@ -532,8 +532,7 @@ check('old host redirects to PRIMARY_HOST', r.status === 301 && r.headers.get('l
       calls = await runCron(30); check('live sync: quarter-hour check covers the whole period', calls.length >= 2 && !!row('HB' + fy + '/900008'));
       x = await A('sync/state', {client_id: sco}); calls = await runCron(31);
       check('live sync: a quiet minute check keeps the full-check figures', JSON.stringify((await A('sync/state', {client_id: sco})).j.sync.last_result) === JSON.stringify(x.j.sync.last_result));
-      { const r7 = row('HB' + nowFy + '/900007'); check('live sync: room above Rs 7,500 a night gets 18% GST', !!r7 && r7['Total Tariff'] === 8500 && r7['GST Charges'] === 1530, JSON.stringify(r7)); }
-      x = await A('sync/save', {client_id: sco, gst_slab: false}); check('live sync: GST slab can be switched off', x.status === 200 && x.j.sync.gst_slab === 0);
+      { const r7 = row('HB' + nowFy + '/900007'); check('live sync: one-night booking nets total less Rs 118', !!r7 && r7['Net Amount Charged'] === 10030, JSON.stringify(r7)); }
       x = await A('sync/save', {client_id: sco, jwt_secret: SECRET, jwt_client: 'C1', jwt_corporate: 'K9'});
       check('live sync: signing secret saved, never sent back', x.status === 200 && x.j.sync.signing.has_secret && x.j.sync.signing.client === 'C1' && !JSON.stringify(x.j).includes(SECRET) && x.j.synced && x.j.synced.ok, JSON.stringify(x.j.synced));
       check('live sync: portal signs its own token the partner accepts', signedCalls > 0);

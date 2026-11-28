@@ -1363,15 +1363,12 @@ const istDate = (s) => { if (!s) return ""; const v = String(s), t = Date.parse(
 const fyTag = (d) => { const y = +d.slice(0, 4), m = +d.slice(5, 7); return String((m >= 4 ? y : y - 1) % 100).padStart(2, "0"); };   // HB26 = April 2026 to March 2027
 const apiInvoice = (x) => { const n = x.invoiceNumber ?? x.bookingId, d = istDate(x.bookingDate); return n != null && n !== "" && d ? "HB" + fyTag(d) + "/" + n : ""; };
 const nz = (v) => v == null ? "" : v;
-const GST_SLAB = {limit: 7500, low: 5};
 // the partner's totalAmountINR = room amount (incl. hotel GST) + the transaction fee + GST on it; split it the way the reports do
 function apiAmounts(x, c) {
   const total = +(x.totalAmountINR ?? x.totalAmount); if (!(total > 0)) return {};
   const fee = +c.fee || 0, feeGst = r2(fee * (+c.fee_gst || 0) / 100), room = Math.max(total - fee - feeGst, 0), cxl = /cancel/i.test(x.status || "");
-  // GST slab on hotel rooms: 5% when the room rate is up to Rs 7,500 a night before tax, else the higher rate (18%)
-  const nights = Math.max(+x.totalNumberOfNights || 1, 1), rate = c.gst_slab ? (room / nights <= GST_SLAB.limit * (1 + GST_SLAB.low / 100) ? GST_SLAB.low : +c.hotel_gst || 0) : +c.hotel_gst || 0;
-  const base = r2(room / (1 + rate / 100));
-  return {"Total Tariff": base, "GST Charges": cxl ? 0 : r2(room - base), "Net Amount Charged": cxl ? (+x.totalCancellationCharges || 0) : r2(room), "Transaction Fee": fee, "Transaction Fee GST Charged": feeGst};
+  // the room amount already includes the hotel's taxes: it is not split into tariff and GST
+  return {"Total Tariff": "", "GST Charges": "", "Net Amount Charged": cxl ? (+x.totalCancellationCharges || 0) : r2(room), "Transaction Fee": fee, "Transaction Fee GST Charged": feeGst};
 }
 function apiRow(x, c = SYNC_DEF) {
   const r = {}; TX_COLS.forEach((k) => { r[k] = ""; });

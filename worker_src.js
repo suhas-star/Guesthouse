@@ -414,14 +414,14 @@ const SCHEMA = [
   "CREATE TABLE IF NOT EXISTS guests (id INTEGER PRIMARY KEY AUTOINCREMENT, client_id INTEGER NOT NULL, gkey TEXT NOT NULL, title TEXT, name TEXT, gender TEXT, email TEXT, phone TEXT, grade TEXT, emp_code TEXT, base TEXT, uses INTEGER DEFAULT 0, last_used TEXT, UNIQUE (client_id, gkey))",
   // hotel bookings removed by the Zuna team (kept so they can be restored)
   // live sync settings per client: partner API address, relay, secrets (never sent back to the browser) and the last run
-  "CREATE TABLE IF NOT EXISTS tx_sync (client_id INTEGER PRIMARY KEY, api_url TEXT, relay_url TEXT, relay_key TEXT, token TEXT, months INTEGER DEFAULT 2, skip_free_cxl INTEGER DEFAULT 1, enabled INTEGER DEFAULT 0, fee REAL, fee_gst REAL, hotel_gst REAL, gst_slab INTEGER, last_run TEXT, last_ok TEXT, last_error TEXT, last_result TEXT)",
+  "CREATE TABLE IF NOT EXISTS tx_sync (client_id INTEGER PRIMARY KEY, api_url TEXT, relay_url TEXT, relay_key TEXT, token TEXT, months INTEGER DEFAULT 2, skip_free_cxl INTEGER DEFAULT 1, enabled INTEGER DEFAULT 0, fee REAL, fee_gst REAL, hotel_gst REAL, gst_slab INTEGER, jwt_secret TEXT, jwt_iss TEXT, jwt_aud TEXT, jwt_client TEXT, jwt_corporate TEXT, last_run TEXT, last_ok TEXT, last_error TEXT, last_result TEXT)",
   "CREATE TABLE IF NOT EXISTS tx_removed (id INTEGER PRIMARY KEY AUTOINCREMENT, client_id INTEGER NOT NULL, code TEXT NOT NULL, row TEXT NOT NULL, upload_id INTEGER, by_email TEXT, at TEXT, restored TEXT)",
 ];
 let schemaReady = false;
 async function ensureSchema(env) {
   if (schemaReady) return;
   for (const q of SCHEMA) await env.DB.prepare(q).run();
-  for (const c of ["users ADD COLUMN role TEXT", "users ADD COLUMN client_id INTEGER", "guesthouses ADD COLUMN state TEXT", "guesthouses ADD COLUMN country TEXT", "room_types ADD COLUMN bed_type TEXT", "clients ADD COLUMN legal_name TEXT", "users ADD COLUMN tx_access INTEGER", "tx_uploads ADD COLUMN hash TEXT", "tx_uploads ADD COLUMN file_id INTEGER", "transactions ADD COLUMN held INTEGER", "users ADD COLUMN book_access INTEGER", "clients ADD COLUMN mail_cc TEXT", "clients ADD COLUMN mail_bcc TEXT", "trips ADD COLUMN wbs TEXT", "clients ADD COLUMN elig TEXT", "clients ADD COLUMN svc_fee REAL", "guesthouses ADD COLUMN checkin_time TEXT", "guesthouses ADD COLUMN checkout_time TEXT", "guesthouses ADD COLUMN team_emails TEXT", "gh_rates ADD COLUMN plan TEXT", "gh_rates ADD COLUMN fare_double REAL", "gh_rates ADD COLUMN extra_bed REAL", "trips ADD COLUMN plan TEXT", "trips ADD COLUMN cancel_charge REAL", "trips ADD COLUMN cancel_basis TEXT", "tx_sync ADD COLUMN fee REAL", "tx_sync ADD COLUMN fee_gst REAL", "tx_sync ADD COLUMN hotel_gst REAL", "tx_sync ADD COLUMN gst_slab INTEGER"]) { try { await env.DB.prepare("ALTER TABLE " + c).run(); } catch (e) { /* exists */ } }
+  for (const c of ["users ADD COLUMN role TEXT", "users ADD COLUMN client_id INTEGER", "guesthouses ADD COLUMN state TEXT", "guesthouses ADD COLUMN country TEXT", "room_types ADD COLUMN bed_type TEXT", "clients ADD COLUMN legal_name TEXT", "users ADD COLUMN tx_access INTEGER", "tx_uploads ADD COLUMN hash TEXT", "tx_uploads ADD COLUMN file_id INTEGER", "transactions ADD COLUMN held INTEGER", "users ADD COLUMN book_access INTEGER", "clients ADD COLUMN mail_cc TEXT", "clients ADD COLUMN mail_bcc TEXT", "trips ADD COLUMN wbs TEXT", "clients ADD COLUMN elig TEXT", "clients ADD COLUMN svc_fee REAL", "guesthouses ADD COLUMN checkin_time TEXT", "guesthouses ADD COLUMN checkout_time TEXT", "guesthouses ADD COLUMN team_emails TEXT", "gh_rates ADD COLUMN plan TEXT", "gh_rates ADD COLUMN fare_double REAL", "gh_rates ADD COLUMN extra_bed REAL", "trips ADD COLUMN plan TEXT", "trips ADD COLUMN cancel_charge REAL", "trips ADD COLUMN cancel_basis TEXT", "tx_sync ADD COLUMN fee REAL", "tx_sync ADD COLUMN fee_gst REAL", "tx_sync ADD COLUMN hotel_gst REAL", "tx_sync ADD COLUMN gst_slab INTEGER", "tx_sync ADD COLUMN jwt_secret TEXT", "tx_sync ADD COLUMN jwt_iss TEXT", "tx_sync ADD COLUMN jwt_aud TEXT", "tx_sync ADD COLUMN jwt_client TEXT", "tx_sync ADD COLUMN jwt_corporate TEXT"]) { try { await env.DB.prepare("ALTER TABLE " + c).run(); } catch (e) { /* exists */ } }
   schemaReady = true;
 }
 const DEFAULT_GRADES = "M1,M2,M3,M4,M5,M6,M7,M8,P1,P2,P3,E1,E2,E3,E4,E5,E6,E7";
@@ -858,7 +858,7 @@ const AUDIT_LABEL = {"/api/login": "Signed in", "/api/forgot": "Asked for a pass
   "/api/admin/tx/import": "Uploaded a hotel report", "/api/admin/tx/undo": "Undid a hotel report upload", "/api/admin/tx/keep": "Kept a possible duplicate", "/api/admin/tx/remove": "Removed a hotel booking", "/api/admin/tx/restore": "Restored a hotel booking",
   "/api/admin/user": "Saved a user", "/api/admin/user/access": "Changed a user's access", "/api/admin/user/reset": "Reset a user's password", "/api/admin/reminders": "Sent document reminders", "/api/admin/backup": "Backed up the data now",
   "/api/manage/user": "Saved a user", "/api/manage/user/access": "Changed a user's access", "/api/manage/user/reset": "Reset a user's password"};
-const AUDIT_DROP = /^(password|pw|new_password|new_pw|old_password|current|code|token|relay_key|pdf|data|file|content|logo|image|photo|csv|rows|xlsx|b64)$/i;
+const AUDIT_DROP = /^(password|pw|new_password|new_pw|old_password|current|code|token|relay_key|jwt_secret|pdf|data|file|content|logo|image|photo|csv|rows|xlsx|b64)$/i;
 const auditClean = (v, d) => { if (v == null) return v; if (typeof v === "string") return v.length > 160 ? v.slice(0, 160) + "…" : v; if (typeof v !== "object") return v; if (d > 2) return "…";
   if (Array.isArray(v)) return v.length > 12 ? v.slice(0, 12).map((x) => auditClean(x, d + 1)).concat(["… " + (v.length - 12) + " more"]) : v.map((x) => auditClean(x, d + 1));
   const o = {}; for (const [k, x] of Object.entries(v)) { if (AUDIT_DROP.test(k)) { if (x) o[k] = "(not stored)"; continue; } o[k] = auditClean(x, d + 1); } return o; };
@@ -1306,7 +1306,7 @@ async function txList(env, cid, b) {
   w.push("(held IS NULL OR held = 0)");   // possible duplicates stay hidden until an admin keeps them
   const {results} = await env.DB.prepare("SELECT row FROM transactions WHERE " + w.join(" AND ") + " ORDER BY booked DESC, code LIMIT 10001").bind(...args).all();
   const last = await env.DB.prepare("SELECT at FROM tx_uploads WHERE client_id = ? AND undone IS NULL ORDER BY id DESC LIMIT 1").bind(cid).first();
-  const live = await env.DB.prepare("SELECT 1 FROM tx_sync WHERE client_id = ? AND token IS NOT NULL AND token != '' AND relay_key IS NOT NULL AND relay_key != ''").bind(cid).first();
+  const live = syncReady(await syncCfg(env, cid));
   return json({rows: results.slice(0, 10000).map((x) => JSON.parse(x.row)), more: results.length > 10000, updated: last ? last.at : null, cols: TX_COLS, live: !!live});
 }
 
@@ -1314,19 +1314,30 @@ async function txList(env, cid, b) {
 // The partner allow-lists one IP, so every call goes worker -> relay (DigitalOcean reserved IP) -> partner.
 // Bookings come in under the same Invoice No as the uploaded reports (HB<financial year>/<booking id>) and go
 // through the normal import, so matching, possible-duplicate holds, history and undo all work as for uploads.
-const SYNC_DEF = {api_url: "https://bff.prod.cbtsuite.com", relay_url: "https://174-138-123-123.sslip.io", relay_key: "", token: "", months: 2, skip_free_cxl: 1, enabled: 0, fee: 100, fee_gst: 18, hotel_gst: 18, gst_slab: 1};
+const SYNC_DEF = {api_url: "https://bff.prod.cbtsuite.com", relay_url: "https://174-138-123-123.sslip.io", relay_key: "", token: "", months: 2, skip_free_cxl: 1, enabled: 0, fee: 100, fee_gst: 18, hotel_gst: 18, gst_slab: 1, jwt_secret: "", jwt_iss: "https://vantiscorp.com", jwt_aud: "cbt-bff-api", jwt_client: "", jwt_corporate: ""};
+// the partner shares a signing secret: the portal makes its own short-lived token for every call, so nothing ever expires
+const syncSigned = (c) => !!(c.jwt_secret && c.jwt_client && c.jwt_corporate);
+const syncReady = (c) => !!(c.relay_key && (c.token || syncSigned(c)));
+const b64url = (bytes) => { let s = ""; new Uint8Array(bytes).forEach((x) => { s += String.fromCharCode(x); }); return btoa(s).replace(/\+/g, "-").replace(/\//g, "_").replace(/=+$/, ""); };
+async function mintToken(c) {
+  const now = Math.floor(Date.now() / 1000), enc = new TextEncoder();
+  const data = b64url(enc.encode(JSON.stringify({alg: "HS256", typ: "JWT"}))) + "." + b64url(enc.encode(JSON.stringify({clientId: String(c.jwt_client), corporateId: String(c.jwt_corporate), iss: c.jwt_iss, aud: c.jwt_aud, iat: now, nbf: now - 60, exp: now + 3600})));
+  const key = await crypto.subtle.importKey("raw", enc.encode(c.jwt_secret), {name: "HMAC", hash: "SHA-256"}, false, ["sign"]);
+  return data + "." + b64url(await crypto.subtle.sign("HMAC", key, enc.encode(data)));
+}
+const partnerToken = (c) => syncSigned(c) ? mintToken(c) : c.token;
 const SYNC_PATH = {report: "/api/LtmReport/ltm_bookings", totals: "/api/LtmReport/ltm_bookings-transaction-report", voucher: "/api/LtmReport/ltm_booking-voucher-links/"};
 async function syncCfg(env, cid) { const r = await env.DB.prepare("SELECT * FROM tx_sync WHERE client_id = ?").bind(cid).first(); const c = {...SYNC_DEF, client_id: cid}; if (r) for (const k in r) if (r[k] != null) c[k] = r[k]; return c; }
 const jwtInfo = (t) => { try { let s = String(t).split(".")[1].replace(/-/g, "+").replace(/_/g, "/"); s += "===".slice((s.length + 3) % 4); const p = JSON.parse(atob(s));
   return {exp: p.exp ? new Date(p.exp * 1000).toISOString() : null, client: p.clientId ?? null, corporate: p.corporateId ?? null}; } catch (e) { return null; } };
-const syncView = (c) => ({api_url: c.api_url, relay_url: c.relay_url, months: +c.months, fee: +c.fee, fee_gst: +c.fee_gst, hotel_gst: +c.hotel_gst, gst_slab: c.gst_slab ? 1 : 0, skip_free_cxl: c.skip_free_cxl ? 1 : 0, enabled: c.enabled ? 1 : 0, has_key: !!c.relay_key, has_token: !!c.token,
+const syncView = (c) => ({api_url: c.api_url, relay_url: c.relay_url, months: +c.months, fee: +c.fee, fee_gst: +c.fee_gst, hotel_gst: +c.hotel_gst, gst_slab: c.gst_slab ? 1 : 0, ready: syncReady(c), signing: {has_secret: !!c.jwt_secret, iss: c.jwt_iss || "", aud: c.jwt_aud || "", client: c.jwt_client || "", corporate: c.jwt_corporate || ""}, skip_free_cxl: c.skip_free_cxl ? 1 : 0, enabled: c.enabled ? 1 : 0, has_key: !!c.relay_key, has_token: !!c.token,
   token: c.token ? jwtInfo(c.token) : null, last_run: c.last_run || null, last_ok: c.last_ok || null, last_error: c.last_error || null, last_result: jparse(c.last_result, null)});
 const b64text = (b) => new TextDecoder().decode(Uint8Array.from(atob(b || ""), (ch) => ch.charCodeAt(0)));
 // one call to the partner API through the relay; 5xx and network errors are retried twice, 401/403 are not
 async function partnerCall(c, method, path, body) {
   if (!c.relay_url || !c.relay_key) throw new Error("The relay address and key are not saved yet.");
-  if (!c.token) throw new Error("The API token is not saved yet.");
-  const req = {url: String(c.api_url).replace(/\/+$/, "") + path, method, headers: {authorization: "Bearer " + c.token, "content-type": "application/json", accept: "application/json"}};
+  if (!c.token && !syncSigned(c)) throw new Error(c.jwt_secret ? "The client ID and corporate ID are not saved yet." : "The signing secret is not saved yet.");
+  const req = {url: String(c.api_url).replace(/\/+$/, "") + path, method, headers: {authorization: "Bearer " + await partnerToken(c), "content-type": "application/json", accept: "application/json"}};
   if (body) req.body = JSON.stringify(body);
   let last;
   for (let i = 0; i < 3; i++) {
@@ -1337,7 +1348,7 @@ async function partnerCall(c, method, path, body) {
     if (r.status === 401) throw new Error("The relay refused the key. Check the relay key.");
     if (!r.ok) { last = new Error("Relay: " + (o.error || "HTTP " + r.status)); if (r.status === 403 || r.status === 400) throw last; continue; }
     const txt = b64text(o.body_b64); let data = null; try { data = JSON.parse(txt); } catch (e) { /* not JSON */ }
-    if (o.status === 403) throw new Error(/token/i.test(txt) ? "The API token was rejected or has expired. Save a new token." : "Access denied by the partner: our IP is not on their allow-list.");
+    if (o.status === 403) throw new Error(/token/i.test(txt) ? (syncSigned(c) ? "The booking system rejected our token: check the signing secret, issuer, audience, client ID and corporate ID." : "The API token was rejected or has expired. Save a new token.") : "Access denied by the partner: our IP is not on their allow-list.");
     if (o.status === 401) throw new Error("The partner says the API token is missing or malformed.");
     if (o.status === 404) return {status: 404, data};
     if (o.status >= 500) { last = new Error("Partner API error " + o.status + ((data && data.errorDetails) ? ": " + data.errorDetails : "")); continue; }
@@ -1434,16 +1445,18 @@ async function syncApi(env, user, path, b) {
     const c = await syncCfg(env, cid), url = (v, d) => { const s = clean(v, 200).replace(/\/+$/, ""); return /^https:\/\/[a-z0-9.-]+(:\d+)?$/i.test(s) || /^http:\/\/(127\.0\.0\.1|localhost)(:\d+)?$/.test(s) ? s : d; };
     const api = b.api_url !== undefined ? url(b.api_url, null) : c.api_url, relay = b.relay_url !== undefined ? url(b.relay_url, null) : c.relay_url;
     if (!api || !relay) return json({error: "Addresses must start with https:// and be just the host, like https://example.com."}, 400);
-    let key = c.relay_key, token = c.token;
+    let key = c.relay_key, token = c.token, secret = c.jwt_secret;
+    if (b.jwt_secret) { secret = String(b.jwt_secret).trim().slice(0, 500); if (secret.length < 16) return json({error: "That signing secret looks too short."}, 400); }
+    const idf = (v, d) => v === undefined ? d : clean(v, 60), iss = idf(b.jwt_iss, c.jwt_iss), aud = idf(b.jwt_aud, c.jwt_aud), jcl = idf(b.jwt_client, c.jwt_client), jco = idf(b.jwt_corporate, c.jwt_corporate);
     if (b.relay_key) { key = clean(b.relay_key, 200); if (!/^[A-Za-z0-9_-]{32,200}$/.test(key)) return json({error: "That relay key doesn't look right: it should be the long code printed by the relay setup."}, 400); }
     if (b.token) { token = clean(b.token, 4000).replace(/^bearer\s+/i, ""); if (!jwtInfo(token)) return json({error: "That doesn't look like an API token. Paste the full token you received from the partner."}, 400); }
     const num = (v, d, max) => { if (v === undefined || v === null || v === "") return d; const n = +v; return isFinite(n) && n >= 0 && n <= max ? r2(n) : NaN; };
     const fee = num(b.fee, +c.fee, 100000), feeGst = num(b.fee_gst, +c.fee_gst, 100), hGst = num(b.hotel_gst, +c.hotel_gst, 100);
     if ([fee, feeGst, hGst].some((v) => isNaN(v))) return json({error: "Check the transaction fee and GST figures."}, 400);
     // live as soon as both secrets are saved: no switch, no manual sync
-    const slab = b.gst_slab !== undefined ? (b.gst_slab ? 1 : 0) : (c.gst_slab ? 1 : 0), months = Math.min(Math.max(parseInt(b.months ?? c.months, 10) || 0, 0), 12), skip = b.skip_free_cxl !== undefined ? (b.skip_free_cxl ? 1 : 0) : c.skip_free_cxl, on = key && token ? 1 : 0;
-    await env.DB.prepare("INSERT INTO tx_sync (client_id, api_url, relay_url, relay_key, token, months, skip_free_cxl, enabled, fee, fee_gst, hotel_gst, gst_slab) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?) ON CONFLICT(client_id) DO UPDATE SET api_url = excluded.api_url, relay_url = excluded.relay_url, relay_key = excluded.relay_key, token = excluded.token, months = excluded.months, skip_free_cxl = excluded.skip_free_cxl, enabled = excluded.enabled, fee = excluded.fee, fee_gst = excluded.fee_gst, hotel_gst = excluded.hotel_gst, gst_slab = excluded.gst_slab")
-      .bind(cid, api, relay, key, token, months, skip, on, fee, feeGst, hGst, slab).run();
+    const slab = b.gst_slab !== undefined ? (b.gst_slab ? 1 : 0) : (c.gst_slab ? 1 : 0), months = Math.min(Math.max(parseInt(b.months ?? c.months, 10) || 0, 0), 12), skip = b.skip_free_cxl !== undefined ? (b.skip_free_cxl ? 1 : 0) : c.skip_free_cxl, on = syncReady({relay_key: key, token, jwt_secret: secret, jwt_client: jcl, jwt_corporate: jco}) ? 1 : 0;
+    await env.DB.prepare("INSERT INTO tx_sync (client_id, api_url, relay_url, relay_key, token, months, skip_free_cxl, enabled, fee, fee_gst, hotel_gst, gst_slab, jwt_secret, jwt_iss, jwt_aud, jwt_client, jwt_corporate) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?) ON CONFLICT(client_id) DO UPDATE SET api_url = excluded.api_url, relay_url = excluded.relay_url, relay_key = excluded.relay_key, token = excluded.token, months = excluded.months, skip_free_cxl = excluded.skip_free_cxl, enabled = excluded.enabled, fee = excluded.fee, fee_gst = excluded.fee_gst, hotel_gst = excluded.hotel_gst, gst_slab = excluded.gst_slab, jwt_secret = excluded.jwt_secret, jwt_iss = excluded.jwt_iss, jwt_aud = excluded.jwt_aud, jwt_client = excluded.jwt_client, jwt_corporate = excluded.jwt_corporate")
+      .bind(cid, api, relay, key, token, months, skip, on, fee, feeGst, hGst, slab, secret, iss, aud, jcl, jco).run();
     const first = on ? await syncRun(env, cid, user.email) : null;   // bring the data in straight away
     return json({ok: true, synced: first, sync: syncView(await syncCfg(env, cid))});
   }
@@ -1467,7 +1480,7 @@ async function syncApi(env, user, path, b) {
 async function txVoucher(env, cid, code) {
   const m = /^HB\d{2}\/(\d{1,12})$/.exec(String(code || "").trim()); if (!m) return json({error: "This booking has no partner booking number."}, 400);
   if (!(await env.DB.prepare("SELECT 1 FROM transactions WHERE client_id = ? AND code = ?").bind(cid, String(code).trim()).first())) return json({error: "Booking not found."}, 404);
-  const c = await syncCfg(env, cid); if (!c.token || !c.relay_key) return json({error: "Vouchers aren't available yet: the live connection is not set up."}, 503);
+  const c = await syncCfg(env, cid); if (!syncReady(c)) return json({error: "Vouchers aren't available yet: the live connection is not set up."}, 503);
   try { const {status, data} = await partnerCall(c, "GET", SYNC_PATH.voucher + m[1]);
     if (status === 404) return json({error: "The partner has no voucher for this booking."}, 404);
     const ok = (u) => typeof u === "string" && /^https:\/\//i.test(u);

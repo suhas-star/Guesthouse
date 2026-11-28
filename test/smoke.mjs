@@ -463,7 +463,7 @@ check('old host redirects to PRIMARY_HOST', r.status === 301 && r.headers.get('l
         bookingDate: day(2) + 'T09:30:00Z', checkIn: day(20) + 'T00:00:00Z', checkOut: day(22) + 'T00:00:00Z', totalNumberOfNights: 2, propertyName: 'Hotel ' + id, category: 'Business', city: 'Pune', ratePerNight: 6500, totalAmount: 13000, totalAmountINR: 13000, currency: 'INR',
         totalCancellationCharges: null, employeeId: 'E' + id, wbs: 'WBS-1', travelRequestId: 'TR-' + id, ltiBaseLocation: 'Mumbai', grade: 'G5', ...extra});
       let MOCK = [bk(900001, 'Confirmed'), bk(900002, 'Cancelled', {totalCancellationCharges: 0}), bk(900003, 'Cancelled', {totalCancellationCharges: 1200}), bk(900004, 'Cancelled', {totalCancellationCharges: 0}), bk(900005, 'Planned')];
-      let partnerDown = false; const seen = [];
+      let partnerDown = false, signedCalls = 0; const seen = [], SECRET = 'test-signing-secret-1234567890';
       const ok = (o, status = 200) => new Response(JSON.stringify({status, headers: {}, body_b64: Buffer.from(JSON.stringify(o)).toString('base64')}), {status: 200, headers: {'content-type': 'application/json'}});
       const prevFetch = globalThis.fetch;
       globalThis.fetch = async (u, o = {}) => { const s = String(u); if (!s.startsWith('https://relay.test/')) return prevFetch(u, o);
@@ -474,7 +474,10 @@ check('old host redirects to PRIMARY_HOST', r.status === 301 && r.headers.get('l
         const q = JSON.parse(o.body); seen.push(q); const url = new URL(q.url), body = q.body ? JSON.parse(q.body) : null;
         if (url.host !== 'api.partner.test') return new Response('{"error":"Host not allowed"}', {status: 403});
         if (partnerDown) return ok({status: 'failure', message: 'Access denied.'}, 403);
-        if (q.headers.authorization !== 'Bearer ' + TOKEN) return ok({status: 'failure', message: 'Invalid token.'}, 403);
+        const jwtOk = (t) => { const [hd, pl, sg] = String(t).split('.'); if (!sg) return false; const want = crypto.createHmac('sha256', SECRET).update(hd + '.' + pl).digest('base64url'); const c = JSON.parse(Buffer.from(pl, 'base64url'));
+          return sg === want && c.clientId === 'C1' && c.corporateId === 'K9' && c.iss === 'https://vantiscorp.com' && c.aud === 'cbt-bff-api' && c.exp > Date.now() / 1000; };
+        const bearer = String(q.headers.authorization || '').replace(/^Bearer /, ''); if (bearer !== TOKEN && !jwtOk(bearer)) return ok({status: 'failure', message: 'Invalid token.'}, 403);
+        if (bearer !== TOKEN) signedCalls++;
         if (url.pathname === '/api/LtmReport/ltm_bookings') { const {startDate, endDate} = body.bookingDateRange, all = MOCK.filter((b) => b.bookingDate >= startDate && b.bookingDate <= endDate);
           return ok({status: 'success', totalCount: all.length, bookings: all.slice(body.pagination.offset, body.pagination.offset + 2)}); }   // two per page, to exercise paging
         if (url.pathname === '/api/LtmReport/ltm_bookings-transaction-report') return ok({status: 'success', totalBookings: MOCK.length, totalCancelledBookings: 3, currency: 'INR'});
@@ -525,6 +528,10 @@ check('old host redirects to PRIMARY_HOST', r.status === 301 && r.headers.get('l
       check('live sync: the 15-minute trigger picks up a new booking', !!row('HB' + fy + '/900006'));
       { const r7 = row('HB' + fy + '/900007'); check('live sync: room above Rs 7,500 a night gets 18% GST', !!r7 && r7['Total Tariff'] === 8500 && r7['GST Charges'] === 1530, JSON.stringify(r7)); }
       x = await A('sync/save', {client_id: sco, gst_slab: false}); check('live sync: GST slab can be switched off', x.status === 200 && x.j.sync.gst_slab === 0);
+      x = await A('sync/save', {client_id: sco, jwt_secret: SECRET, jwt_client: 'C1', jwt_corporate: 'K9'});
+      check('live sync: signing secret saved, never sent back', x.status === 200 && x.j.sync.signing.has_secret && x.j.sync.signing.client === 'C1' && !JSON.stringify(x.j).includes(SECRET) && x.j.synced && x.j.synced.ok, JSON.stringify(x.j.synced));
+      check('live sync: portal signs its own token the partner accepts', signedCalls > 0);
+      check('live sync: audit log keeps no signing secret', !DB.raw.prepare("SELECT 1 FROM audit WHERE detail LIKE ?").get('%' + SECRET + '%'));
       partnerDown = true; x = await A('sync/run', {client_id: sco});
       check('live sync: an IP refusal is reported plainly and kept as last error', x.status === 502 && /allow-list/.test(x.j.error) && /allow-list/.test(x.j.sync.last_error) && !!x.j.sync.last_ok);
       globalThis.fetch = prevFetch;

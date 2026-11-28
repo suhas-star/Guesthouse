@@ -847,8 +847,8 @@ const renderTx = (D, c) => {
   // live sync with the booking system's API (called through Zuna's fixed-IP relay)
   const ls = h('div', 'card p-5 mb-4'); D.appendChild(ls);
   const syncSettings = (y) => { const f = h('form', 'space-y-4'); f.noValidate = true;
-    const tokInfo = y.token ? 'Saved' + (y.token.exp ? ' · valid until ' + fDT(y.token.exp) : '') : 'Not saved yet';
-    const tok = h('textarea', 'inp font-mono text-xs h-24'); tok.placeholder = y.has_token ? 'Leave empty to keep the saved token' : 'Paste the token from the booking system';
+    const sg = y.signing || {}, sec = inp('', sg.has_secret ? 'Leave empty to keep the saved secret' : 'Paste the signing secret', 'password'); sec.autocomplete = 'off';
+    const jcl = inp(sg.client, 'Given by the booking system'), jco = inp(sg.corporate, 'Given by the booking system'), iss = inp(sg.iss, 'https://…'), aud = inp(sg.aud, '');
     const key = inp('', y.has_key ? 'Leave empty to keep the saved key' : 'Paste the relay key', 'password'); key.autocomplete = 'off';
     const api0 = inp(y.api_url, 'https://…'), relay = inp(y.relay_url, 'https://…');
     const months = sel(String(y.months), [['0', 'This month only'], ['1', 'This and last month'], ['2', 'Last 3 months'], ['5', 'Last 6 months'], ['11', 'Last 12 months']]);
@@ -859,12 +859,13 @@ const renderTx = (D, c) => {
     const slab = switchEl('Hotel GST by room rate: 5% up to ₹7,500 a night (before tax), the rate above for higher rooms', !!y.gst_slab);
     amt.append(h('p', 'text-xs text-zuna-600', "The booking system's total includes the room amount with hotel GST, the transaction fee and GST on it. These figures split the total into the report columns (Total Tariff, GST, Net Amount, Transaction Fee). With the slab off, the hotel GST rate applies to every room."), ag, slab);
     const g = h('div', 'grid sm:grid-cols-2 gap-4');
-    g.append(field('API token · ' + tokInfo, tok, 'sm:col-span-2'), field('Relay key · ' + (y.has_key ? 'Saved' : 'Not saved yet'), key), field('Bookings to check', months), field('Booking system address', api0), field('Relay address', relay));
+    g.append(field('Signing secret · ' + (sg.has_secret ? 'Saved' : 'Not saved yet'), sec), field('Relay key · ' + (y.has_key ? 'Saved' : 'Not saved yet'), key), field('Client ID', jcl), field('Corporate ID', jco),
+      field('Issuer', iss), field('Audience', aud), field('Booking system address', api0), field('Relay address', relay), field('Bookings to check', months));
     const err = h('p', 'text-sm text-rose-600 hidden'); err.setAttribute('role', 'alert');
     const row = h('div', 'flex flex-wrap items-center justify-end gap-2 pt-2'); const save = ib('button', 'btn btn-primary', 'Save', 'check'); save.type = 'submit'; row.appendChild(save);
-    f.append(h('p', 'text-xs text-zuna-500', 'Bookings start flowing in as soon as the token and the relay key are saved, and update every 15 minutes. Both are stored securely and never shown again: paste a new one only to replace it.'), g, amt, skip, err, row);
+    f.append(h('p', 'text-xs text-zuna-500', 'Bookings start flowing in as soon as the signing secret, client ID, corporate ID and relay key are saved, and update every 15 minutes. The portal makes a fresh token for every call, so nothing expires. The secret and key are stored securely and never shown again.'), g, amt, skip, err, row);
     f.onsubmit = async (e) => { e.preventDefault(); err.classList.add('hidden');
-      try { const r = await api('sync/save', {client_id: c.id, token: tok.value.trim(), relay_key: key.value.trim(), api_url: api0.value.trim(), relay_url: relay.value.trim(), months: +months.value, skip_free_cxl: skip.input.checked, fee: fee.value, fee_gst: feeG.value, hotel_gst: hG.value, gst_slab: slab.input.checked});
+      try { const r = await api('sync/save', {client_id: c.id, jwt_secret: sec.value.trim(), jwt_client: jcl.value.trim(), jwt_corporate: jco.value.trim(), jwt_iss: iss.value.trim(), jwt_aud: aud.value.trim(), relay_key: key.value.trim(), api_url: api0.value.trim(), relay_url: relay.value.trim(), months: +months.value, skip_free_cxl: skip.input.checked, fee: fee.value, fee_gst: feeG.value, hotel_gst: hG.value, gst_slab: slab.input.checked});
         closeModal(); const x = r.synced; toast(!x ? 'Settings saved' : x.ok ? 'Saved · live data connected' + (x.result.added ? ': ' + x.result.added + ' new bookings' : '') : 'Saved, but the booking system did not answer: ' + x.error); paintSync(r.sync);
         if (x && x.ok) { st.hist = null; loadHist(); loadStored(); } }
       catch (er) { err.textContent = er.message; err.classList.remove('hidden'); } };
@@ -875,11 +876,11 @@ const renderTx = (D, c) => {
         it.append(icon(s.ok ? 'circle-check' : 'circle-x', 'w-5 h-5 shrink-0 ' + (s.ok ? 'text-mint-700' : 'text-rose-600'))); const tx = h('div', 'min-w-0'); tx.append(h('p', 'text-sm font-bold', s.step), h('p', 'text-xs text-zuna-600 break-words', s.detail)); it.appendChild(tx); w.appendChild(it); });
       if (r.steps.every((s) => s.ok) && r.steps.length >= 3) w.appendChild(h('p', 'text-sm font-semibold text-mint-700 pt-1', 'Everything works. You can run a sync now.')); }
     catch (er) { w.replaceChildren(h('p', 'text-sm text-rose-600', er.message)); } };
-  const paintSync = (y) => { ls.replaceChildren(); const ready = y.has_key && y.has_token;
+  const paintSync = (y) => { ls.replaceChildren(); const ready = !!y.ready;
     const top = h('div', 'flex flex-wrap items-center gap-3');
     const ic2 = h('span', 'grid place-items-center w-10 h-10 rounded-xl shrink-0 ' + (y.enabled ? 'bg-zuna-900 text-mint-400' : 'bg-zuna-50 text-zuna-400')); ic2.appendChild(icon('history', 'w-5 h-5'));
     const tt = h('div', 'min-w-0 flex-1'); tt.append(h('p', 'text-sm font-bold', 'Live sync with the booking system'),
-      h('p', 'text-xs text-zuna-500', !ready ? 'Not connected yet: save the API token and the relay key in Sync settings.' : 'Live · new and changed bookings come in every 15 minutes (bookings made in the last ' + (y.months + 1) + (y.months ? ' months' : ' month') + ')'));
+      h('p', 'text-xs text-zuna-500', !ready ? 'Not connected yet: save the signing secret, client ID, corporate ID and relay key in Sync settings.' : 'Live · new and changed bookings come in every 15 minutes (bookings made in the last ' + (y.months + 1) + (y.months ? ' months' : ' month') + ')'));
     const acts = h('div', 'flex flex-wrap gap-2');
     const bS = ib('button', 'btn', 'Sync settings', 'sliders-horizontal'); bS.onclick = () => syncSettings(y);
     const bT = ib('button', 'btn', 'Check connection', 'shield-check'); bT.onclick = syncTest;

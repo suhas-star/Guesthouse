@@ -525,13 +525,9 @@ check('old host redirects to PRIMARY_HOST', r.status === 301 && r.headers.get('l
       x = await call('/api/tx/voucher', {method: 'POST', body: {client_id: sco, code: 'HB' + fy + '/900001'}, cookie: asha}); check('live sync: other client cannot fetch the voucher', x.status === 404 || x.status === 403);
       const nowIso = new Date(Date.now() - 60000).toISOString().slice(0, 19) + 'Z', nowFy = (() => { const t = new Date(Date.now() + 19800000); return String((t.getUTCMonth() + 1 >= 4 ? t.getUTCFullYear() : t.getUTCFullYear() - 1) % 100).padStart(2, '0'); })();
       MOCK.push(bk(900006, 'Confirmed', {bookingDate: nowIso}), bk(900007, 'Confirmed', {bookingDate: nowIso, totalNumberOfNights: 1, totalAmountINR: 10148}), bk(900008, 'Confirmed', {bookingDate: day(1) + 'T08:00:00Z'}));
-      const runCron = async (min) => { const n0 = seen.length; await worker.scheduled({cron: '* * * * *', scheduledTime: Date.UTC(2026, 0, 1, 10, min)}, env, {waitUntil: (p) => p}); await new Promise((r) => setTimeout(r, 50)); return seen.slice(n0); };
-      let calls = await runCron(7);
-      check('live sync: minute check asks only for yesterday and today, and picks up a new booking at once', !!row('HB' + nowFy + '/900006') && calls.length === 1 && Date.parse(JSON.parse(calls[0].body).bookingDateRange.startDate) > Date.now() - 2.1 * 864e5);
-      check('live sync: quiet minute checks do not wipe the last full check', (await A('sync/state', {client_id: sco})).j.sync.last_result.fetched > 0);
-      calls = await runCron(30); check('live sync: quarter-hour check covers the whole period', calls.length >= 2 && !!row('HB' + fy + '/900008'));
-      x = await A('sync/state', {client_id: sco}); calls = await runCron(31);
-      check('live sync: a quiet minute check keeps the full-check figures', JSON.stringify((await A('sync/state', {client_id: sco})).j.sync.last_result) === JSON.stringify(x.j.sync.last_result));
+      const runCron = async (min) => { const n0 = seen.length; await worker.scheduled({cron: '*/15 * * * *', scheduledTime: Date.UTC(2026, 0, 1, 10, min)}, env, {waitUntil: (p) => p}); await new Promise((r) => setTimeout(r, 50)); return seen.slice(n0); };
+      const calls = await runCron(15);
+      check('live sync: the 15-minute trigger covers the whole period and picks up new bookings', calls.length >= 2 && !!row('HB' + nowFy + '/900006') && !!row('HB' + fy + '/900008'));
       { const r7 = row('HB' + nowFy + '/900007'); check('live sync: one-night booking nets total less Rs 118', !!r7 && r7['Net Amount Charged'] === 10030, JSON.stringify(r7)); }
       x = await A('sync/save', {client_id: sco, jwt_secret: SECRET, jwt_client: 'C1', jwt_corporate: 'K9'});
       check('live sync: signing secret saved, never sent back', x.status === 200 && x.j.sync.signing.has_secret && x.j.sync.signing.client === 'C1' && !JSON.stringify(x.j).includes(SECRET) && x.j.synced && x.j.synced.ok, JSON.stringify(x.j.synced));

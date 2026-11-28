@@ -1699,9 +1699,9 @@ const signIn = (request) => {
 
 const WORKER = {
   // daily (Cloudflare cron trigger): e-mail reminders for guest house documents nearing expiry
-  // every minute: live hotel sync (today's bookings; the last months every 15 minutes); 02:30 UTC: nightly jobs
+  // every 15 minutes: live hotel sync (new, changed and cancelled bookings of the last months); 02:30 UTC: nightly jobs
   async scheduled(event, env, ctx) {
-    if (!event || event.cron !== "30 2 * * *") { const m = new Date((event && event.scheduledTime) || Date.now()).getUTCMinutes(); ctx.waitUntil(syncAll(env, m % 15 === 0 ? "full" : "quick").catch(() => null)); }
+    if (!event || event.cron !== "30 2 * * *") ctx.waitUntil(syncAll(env, "full").catch(() => null));
     if (event && event.cron && event.cron !== "30 2 * * *") return;
     ctx.waitUntil(docReminders(env)); ctx.waitUntil(backupNow(env, "nightly").catch(() => null));
     ctx.waitUntil(env.DB.prepare("DELETE FROM audit WHERE at < ?").bind(new Date(Date.now() - 3 * 365 * 864e5).toISOString()).run().catch(() => null)); },

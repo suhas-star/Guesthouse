@@ -1393,14 +1393,17 @@ function apiMerge(old, a) {
 }
 const monthRanges = (n, now = new Date()) => { const out = [], y = now.getUTCFullYear(), m = now.getUTCMonth();
   for (let i = n; i >= 0; i--) { const s = new Date(Date.UTC(y, m - i, 1)), e = new Date(Date.UTC(y, m - i + 1, 1) - 1000); out.push({startDate: s.toISOString().slice(0, 19) + "Z", endDate: e.toISOString().slice(0, 19) + "Z"}); } return out; };
-async function syncRun(env, cid, by) {
+// quick check (every minute): bookings made yesterday and today, IST; a full check covers the last months
+const quickRange = (now = new Date()) => { const t = new Date(now.getTime() + 19800000), s = Date.UTC(t.getUTCFullYear(), t.getUTCMonth(), t.getUTCDate() - 1) - 19800000;
+  return [{startDate: new Date(s).toISOString().slice(0, 19) + "Z", endDate: now.toISOString().slice(0, 19) + "Z"}]; };
+async function syncRun(env, cid, by, mode) {
   await ensureSchema(env);
   const c = await syncCfg(env, cid), at = new Date().toISOString(), res = {fetched: 0, months: 0, added: 0, changed: 0, skipped_cancelled: 0, skipped_removed: 0, skipped_other: 0, held: 0, amt_checked: 0, amt_match: 0};
-  const save = (ok, err) => env.DB.prepare("INSERT INTO tx_sync (client_id, last_run, last_ok, last_error, last_result) VALUES (?, ?, ?, ?, ?) ON CONFLICT(client_id) DO UPDATE SET last_run = excluded.last_run, last_ok = COALESCE(excluded.last_ok, tx_sync.last_ok), last_error = excluded.last_error, last_result = excluded.last_result")
-    .bind(cid, at, ok ? at : null, err || null, JSON.stringify(res)).run();
+  const save = (ok, err) => env.DB.prepare("INSERT INTO tx_sync (client_id, last_run, last_ok, last_error, last_result) VALUES (?, ?, ?, ?, ?) ON CONFLICT(client_id) DO UPDATE SET last_run = excluded.last_run, last_ok = COALESCE(excluded.last_ok, tx_sync.last_ok), last_error = excluded.last_error, last_result = CASE WHEN ? THEN tx_sync.last_result ELSE excluded.last_result END")
+    .bind(cid, at, ok ? at : null, err || null, JSON.stringify(res), mode === "quick" && ok && !res.added && !res.changed ? 1 : 0).run();   // a quiet quick check keeps the last full check's figures
   try {
     const got = new Map();
-    for (const range of monthRanges(Math.min(Math.max(+c.months || 0, 0), 12))) {
+    for (const range of mode === "quick" ? quickRange() : monthRanges(Math.min(Math.max(+c.months || 0, 0), 12))) {
       for (let off = 0, total = Infinity; off < total && off < 50000;) {
         const {data} = await partnerCall(c, "POST", SYNC_PATH.report, {bookingDateRange: range, pagination: {offset: off, limit: 1000}});
         const list = Array.isArray(data.bookings) ? data.bookings : []; total = +data.totalCount || 0;
@@ -1433,10 +1436,10 @@ async function syncRun(env, cid, by) {
     await save(true, null); return {ok: true, result: res};
   } catch (e) { await save(false, e.message || String(e)); return {ok: false, error: e.message || String(e), result: res}; }
 }
-async function syncAll(env) {
+async function syncAll(env, mode) {
   await ensureSchema(env);
   const {results} = await env.DB.prepare("SELECT client_id FROM tx_sync WHERE enabled = 1").all();
-  for (const x of results) await syncRun(env, x.client_id, "Zuna Hotel Desk").catch(() => null);
+  for (const x of results) await syncRun(env, x.client_id, "Zuna Hotel Desk", mode).catch(() => null);
 }
 async function syncApi(env, user, path, b) {
   const cid = +b.client_id; if (!cid || !(await env.DB.prepare("SELECT 1 FROM clients WHERE id = ?").bind(cid).first())) return json({error: "Client not found."}, 404);
@@ -1699,7 +1702,9 @@ const signIn = (request) => {
 
 const WORKER = {
   // daily (Cloudflare cron trigger): e-mail reminders for guest house documents nearing expiry
-  async scheduled(event, env, ctx) { ctx.waitUntil(syncAll(env).catch(() => null));   // live hotel sync on every trigger (every 15 minutes)
+  // every minute: live hotel sync (today's bookings; the last months every 15 minutes); 02:30 UTC: nightly jobs
+  async scheduled(event, env, ctx) {
+    if (!event || event.cron !== "30 2 * * *") { const m = new Date((event && event.scheduledTime) || Date.now()).getUTCMinutes(); ctx.waitUntil(syncAll(env, m % 15 === 0 ? "full" : "quick").catch(() => null)); }
     if (event && event.cron && event.cron !== "30 2 * * *") return;
     ctx.waitUntil(docReminders(env)); ctx.waitUntil(backupNow(env, "nightly").catch(() => null));
     ctx.waitUntil(env.DB.prepare("DELETE FROM audit WHERE at < ?").bind(new Date(Date.now() - 3 * 365 * 864e5).toISOString()).run().catch(() => null)); },

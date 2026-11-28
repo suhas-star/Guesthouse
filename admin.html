@@ -863,7 +863,7 @@ const renderTx = (D, c) => {
       field('Issuer', iss), field('Audience', aud), field('Booking system address', api0), field('Relay address', relay), field('Bookings to check', months));
     const err = h('p', 'text-sm text-rose-600 hidden'); err.setAttribute('role', 'alert');
     const row = h('div', 'flex flex-wrap items-center justify-end gap-2 pt-2'); const save = ib('button', 'btn btn-primary', 'Save', 'check'); save.type = 'submit'; row.appendChild(save);
-    f.append(h('p', 'text-xs text-zuna-500', 'Bookings start flowing in as soon as the signing secret, client ID, corporate ID and relay key are saved, and update every 15 minutes. The portal makes a fresh token for every call, so nothing expires. The secret and key are stored securely and never shown again.'), g, amt, skip, err, row);
+    f.append(h('p', 'text-xs text-zuna-500', 'Bookings start flowing in as soon as the signing secret, client ID, corporate ID and relay key are saved: new bookings within a minute, changes within 15 minutes. The portal makes a fresh token for every call, so nothing expires. The secret and key are stored securely and never shown again.'), g, amt, skip, err, row);
     f.onsubmit = async (e) => { e.preventDefault(); err.classList.add('hidden');
       try { const r = await api('sync/save', {client_id: c.id, jwt_secret: sec.value.trim(), jwt_client: jcl.value.trim(), jwt_corporate: jco.value.trim(), jwt_iss: iss.value.trim(), jwt_aud: aud.value.trim(), relay_key: key.value.trim(), api_url: api0.value.trim(), relay_url: relay.value.trim(), months: +months.value, skip_free_cxl: skip.input.checked, fee: fee.value, fee_gst: feeG.value, hotel_gst: hG.value, gst_slab: slab.input.checked});
         closeModal(); const x = r.synced; toast(!x ? 'Settings saved' : x.ok ? 'Saved · live data connected' + (x.result.added ? ': ' + x.result.added + ' new bookings' : '') : 'Saved, but the booking system did not answer: ' + x.error); paintSync(r.sync);
@@ -880,7 +880,7 @@ const renderTx = (D, c) => {
     const top = h('div', 'flex flex-wrap items-center gap-3');
     const ic2 = h('span', 'grid place-items-center w-10 h-10 rounded-xl shrink-0 ' + (y.enabled ? 'bg-zuna-900 text-mint-400' : 'bg-zuna-50 text-zuna-400')); ic2.appendChild(icon('history', 'w-5 h-5'));
     const tt = h('div', 'min-w-0 flex-1'); tt.append(h('p', 'text-sm font-bold', 'Live sync with the booking system'),
-      h('p', 'text-xs text-zuna-500', !ready ? 'Not connected yet: save the signing secret, client ID, corporate ID and relay key in Sync settings.' : 'Live · new and changed bookings come in every 15 minutes (bookings made in the last ' + (y.months + 1) + (y.months ? ' months' : ' month') + ')'));
+      h('p', 'text-xs text-zuna-500', !ready ? 'Not connected yet: save the signing secret, client ID, corporate ID and relay key in Sync settings.' : 'Live · new bookings appear within a minute; changes to bookings made in the last ' + (y.months + 1) + (y.months ? ' months' : ' month') + ' are rechecked every 15 minutes'));
     const acts = h('div', 'flex flex-wrap gap-2');
     const bS = ib('button', 'btn', 'Sync settings', 'sliders-horizontal'); bS.onclick = () => syncSettings(y);
     const bT = ib('button', 'btn', 'Check connection', 'shield-check'); bT.onclick = syncTest;
@@ -895,7 +895,7 @@ const renderTx = (D, c) => {
     if (lr && lr.amt_checked && !y.last_error) { const all = lr.amt_match === lr.amt_checked;
       info.appendChild(h('span', 'zchip ' + (all ? 'zchip-live' : 'zchip-warn'), all ? 'Amounts match the uploaded reports (' + lr.amt_checked + ' checked)' : 'Amounts differ from the uploaded reports for ' + (lr.amt_checked - lr.amt_match) + ' of ' + lr.amt_checked + ' bookings · check the GST figures in Sync settings')); }
     if (info.childNodes.length) ls.appendChild(info);
-    if (y.last_error) { const e = h('div', 'mt-3 flex gap-2 rounded-xl bg-rose-50 ring-1 ring-rose-200 p-3 text-sm text-rose-700'); e.append(icon('triangle-alert', 'w-4 h-4 shrink-0 mt-0.5'), h('span', null, 'Live data paused: the update on ' + fDT(y.last_run) + ' failed: ' + y.last_error + ' It retries every 15 minutes.')); ls.appendChild(e); } };
+    if (y.last_error) { const e = h('div', 'mt-3 flex gap-2 rounded-xl bg-rose-50 ring-1 ring-rose-200 p-3 text-sm text-rose-700'); e.append(icon('triangle-alert', 'w-4 h-4 shrink-0 mt-0.5'), h('span', null, 'Live data paused: the update on ' + fDT(y.last_run) + ' failed: ' + y.last_error + ' It retries every minute.')); ls.appendChild(e); } };
   const loadSync = () => api('sync/state', {client_id: c.id}).then((r) => { st.sync = r.sync; if (ls.isConnected) paintSync(r.sync); }).catch(() => ls.replaceChildren(h('p', 'text-sm text-zuna-500', 'Live sync status is not available right now.')));
   if (st.sync) paintSync(st.sync); else { ls.appendChild(h('p', 'text-sm text-zuna-500', 'Loading live sync…')); loadSync(); }
   const grid = h('div', 'grid xl:grid-cols-[minmax(0,1fr)_340px] gap-4 items-start'); D.appendChild(grid);

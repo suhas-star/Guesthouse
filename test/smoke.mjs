@@ -499,7 +499,7 @@ check('old host redirects to PRIMARY_HOST', r.status === 301 && r.headers.get('l
       check('live sync: partner gets the token and a one-month booking range', seen.some((q) => q.headers.authorization === 'Bearer ' + TOKEN && /T23:59:59Z$/.test(JSON.parse(q.body || '{}').bookingDateRange?.endDate || '')));
       const row = (inv) => { const t = DB.raw.prepare('SELECT row, status FROM transactions WHERE client_id = ? AND code = ?').get(sco, inv); return t ? JSON.parse(t.row) : null; };
       const r1 = row('HB' + fy + '/900001'), r2 = row('HB' + fy + '/900002'), r3 = row('HB' + fy + '/900003');
-      check('live sync: total split into tariff, hotel GST, net and service charge', !!r1 && r1['Net Amount Charged'] === 12882 && r1['Total Tariff'] === 10916.95 && r1['GST Charges'] === 1965.05 && r1['Transaction Fee'] === 100 && r1['Transaction Fee GST Charged'] === 18, JSON.stringify(r1));
+      check('live sync: total split into tariff, hotel GST (5% slab), net and transaction fee', !!r1 && r1['Net Amount Charged'] === 12882 && r1['Total Tariff'] === 12268.57 && r1['GST Charges'] === 613.43 && r1['Transaction Fee'] === 100 && r1['Transaction Fee GST Charged'] === 18, JSON.stringify(r1));
       check('live sync: cancelled booking nets only its charge', !!r3 && r3['Net Amount Charged'] === 1200 && r3['GST Charges'] === 0);
       check('live sync: amounts checked against the uploaded report', rs.amt_checked === 0);
       check('live sync: new booking stored under the HB invoice with mapped fields', !!r1 && r1['Guest Name'] === 'Guest 900001' && r1['Booking Code'] === 'HC-900001' && r1['Check-In Date'] === day(20) && r1['Stay Days'] === 2 && r1['Emp Code'] === 'E900001' && r1['Booked Date'] === day(2));
@@ -516,9 +516,11 @@ check('old host redirects to PRIMARY_HOST', r.status === 301 && r.headers.get('l
       x = await V('HB' + fy + '/900003'); check('live sync: partner 404 for a voucher is explained', x.status === 404);
       x = await V('HB' + fy + '/123'); check('live sync: voucher only for bookings in the portal', x.status === 404);
       x = await call('/api/tx/voucher', {method: 'POST', body: {client_id: sco, code: 'HB' + fy + '/900001'}, cookie: asha}); check('live sync: other client cannot fetch the voucher', x.status === 404 || x.status === 403);
-      MOCK.push(bk(900006, 'Confirmed')); x = await A('sync/save', {client_id: sco, enabled: true}); check('live sync: turned on', x.status === 200 && x.j.sync.enabled === 1);
+      MOCK.push(bk(900006, 'Confirmed'), bk(900007, 'Confirmed', {totalNumberOfNights: 1, totalAmountINR: 10148})); x = await A('sync/save', {client_id: sco, enabled: true}); check('live sync: turned on', x.status === 200 && x.j.sync.enabled === 1);
       await worker.scheduled({cron: '15 */3 * * *'}, env, {waitUntil: (p) => p}); await new Promise((r) => setTimeout(r, 50));
       check('live sync: the 3-hourly trigger picks up a new booking', !!row('HB' + fy + '/900006'));
+      { const r7 = row('HB' + fy + '/900007'); check('live sync: room above Rs 7,500 a night gets 18% GST', !!r7 && r7['Total Tariff'] === 8500 && r7['GST Charges'] === 1530, JSON.stringify(r7)); }
+      x = await A('sync/save', {client_id: sco, gst_slab: false}); check('live sync: GST slab can be switched off', x.status === 200 && x.j.sync.gst_slab === 0);
       partnerDown = true; x = await A('sync/run', {client_id: sco});
       check('live sync: an IP refusal is reported plainly and kept as last error', x.status === 502 && /allow-list/.test(x.j.error) && /allow-list/.test(x.j.sync.last_error) && !!x.j.sync.last_ok);
       globalThis.fetch = prevFetch;
